@@ -105,7 +105,7 @@ def parse_masters(presentation, image_dir):
     return masters
 
 
-def parse_single_slide(ppt_path, slide_index, out_dir):
+def parse_single_slide(ppt_path, slide_index, out_dir, preserved_data=None):
     """
     단일 슬라이드만 파싱하여 해당 슬라이드의 정보(dict)를 반환합니다.
     이미지도 out_dir/images 에 새로 export 됩니다.
@@ -169,6 +169,14 @@ def parse_single_slide(ppt_path, slide_index, out_dir):
                     image_dir=image_dir,
                     indent=2,
                 )
+
+                # Apply preserved description if available
+                if preserved_data:
+                    key = (slide_index, shape.Name)
+                    if key in preserved_data:
+                        shape_info_data["description"] = preserved_data[key]
+                        print(f"  [INFO] Preserved description for {shape.Name}")
+
                 slide_info["shapes"].append(shape_info_data)
             except Exception as e:
                 print(
@@ -216,7 +224,9 @@ def extract_metadata(presentation) -> dict:
     return metadata
 
 
-def parse_presentation(ppt_path, out_dir, debug=False, progress_callback=None):
+def parse_presentation(
+    ppt_path, out_dir, debug=False, progress_callback=None, preserved_data=None
+):
     if not os.path.exists(ppt_path):
         print(f"[ERROR] File not found: {ppt_path}")
         return None
@@ -320,6 +330,14 @@ def parse_presentation(ppt_path, out_dir, debug=False, progress_callback=None):
                         max_z=shapes_count,
                         context="slide",
                     )
+
+                    # Apply preserved description if available
+                    if preserved_data:
+                        key = (slide_index, shape.Name)
+                        if key in preserved_data:
+                            shape_info["description"] = preserved_data[key]
+                            print(f"  [INFO] Preserved description for {shape.Name}")
+
                     slide_info["shapes"].append(shape_info)
 
                 result["slides"].append(slide_info)

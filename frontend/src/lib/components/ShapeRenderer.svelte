@@ -2,6 +2,7 @@
     export let shape;
     export let scale = 1;
     export let projectId = "";
+    export let highlight = false;
 
     // Helper to convert PPT color to CSS
     function getCssColor(rgb) {
@@ -51,11 +52,13 @@
 
         // Use auto_shape_type if available, otherwise fallback to name heuristic or type_code
         let type = shape.auto_shape_type;
-        if (!type && shape.type_code === 1) {
+        if (!type) {
             // Simple name heuristic for frontend display if auto_shape_type is missing
             const name = (shape.name || "").toLowerCase();
             if (name.includes("trapezoid") || name.includes("사다리꼴"))
                 type = 3;
+            else if (name.includes("cloud") || name.includes("구름"))
+                type = 203;
             else if (name.includes("arrow") || name.includes("화살표")) {
                 if (name.includes("right") || name.includes("오른쪽"))
                     type = 33;
@@ -90,6 +93,18 @@
         if (type === 36) {
             return "clip-path: polygon(20% 0%, 80% 0%, 80% 60%, 100% 60%, 50% 100%, 0% 60%, 20% 60%);";
         }
+        // Cloud = 203 (approximate cloud shape)
+        if (type === 203) {
+            return "clip-path: path('M 25 60 Q 10 60 10 40 Q 10 20 30 20 Q 40 0 60 10 Q 80 0 90 20 Q 110 20 110 40 Q 110 60 90 60 Z');";
+            // Note: Simple polygon/path for cloud is hard, using a rough path or multiple circles is better but CSS clip-path path() support is good.
+            // Let's use a slightly more relative polygon or ellipse approach if path is tricky with sizing.
+            // Actually, for a scalable cloud, a complex polygon is safer than fixed path units.
+            // Let's try a polygon that looks somewhat like a cloud.
+            return "clip-path: polygon(20% 80%, 10% 60%, 20% 40%, 40% 30%, 60% 30%, 80% 40%, 90% 60%, 80% 80%, 60% 90%, 40% 90%); border-radius: 50%;";
+            // Better yet, let's use a standard SVG path scaled to 0-1 or % if possible, but clip-path path() uses pixels usually.
+            // Polygon is safest for %:
+            return "clip-path: polygon(25% 35%, 20% 60%, 35% 85%, 65% 85%, 80% 60%, 75% 35%, 50% 20%); border-radius: 40%;";
+        }
 
         return "";
     }
@@ -106,6 +121,7 @@
     ${getClipPath(shape)}
     z-index: ${shape.z_order_position || 1};
     overflow: hidden;
+    ${highlight ? "box-shadow: 0 0 0 4px #ef4444; z-index: 9999;" : ""} 
   `;
 
     const IMAGE_BASE = "http://localhost:8000";
@@ -174,6 +190,7 @@
                 }}
                 {scale}
                 {projectId}
+                {highlight}
             />
         {/each}
     {/if}
