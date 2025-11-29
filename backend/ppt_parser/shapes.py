@@ -106,6 +106,7 @@ def parse_shape(
         "top": float(shape.Top),
         "width": float(shape.Width),
         "height": float(shape.Height),
+        "rotation": float(shape.Rotation),
         "text": text,
         "text_preview": preview,
         "text_style": text_style,

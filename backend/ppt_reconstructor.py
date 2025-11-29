@@ -145,6 +145,7 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
         top = shape_data.get("top", 0)
         width = shape_data.get("width", 100)
         height = shape_data.get("height", 100)
+        rotation = shape_data.get("rotation", 0)
         type_code = shape_data.get("type_code", 1)  # Default to Rectangle
         auto_shape_type = shape_data.get("auto_shape_type")
         name = shape_data.get("name", "")
@@ -211,6 +212,7 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
                         shape.Top = top
                         shape.Width = width
                         shape.Height = height
+                        shape.Rotation = rotation
                     except Exception as e:
                         print(f"[WARN] Failed to add picture {full_image_path}: {e}")
                 else:
@@ -222,6 +224,7 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
             if type_code == 17:
                 # msoTextOrientationHorizontal = 1
                 shape = slide.Shapes.AddTextbox(1, left, top, width, height)
+                shape.Rotation = rotation
                 # TextBoxes created via AddTextbox might have default fills/lines.
                 # We'll rely on apply_fill_format/apply_line_format to reset them,
                 # but explicitly setting transparent background default here might be safer if JSON lacks fill info.
@@ -229,15 +232,18 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
             elif type_code == 14:  # Placeholder
                 # Treat as textbox for now as they often contain text
                 shape = slide.Shapes.AddTextbox(1, left, top, width, height)
+                shape.Rotation = rotation
             else:
                 # AutoShape
                 try:
                     shape = slide.Shapes.AddShape(type_code, left, top, width, height)
+                    shape.Rotation = rotation
                 except Exception:
                     print(
                         f"[WARN] Failed to add shape type {type_code}, falling back to Rectangle"
                     )
                     shape = slide.Shapes.AddShape(1, left, top, width, height)
+                    shape.Rotation = rotation
 
         # Common Post-Creation Logic
         if shape:
