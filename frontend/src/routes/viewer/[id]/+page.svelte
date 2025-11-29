@@ -1,6 +1,6 @@
 <script>
     import { page } from "$app/stores";
-    import { onMount } from "svelte";
+    import { onMount, tick } from "svelte";
     import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
 
     const projectId = $page.params.id;
@@ -47,8 +47,24 @@
             );
             if (res.ok) {
                 project = await res.json();
+
+                // Check for slide query param
+                const slideParam = $page.url.searchParams.get("slide");
+                if (slideParam) {
+                    const idx = parseInt(slideParam) - 1;
+                    if (
+                        !isNaN(idx) &&
+                        idx >= 0 &&
+                        idx < project.slides.length
+                    ) {
+                        currentSlideIndex = idx;
+                    }
+                }
+
+                await tick();
                 updateScale();
                 resetHistory();
+                scrollToSlide(currentSlideIndex);
             }
         } catch (e) {
             console.error(e);
@@ -68,8 +84,7 @@
         (s) => s.slide_index === currentSlideIndex + 1,
     );
 
-    // Flatten shapes for the sidebar list (including children if needed, but for now just top-level or flattened)
-    // Let's flatten recursively for the list to be useful
+    // Flatten shapes for the sidebar list (including children if needed)
     function getAllShapes(shapes) {
         let result = [];
         for (const s of shapes) {
@@ -255,8 +270,6 @@
 
             if (res.ok) {
                 isDirty = false;
-                // Update the "clean" state in history to be the current one?
-                // Actually history just tracks positions, "dirty" means unsaved to backend.
             } else {
                 alert("Failed to save state.");
             }
@@ -399,13 +412,22 @@
         }
     }
 
+    function scrollToSlide(index) {
+        const el = document.getElementById(`slide-thumb-${index}`);
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+    }
+
     // Switch slide handler
-    function selectSlide(index) {
+    async function selectSlide(index) {
         if (isDirty) {
             if (!confirm("You have unsaved changes. Discard them?")) return;
         }
         currentSlideIndex = index;
+        await tick();
         resetHistory();
+        scrollToSlide(index);
     }
 </script>
 
@@ -425,6 +447,7 @@
             {#if project}
                 {#each project.slides as slide, i}
                     <button
+                        id={`slide-thumb-${i}`}
                         class="w-full text-left p-2 rounded hover:bg-gray-50 transition {currentSlideIndex ===
                         i
                             ? 'ring-2 ring-blue-500 bg-blue-50'
@@ -467,7 +490,7 @@
     >
         <!-- Toolbar -->
         <div
-            class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0 z-10"
+            class="min-h-[3.5rem] h-auto bg-white border-b border-gray-200 flex flex-wrap items-center justify-between px-4 py-2 gap-2 shrink-0 z-10"
         >
             <div class="flex items-center space-x-2">
                 <button

@@ -236,7 +236,7 @@
 
                   <!-- Overlay -->
                   <a
-                    href={`/viewer/${selectedProjectId}`}
+                    href={`/viewer/${selectedProjectId}?slide=${slide.slide_index}`}
                     class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-5 transition flex items-center justify-center"
                   >
                   </a>

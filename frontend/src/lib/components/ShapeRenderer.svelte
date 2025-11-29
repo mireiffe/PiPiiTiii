@@ -47,6 +47,13 @@
     }
 
     // Helper for clip-path based on shape type
+    function isCloud(shape) {
+        if (shape.auto_shape_type === 203) return true;
+        const name = (shape.name || "").toLowerCase();
+        return name.includes("cloud") || name.includes("구름");
+    }
+
+    // getClipPath에서 cloud 부분 제거 (SVG로 대체)
     function getClipPath(shape) {
         if (!shape) return "";
 
@@ -57,8 +64,6 @@
             const name = (shape.name || "").toLowerCase();
             if (name.includes("trapezoid") || name.includes("사다리꼴"))
                 type = 3;
-            else if (name.includes("cloud") || name.includes("구름"))
-                type = 203;
             else if (name.includes("arrow") || name.includes("화살표")) {
                 if (name.includes("right") || name.includes("오른쪽"))
                     type = 33;
@@ -93,19 +98,7 @@
         if (type === 36) {
             return "clip-path: polygon(20% 0%, 80% 0%, 80% 60%, 100% 60%, 50% 100%, 0% 60%, 20% 60%);";
         }
-        // Cloud = 203 (approximate cloud shape)
-        if (type === 203) {
-            return "clip-path: path('M 25 60 Q 10 60 10 40 Q 10 20 30 20 Q 40 0 60 10 Q 80 0 90 20 Q 110 20 110 40 Q 110 60 90 60 Z');";
-            // Note: Simple polygon/path for cloud is hard, using a rough path or multiple circles is better but CSS clip-path path() support is good.
-            // Let's use a slightly more relative polygon or ellipse approach if path is tricky with sizing.
-            // Actually, for a scalable cloud, a complex polygon is safer than fixed path units.
-            // Let's try a polygon that looks somewhat like a cloud.
-            return "clip-path: polygon(20% 80%, 10% 60%, 20% 40%, 40% 30%, 60% 30%, 80% 40%, 90% 60%, 80% 80%, 60% 90%, 40% 90%); border-radius: 50%;";
-            // Better yet, let's use a standard SVG path scaled to 0-1 or % if possible, but clip-path path() uses pixels usually.
-            // Polygon is safest for %:
-            return "clip-path: polygon(25% 35%, 20% 60%, 35% 85%, 65% 85%, 80% 60%, 75% 35%, 50% 20%); border-radius: 40%;";
-        }
-
+        // Cloud는 여기서 처리 안 함 (SVG로 대체)
         return "";
     }
 
@@ -124,79 +117,142 @@
     ${highlight ? "box-shadow: 0 0 0 4px #ef4444; z-index: 9999;" : ""} 
   `;
 
+    // Cloud용 style (clip-path 제외)
+    $: cloudStyle = `
+        position: absolute;
+        left: ${shape.left * scale}px;
+        top: ${shape.top * scale}px;
+        width: ${shape.width * scale}px;
+        height: ${shape.height * scale}px;
+        transform: rotate(${shape.rotation || 0}deg);
+        z-index: ${shape.z_order_position || 1};
+        overflow: visible;
+        ${highlight ? "filter: drop-shadow(0 0 4px #ef4444);" : ""}
+    `;
+
+    $: fillColor = shape.fill?.fore_color_rgb ||
+        shape.fill?.back_color_rgb || [255, 255, 255];
+    $: lineColor = shape.line?.color_rgb || [0, 0, 0];
+    $: lineWidth = (shape.line?.weight || 1) * scale;
+
     const IMAGE_BASE = "http://localhost:8000";
 </script>
 
-<div
-    {style}
-    class="absolute select-none group"
-    data-shape-id={shape.shape_index}
->
-    <!-- Image -->
-    {#if shape.image_file}
-        <img
-            src={`${IMAGE_BASE}/results/${projectId}/${shape.image_file}`}
-            alt={shape.name}
-            class="w-full h-full object-contain pointer-events-none"
-        />
-    {/if}
-
-    <!-- Text -->
-    {#if shape.text && !shape.table}
-        <div
-            class="w-full h-full p-1 whitespace-pre-wrap break-words pointer-events-none"
-            style={getTextStyle(shape.text_style)}
+{#if isCloud(shape)}
+    <!-- Cloud Shape - SVG 렌더링 -->
+    <div
+        style={cloudStyle}
+        class="absolute select-none group"
+        data-shape-id={shape.shape_index}
+    >
+        <svg
+            viewBox="0 0 100 60"
+            width="100%"
+            height="100%"
+            preserveAspectRatio="none"
         >
-            {shape.text}
-        </div>
-    {/if}
+            <path
+                d="M25,50 
+                   a15,15 0 0,1 0,-25 
+                   a18,18 0 0,1 30,-10 
+                   a15,15 0 0,1 25,5 
+                   a12,12 0 0,1 0,20 
+                   a10,10 0 0,1 -10,10 
+                   z"
+                fill={getCssColor(fillColor)}
+                stroke={shape.line?.visible !== false
+                    ? getCssColor(lineColor)
+                    : "none"}
+                stroke-width={lineWidth}
+            />
+        </svg>
 
-    <!-- Table -->
-    {#if shape.table}
+        <!-- Text overlay for cloud -->
+        {#if shape.text && !shape.table}
+            <div
+                class="absolute inset-0 flex items-center justify-center p-2 whitespace-pre-wrap break-words pointer-events-none text-center"
+                style={getTextStyle(shape.text_style)}
+            >
+                {shape.text}
+            </div>
+        {/if}
+
         <div
-            class="w-full h-full grid pointer-events-none"
-            style={`
+            class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+            style="filter: drop-shadow(0 0 2px #3b82f6);"
+        ></div>
+    </div>
+{:else}
+    <!-- 기존 Shape 렌더링 -->
+    <div
+        {style}
+        class="absolute select-none group"
+        data-shape-id={shape.shape_index}
+    >
+        <!-- Image -->
+        {#if shape.image_file}
+            <img
+                src={`${IMAGE_BASE}/results/${projectId}/${shape.image_file}`}
+                alt={shape.name}
+                class="w-full h-full object-contain pointer-events-none"
+            />
+        {/if}
+
+        {#if shape.text && !shape.table}
+            <div
+                class="w-full h-full p-1 whitespace-pre-wrap break-words pointer-events-none"
+                style={getTextStyle(shape.text_style)}
+            >
+                {shape.text}
+            </div>
+        {/if}
+
+        <!-- Table -->
+        {#if shape.table}
+            <div
+                class="w-full h-full grid pointer-events-none"
+                style={`
       grid-template-columns: repeat(${shape.table.cols}, 1fr);
       grid-template-rows: repeat(${shape.table.rows}, 1fr);
     `}
-        >
-            {#each shape.table.cells as cell}
-                <div
-                    class="border border-gray-400 p-1 overflow-hidden"
-                    style={`
+            >
+                {#each shape.table.cells as cell}
+                    <div
+                        class="border border-gray-400 p-1 overflow-hidden"
+                        style={`
           ${getFillStyle(cell.fill)}
           ${getTextStyle(cell.text_style)}
         `}
-                >
-                    {cell.text}
-                </div>
+                    >
+                        {cell.text}
+                    </div>
+                {/each}
+            </div>
+        {/if}
+
+        <!-- Recursive Children (Groups) -->
+        {#if shape.children && shape.children.length > 0}
+            {#each shape.children as child}
+                <!-- 
+                    IMPORTANT: Children in JSON have absolute coordinates (slide-relative).
+                    But here they are rendered inside the parent div, which is already positioned.
+                    So we must adjust their coordinates to be relative to the parent.
+                -->
+                <svelte:self
+                    shape={{
+                        ...child,
+                        left: child.left - shape.left,
+                        top: child.top - shape.top,
+                    }}
+                    {scale}
+                    {projectId}
+                    {highlight}
+                />
             {/each}
-        </div>
-    {/if}
+        {/if}
 
-    <!-- Recursive Children (Groups) -->
-    {#if shape.children && shape.children.length > 0}
-        {#each shape.children as child}
-            <!-- 
-                IMPORTANT: Children in JSON have absolute coordinates (slide-relative).
-                But here they are rendered inside the parent div, which is already positioned.
-                So we must adjust their coordinates to be relative to the parent.
-            -->
-            <svelte:self
-                shape={{
-                    ...child,
-                    left: child.left - shape.left,
-                    top: child.top - shape.top,
-                }}
-                {scale}
-                {projectId}
-                {highlight}
-            />
-        {/each}
-    {/if}
-
-    <!-- Selection Overlay (visible on hover/drag) -->
-    <div
-        class="absolute inset-0 border-2 border-blue-500 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-    ></div>
-</div>
+        <div
+            class="absolute inset-0 border-2 border-blue-500 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+        ></div>
+    </div>
+{/if}

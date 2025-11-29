@@ -283,9 +283,7 @@ def parse_presentation(
 
         # 슬라이드
         target_indices = list(range(1, slides_count + 1))
-        if debug and slides_count > 3:
-            print("[DEBUG] Randomly selecting 3 slides...")
-            target_indices = sorted(random.sample(target_indices, 3))
+        target_indices = list(range(1, slides_count + 1))
 
         total_slides = len(target_indices)
         for i, slide_index in enumerate(target_indices):

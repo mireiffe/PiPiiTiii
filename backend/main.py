@@ -1,19 +1,15 @@
 import os
-import sys
+
 import shutil
 
 import json
-import uuid
 from datetime import datetime
 from typing import List, Dict, Any
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pythoncom
-
-# Add parent directory to sys.path to import parsing.py
-# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ppt_parser as parsing
 
@@ -37,10 +33,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 
 # Mount static files for images - serve from project-specific directories
-# The images are stored in results/{project_id}/images/, so we mount the parent results dir
-# and access via /images/{project_id}/images/{filename}
-# However, for simpler frontend paths, we'll serve each project's images directory
-# This will be handled by mounting the entire results directory
 app.mount("/results", StaticFiles(directory=RESULT_DIR), name="results")
 
 # Global progress store: { project_id: { "percent": int, "message": str, "status": "processing"|"done"|"error" } }
@@ -62,6 +54,21 @@ def update_progress(project_id: str, percent: int, message: str):
         progress_store[project_id]["status"] = "done"
     elif percent < 0:
         progress_store[project_id]["status"] = "error"
+
+
+def extract_preserved_descriptions(
+    shapes: List[Dict[str, Any]], slide_index: int, preserved_data: Dict[tuple, str]
+):
+    """Recursively extract descriptions from shapes to preserve them during reparse."""
+    for shape in shapes:
+        name = shape.get("name")
+        desc = shape.get("description")
+        if name and desc:
+            preserved_data[(slide_index, name)] = desc
+        if "children" in shape:
+            extract_preserved_descriptions(
+                shape["children"], slide_index, preserved_data
+            )
 
 
 def run_parsing_task(file_path: str, project_dir: str, project_id: str):
@@ -386,20 +393,12 @@ def reparse_all_project(project_id: str):
 
     try:
         # Extract existing descriptions to preserve them
+        # Extract existing descriptions to preserve them
         preserved_data = {}
         for slide in data.get("slides", []):
-            s_idx = slide.get("slide_index")
-
-            def extract_desc(shapes):
-                for shape in shapes:
-                    name = shape.get("name")
-                    desc = shape.get("description")
-                    if name and desc:
-                        preserved_data[(s_idx, name)] = desc
-                    if "children" in shape:
-                        extract_desc(shape["children"])
-
-            extract_desc(slide.get("shapes", []))
+            extract_preserved_descriptions(
+                slide.get("shapes", []), slide.get("slide_index"), preserved_data
+            )
 
         # Initialize COM for this thread
         pythoncom.CoInitialize()
@@ -451,17 +450,9 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
             None,
         )
         if target_slide:
-
-            def extract_desc(shapes):
-                for shape in shapes:
-                    name = shape.get("name")
-                    desc = shape.get("description")
-                    if name and desc:
-                        preserved_data[(slide_index, name)] = desc
-                    if "children" in shape:
-                        extract_desc(shape["children"])
-
-            extract_desc(target_slide.get("shapes", []))
+            extract_preserved_descriptions(
+                target_slide.get("shapes", []), slide_index, preserved_data
+            )
 
         # Initialize COM for this thread
         pythoncom.CoInitialize()

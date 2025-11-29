@@ -207,7 +207,7 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
                         shape = slide.Shapes.AddPicture(
                             full_image_path, False, True, left, top, width, height
                         )
-                        # Phase 1: Force exact dimensions (PowerPoint may auto-adjust based on DPI/aspect ratio)
+                        # Force exact dimensions (PowerPoint may auto-adjust based on DPI/aspect ratio)
                         shape.Left = left
                         shape.Top = top
                         shape.Width = width
@@ -252,10 +252,10 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
                 try:
                     shape.Name = name
                 except Exception as e:
-                    # Phase 1: Better logging for name failures
+                    # Better logging for name failures
                     print(f"[WARN] Failed to set shape name to '{name}': {e}")
 
-            # Phase 2: Embed original shape_index in AlternativeText for preservation
+            # Embed original shape_index in AlternativeText for preservation
             original_index = shape_data.get("shape_index")
             if original_index:
                 try:
@@ -265,7 +265,7 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
                         f"[WARN] Failed to set AlternativeText for shape '{name}': {e}"
                     )
 
-            # Phase 1: Text - validate HasTextFrame first
+            # Text - validate HasTextFrame first
             if text:
                 try:
                     if shape.HasTextFrame:
@@ -282,7 +282,7 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
             apply_line_format(shape, shape_data.get("line"))
             apply_text_style(shape, shape_data.get("text_style"))
 
-            # Phase 2: Z-order adjustment
+            # Z-order adjustment
             target_z = shape_data.get("z_order_position")
             if target_z:
                 try:
@@ -339,9 +339,6 @@ def reconstruct_presentation(json_data, output_path, image_dir=None):
             slide = pres.Slides.Add(pres.Slides.Count + 1, 12)
 
             shapes_data = slide_data.get("shapes", [])
-            # Sort shapes by z_order_position if available
-            # shapes_data.sort(key=lambda x: x.get("z_order_position", 0))
-            # (Optional, but good practice if z-order is critical)
 
             for shape_data in shapes_data:
                 reconstruct_shape(slide, shape_data, image_dir=image_dir)
@@ -370,5 +367,3 @@ def reconstruct_presentation(json_data, output_path, image_dir=None):
     finally:
         if "pres" in locals():
             pres.Close()
-        # app.Quit()
-        pass
