@@ -47,7 +47,7 @@ def main(ppt_path_raw, slide_index):
             json_filename = f"{base_name}_slide_{slide_index}.json"
             json_path = os.path.join(out_dir, json_filename)
             with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, ensure_ascii=False, indent=2)
+                json.dump(result, f, ensure_ascii=False, indent=2, default=str)
             print(f"[SUCCESS] Slide {slide_index} parsed successfully.")
             print(f"[INFO] JSON saved to: {json_path}")
             print(f"[INFO] Images saved under: {os.path.join(out_dir, 'images')}")
@@ -97,6 +97,6 @@ if __name__ == "__main__":
     # ==========================================
     # Change these variables to test different files or slides
     ppt_path_raw = r"samples/250215_GenerativeModels.pptx"
-    slide_index = 24  # Set to None to parse the entire presentation
+    slide_index = 5  # Set to None to parse the entire presentation
 
     main(ppt_path_raw, slide_index)

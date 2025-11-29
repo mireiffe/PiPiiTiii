@@ -28,6 +28,9 @@ def apply_fill_format(shape, fill_data):
         visible = fill_data.get("visible")
         if visible is not None:
             shape.Fill.Visible = visible
+            # Explicitly set transparency if invisible, to avoid "white box" issues
+            if not visible:
+                shape.Fill.Transparency = 1.0
 
     except Exception as e:
         print(f"[WARN] Failed to apply fill format: {e}")
@@ -100,6 +103,41 @@ def apply_text_style(shape, text_style):
         print(f"[WARN] Failed to apply text style: {e}")
 
 
+def get_shape_type_from_name(name, default_type=1):
+    """
+    Infers the MSO shape type from the shape name if the provided type is generic (Rectangle).
+    This is a heuristic to fix cases where the parser identifies complex shapes as simple Rectangles.
+    """
+    if not name:
+        return default_type
+
+    name_lower = name.lower()
+
+    # MSO Shape Type Constants
+    # msoShapeTrapezoid = 3
+    if "trapezoid" in name_lower or "사다리꼴" in name_lower:
+        return 3
+
+    # Arrows
+    # msoShapeRightArrow = 33
+    # msoShapeLeftArrow = 34
+    # msoShapeUpArrow = 35
+    # msoShapeDownArrow = 36
+    if "arrow" in name_lower or "화살표" in name_lower:
+        if "right" in name_lower or "오른쪽" in name_lower:
+            return 33
+        elif "left" in name_lower or "왼쪽" in name_lower:
+            return 34
+        elif "up" in name_lower or "위쪽" in name_lower:
+            return 35
+        elif "down" in name_lower or "아래쪽" in name_lower:
+            return 36
+        # Default to Right Arrow if direction not specified but it is an arrow
+        return 33
+
+    return default_type
+
+
 def reconstruct_shape(slide, shape_data, image_dir=None):
     try:
         # Basic properties
@@ -108,8 +146,18 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
         width = shape_data.get("width", 100)
         height = shape_data.get("height", 100)
         type_code = shape_data.get("type_code", 1)  # Default to Rectangle
+        auto_shape_type = shape_data.get("auto_shape_type")
+        name = shape_data.get("name", "")
         image_file = shape_data.get("image_file")
         children = shape_data.get("children", [])
+
+        # Refine type_code:
+        # 1. Use auto_shape_type if available (most accurate for AutoShapes)
+        # 2. Fallback to name heuristics if it's a generic Rectangle (1) and no auto_shape_type
+        if auto_shape_type:
+            type_code = auto_shape_type
+        elif type_code == 1:
+            type_code = get_shape_type_from_name(name, type_code)
 
         # Create shape
         shape = None
@@ -174,13 +222,17 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
             if type_code == 17:
                 # msoTextOrientationHorizontal = 1
                 shape = slide.Shapes.AddTextbox(1, left, top, width, height)
+                # TextBoxes created via AddTextbox might have default fills/lines.
+                # We'll rely on apply_fill_format/apply_line_format to reset them,
+                # but explicitly setting transparent background default here might be safer if JSON lacks fill info.
+                # However, we should trust the JSON 'fill' data.
             elif type_code == 14:  # Placeholder
                 # Treat as textbox for now as they often contain text
                 shape = slide.Shapes.AddTextbox(1, left, top, width, height)
             else:
-                # Default to AutoShape (Rectangle)
+                # AutoShape
                 try:
-                    shape = slide.Shapes.AddShape(1, left, top, width, height)
+                    shape = slide.Shapes.AddShape(type_code, left, top, width, height)
                 except Exception:
                     print(
                         f"[WARN] Failed to add shape type {type_code}, falling back to Rectangle"
@@ -190,7 +242,6 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
         # Common Post-Creation Logic
         if shape:
             # Set Name
-            name = shape_data.get("name")
             if name:
                 try:
                     shape.Name = name

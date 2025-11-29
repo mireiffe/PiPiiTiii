@@ -93,11 +93,15 @@ class ProjectSummary(BaseModel):
     created_at: str
     author: str = "Unknown"
     slide_count: int
+    title: str = ""
+    subject: str = ""
+    last_modified_by: str = ""
+    revision_number: str = ""
 
 
 class PositionUpdate(BaseModel):
     slide_index: int
-    shape_index: str | int  # ID is string in parsing.py (e.g. "1", "M1", "L1_1")
+    shape_index: str | int
     left: float
     top: float
 
@@ -130,15 +134,20 @@ def list_projects():
                 stats = os.stat(json_path)
                 created_at = datetime.fromtimestamp(stats.st_ctime).isoformat()
 
+                metadata = data.get("metadata", {})
+                builtin = metadata.get("builtin_properties", {})
+
                 projects.append(
                     ProjectSummary(
                         id=folder_name,
                         name=folder_name,
                         created_at=created_at,
-                        author=data.get(
-                            "author", "Unknown"
-                        ),  # parsing.py doesn't extract author yet, but we can add it or mock it
+                        author=builtin.get("Author") or "Unknown",
                         slide_count=data.get("slides_count", 0),
+                        title=builtin.get("Title") or "",
+                        subject=builtin.get("Subject") or "",
+                        last_modified_by=builtin.get("Last Author") or "",
+                        revision_number=str(builtin.get("Revision Number") or ""),
                     )
                 )
             except Exception as e:
@@ -254,7 +263,7 @@ def update_project_shape(project_id: str, update: PositionUpdate):
         raise HTTPException(status_code=404, detail="Shape not found")
 
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
     return {"status": "success"}
 
@@ -282,6 +291,9 @@ def reparse_all_project(project_id: str):
             raise HTTPException(status_code=404, detail="Original PPT file not found")
 
     try:
+        # Initialize COM for this thread
+        pythoncom.CoInitialize()
+
         # Re-run parsing
         new_json_path = parsing.parse_presentation(ppt_path, project_dir, debug=False)
 
@@ -293,6 +305,9 @@ def reparse_all_project(project_id: str):
     except Exception as e:
         print(f"Reparse error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Uninitialize COM when done
+        pythoncom.CoUninitialize()
 
 
 @app.post("/api/project/{project_id}/slides/{slide_index}/reparse")
@@ -317,6 +332,9 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
             raise HTTPException(status_code=404, detail="Original PPT file not found")
 
     try:
+        # Initialize COM for this thread
+        pythoncom.CoInitialize()
+
         # Parse single slide
         new_slide_info = parsing.parse_single_slide(ppt_path, slide_index, project_dir)
 
@@ -342,7 +360,7 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
 
         # Save updated JSON
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
         return {
             "status": "success",
@@ -353,6 +371,9 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
     except Exception as e:
         print(f"Slide reparse error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Uninitialize COM when done
+        pythoncom.CoUninitialize()
 
 
 if __name__ == "__main__":

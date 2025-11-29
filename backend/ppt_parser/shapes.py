@@ -64,17 +64,29 @@ def parse_shape(
     # Use preserved index if available, otherwise use provided shape_index
     final_shape_index = preserved_index if preserved_index else shape_index
 
+    # Extract AutoShapeType if it's an AutoShape (Type 1)
+    auto_shape_type = None
+    if shape.Type == 1:  # msoAutoShape
+        try:
+            auto_shape_type = int(shape.AutoShapeType)
+        except Exception:
+            pass
+
     fill_info = None
     line_info = None
     geometry_info = None
-    try:
-        fill_info = extract_fill_format(shape.Fill)
-    except Exception:
-        fill_info = None
-    try:
-        line_info = extract_line_format(shape.Line)
-    except Exception:
-        line_info = None
+
+    # Skip fill/line extraction for Groups (Type 6) to avoid "black box" issues
+    if shape.Type != MSO_TYPE_GROUP:
+        try:
+            fill_info = extract_fill_format(shape.Fill)
+        except Exception:
+            fill_info = None
+        try:
+            line_info = extract_line_format(shape.Line)
+        except Exception:
+            line_info = None
+
     geometry_info = extract_geometry_info(shape)
 
     preview = ""
@@ -89,6 +101,7 @@ def parse_shape(
         "context": context,
         "type_code": shape.Type,
         "type_name": shape_type_name,
+        "auto_shape_type": auto_shape_type,
         "left": float(shape.Left),
         "top": float(shape.Top),
         "width": float(shape.Width),

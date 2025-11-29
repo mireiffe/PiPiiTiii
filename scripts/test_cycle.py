@@ -78,7 +78,7 @@ def cycle_test(
             }
 
             with open(ab_json_path, "w", encoding="utf-8") as f:
-                json.dump(ab_data, f, ensure_ascii=False, indent=2)
+                json.dump(ab_data, f, ensure_ascii=False, indent=2, default=str)
         else:
             parse_presentation(str(ppt_path), str(ab_dir), debug=False)
 
@@ -131,7 +131,7 @@ def cycle_test(
             }
 
             with open(ba_json_path, "w", encoding="utf-8") as f:
-                json.dump(ba_data, f, ensure_ascii=False, indent=2)
+                json.dump(ba_data, f, ensure_ascii=False, indent=2, default=str)
         else:
             parse_presentation(str(ab_recon_path), str(ba_dir), debug=False)
 

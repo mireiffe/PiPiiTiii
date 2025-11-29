@@ -153,6 +153,7 @@ def parse_single_slide(ppt_path, slide_index, out_dir):
             "shapes_count": shapes_count,
             "design_name": design_name,
             "layout_name": layout_name,
+            "metadata": extract_metadata(presentation),
             "shapes": [],
         }
 
@@ -184,6 +185,37 @@ def parse_single_slide(ppt_path, slide_index, out_dir):
             presentation.Close()
 
 
+def extract_metadata(presentation) -> dict:
+    metadata = {
+        "builtin_properties": {},
+        "custom_properties": {},
+    }
+
+    try:
+        for prop in presentation.BuiltInDocumentProperties:
+            name = prop.Name
+            try:
+                value = prop.Value
+            except Exception:
+                value = None
+            metadata["builtin_properties"][name] = value
+    except Exception as e:
+        print(f"[WARN] Failed to extract BuiltInDocumentProperties: {e}")
+
+    try:
+        for prop in presentation.CustomDocumentProperties:
+            name = prop.Name
+            try:
+                value = prop.Value
+            except Exception:
+                value = None
+            metadata["custom_properties"][name] = value
+    except Exception as e:
+        print(f"[WARN] Failed to extract CustomDocumentProperties: {e}")
+
+    return metadata
+
+
 def parse_presentation(ppt_path, out_dir, debug=False, progress_callback=None):
     if not os.path.exists(ppt_path):
         print(f"[ERROR] File not found: {ppt_path}")
@@ -211,21 +243,24 @@ def parse_presentation(ppt_path, out_dir, debug=False, progress_callback=None):
         print(f"Slides Count: {slides_count}")
 
         # Convert to relative path from project root (3 levels up from backend/ppt_parser)
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        project_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
         abs_ppt_path = os.path.abspath(ppt_path)
         try:
             rel_ppt_path = os.path.relpath(abs_ppt_path, project_root)
             # Convert to forward slashes
-            rel_ppt_path = rel_ppt_path.replace(os.sep, '/')
+            rel_ppt_path = rel_ppt_path.replace(os.sep, "/")
         except ValueError:
             # If relpath fails (different drives on Windows), use absolute path
-            rel_ppt_path = abs_ppt_path.replace(os.sep, '/')
+            rel_ppt_path = abs_ppt_path.replace(os.sep, "/")
 
         result = {
             "ppt_path": rel_ppt_path,
             "slides_count": slides_count,
             "slide_width": slide_width,
             "slide_height": slide_height,
+            "metadata": extract_metadata(presentation),
             "masters": [],
             "slides": [],
         }
@@ -298,7 +333,7 @@ def parse_presentation(ppt_path, out_dir, debug=False, progress_callback=None):
         base_name = os.path.splitext(os.path.basename(ppt_path))[0]
         json_path = os.path.join(out_dir, f"{base_name}.json")
         with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+            json.dump(result, f, ensure_ascii=False, indent=2, default=str)
 
         print(f"[INFO] JSON metadata saved to: {json_path}")
         print(f"[INFO] Images saved under : {image_dir}")
