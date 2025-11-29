@@ -1,6 +1,7 @@
 <script>
     export let shape;
     export let scale = 1;
+    export let projectId = "";
 
     // Helper to convert PPT color to CSS
     function getCssColor(rgb) {
@@ -67,7 +68,7 @@
     <!-- Image -->
     {#if shape.image_file}
         <img
-            src={`${IMAGE_BASE}/${shape.image_file}`}
+            src={`${IMAGE_BASE}/results/${projectId}/${shape.image_file}`}
             alt={shape.name}
             class="w-full h-full object-contain pointer-events-none"
         />

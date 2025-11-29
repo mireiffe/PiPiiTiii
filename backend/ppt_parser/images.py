@@ -14,7 +14,8 @@ def export_shape_image(shape, slide_index, shape_index, image_dir):
 
     try:
         shape.Export(full_path, PP_SHAPE_FORMAT_PNG)
-        return os.path.join("images", filename)
+        # Always use forward slashes for cross-platform compatibility
+        return f"images/{filename}"
     except Exception as e:
         print(
             f"[WARN] Failed to export image for slide {slide_index}, shape {shape_index} ({shape.Name}): {e}"

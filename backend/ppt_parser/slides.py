@@ -210,8 +210,19 @@ def parse_presentation(ppt_path, out_dir, debug=False, progress_callback=None):
         slides_count = presentation.Slides.Count
         print(f"Slides Count: {slides_count}")
 
+        # Convert to relative path from project root (3 levels up from backend/ppt_parser)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        abs_ppt_path = os.path.abspath(ppt_path)
+        try:
+            rel_ppt_path = os.path.relpath(abs_ppt_path, project_root)
+            # Convert to forward slashes
+            rel_ppt_path = rel_ppt_path.replace(os.sep, '/')
+        except ValueError:
+            # If relpath fails (different drives on Windows), use absolute path
+            rel_ppt_path = abs_ppt_path.replace(os.sep, '/')
+
         result = {
-            "ppt_path": os.path.abspath(ppt_path),
+            "ppt_path": rel_ppt_path,
             "slides_count": slides_count,
             "slide_width": slide_width,
             "slide_height": slide_height,

@@ -230,7 +230,7 @@
                             >
                                 {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
                                     <div class="absolute top-0 left-0">
-                                        <ShapeRenderer {shape} scale={1} />
+                                        <ShapeRenderer {shape} scale={1} {projectId} />
                                     </div>
                                 {/each}
                             </div>
@@ -313,7 +313,7 @@
                 cursor: grab;
               `}
                         >
-                            <ShapeRenderer {shape} {scale} />
+                            <ShapeRenderer {shape} {scale} {projectId} />
                         </div>
                     {/each}
                 </div>

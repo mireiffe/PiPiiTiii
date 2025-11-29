@@ -10,6 +10,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Body, BackgroundTa
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import pythoncom
 
 # Add parent directory to sys.path to import parsing.py
 # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,8 +36,12 @@ RESULT_DIR = os.path.join(BASE_DIR, "results")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 
-# Mount static files for images
-app.mount("/images", StaticFiles(directory=RESULT_DIR), name="images")
+# Mount static files for images - serve from project-specific directories
+# The images are stored in results/{project_id}/images/, so we mount the parent results dir
+# and access via /images/{project_id}/images/{filename}
+# However, for simpler frontend paths, we'll serve each project's images directory
+# This will be handled by mounting the entire results directory
+app.mount("/results", StaticFiles(directory=RESULT_DIR), name="results")
 
 # Global progress store: { project_id: { "percent": int, "message": str, "status": "processing"|"done"|"error" } }
 progress_store: Dict[str, Dict[str, Any]] = {}
@@ -60,6 +65,8 @@ def update_progress(project_id: str, percent: int, message: str):
 
 
 def run_parsing_task(file_path: str, project_dir: str, project_id: str):
+    # Initialize COM for this thread
+    pythoncom.CoInitialize()
     try:
 
         def callback(p, m):
@@ -75,6 +82,9 @@ def run_parsing_task(file_path: str, project_dir: str, project_id: str):
     except Exception as e:
         print(f"Background task error: {e}")
         update_progress(project_id, -1, str(e))
+    finally:
+        # Uninitialize COM when done
+        pythoncom.CoUninitialize()
 
 
 class ProjectSummary(BaseModel):
@@ -261,6 +271,10 @@ def reparse_all_project(project_id: str):
         data = json.load(f)
 
     ppt_path = data.get("ppt_path")
+    # Convert relative path to absolute path if needed
+    if ppt_path and not os.path.isabs(ppt_path):
+        ppt_path = os.path.join(BASE_DIR, ppt_path)
+
     if not ppt_path or not os.path.exists(ppt_path):
         # Try to find it in uploads if absolute path is missing or wrong
         ppt_path = os.path.join(UPLOAD_DIR, f"{project_id}.pptx")
@@ -293,6 +307,10 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
         data = json.load(f)
 
     ppt_path = data.get("ppt_path")
+    # Convert relative path to absolute path if needed
+    if ppt_path and not os.path.isabs(ppt_path):
+        ppt_path = os.path.join(BASE_DIR, ppt_path)
+
     if not ppt_path or not os.path.exists(ppt_path):
         ppt_path = os.path.join(UPLOAD_DIR, f"{project_id}.pptx")
         if not os.path.exists(ppt_path):

@@ -63,7 +63,9 @@ def main(ppt_path_raw, slide_index):
             reconstruct_path = os.path.join(
                 out_dir, f"{base_name}_slide_{slide_index}_reconstructed.pptx"
             )
-            if reconstruct_presentation(reconstruct_data, reconstruct_path):
+            if reconstruct_presentation(
+                reconstruct_data, reconstruct_path, image_dir=out_dir
+            ):
                 print(f"[SUCCESS] Reconstruction complete: {reconstruct_path}")
             else:
                 print(f"[ERROR] Reconstruction failed.")
@@ -81,7 +83,7 @@ def main(ppt_path_raw, slide_index):
                 json_data = json.load(f)
 
             reconstruct_path = os.path.join(out_dir, f"{base_name}_reconstructed.pptx")
-            if reconstruct_presentation(json_data, reconstruct_path):
+            if reconstruct_presentation(json_data, reconstruct_path, image_dir=out_dir):
                 print(f"[SUCCESS] Reconstruction complete: {reconstruct_path}")
             else:
                 print(f"[ERROR] Reconstruction failed.")
@@ -96,6 +98,5 @@ if __name__ == "__main__":
     # Change these variables to test different files or slides
     ppt_path_raw = r"samples/250215_GenerativeModels.pptx"
     slide_index = 24  # Set to None to parse the entire presentation
-    # ==========================================
 
     main(ppt_path_raw, slide_index)

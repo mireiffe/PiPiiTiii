@@ -46,6 +46,24 @@ def parse_shape(
 
     print(f"{prefix}- [{context}] Shape Name : {shape.Name} ({shape_type_name})")
 
+    # Extract embedded shape_index from AlternativeText if present (for AB/BA consistency)
+    preserved_index = None
+    try:
+        alt_text = getattr(shape, "AlternativeText", "")
+        if alt_text and "##idx_" in alt_text:
+            # Extract index from format "##idx_<original_index>##"
+            start_marker = "##idx_"
+            end_marker = "##"
+            start_pos = alt_text.find(start_marker) + len(start_marker)
+            end_pos = alt_text.find(end_marker, start_pos)
+            if end_pos > start_pos:
+                preserved_index = alt_text[start_pos:end_pos]
+    except Exception:
+        pass
+
+    # Use preserved index if available, otherwise use provided shape_index
+    final_shape_index = preserved_index if preserved_index else shape_index
+
     fill_info = None
     line_info = None
     geometry_info = None
@@ -66,7 +84,7 @@ def parse_shape(
             preview = preview[:80] + "..."
 
     shape_info = {
-        "shape_index": shape_index,
+        "shape_index": final_shape_index,
         "name": shape.Name,
         "context": context,
         "type_code": shape.Type,

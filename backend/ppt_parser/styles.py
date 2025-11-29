@@ -154,7 +154,11 @@ def extract_line_format(line):
     try:
         w = getattr(line, "Weight", None)
         if w is not None:
-            info["weight"] = float(w)
+            val = float(w)
+            if val < 0:
+                info["weight"] = 0.0
+            else:
+                info["weight"] = val
     except Exception:
         pass
 
