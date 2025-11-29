@@ -1,0 +1,551 @@
+2025-11-29 09:36:37,521 - DEBUG - Parsing shape: Rectangle 6, Type: 1 (AutoShape)
+2025-11-29 09:36:37,664 - DEBUG - Parsing shape: Rectangle 8, Type: 1 (AutoShape)
+2025-11-29 09:36:37,792 - DEBUG - Parsing shape: Title Placeholder 1, Type: 14 (Placeholder)
+2025-11-29 09:36:37,846 - DEBUG - Exporting shape Title Placeholder 1 to .\results\images\slide00_shapeM3_Title_Placeholder_1.png
+2025-11-29 09:36:37,848 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:37,925 - DEBUG - Parsing shape: Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:37,969 - DEBUG - Exporting shape Text Placeholder 2 to .\results\images\slide00_shapeM4_Text_Placeholder_2.png
+2025-11-29 09:36:37,970 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:38,040 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:38,091 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeM5_Date_Placeholder_3.png
+2025-11-29 09:36:38,094 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:38,179 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:38,226 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeM6_Footer_Placeholder_4.png
+2025-11-29 09:36:38,229 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:38,305 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:38,350 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeM7_Slide_Number_Placeholder_5.png
+2025-11-29 09:36:38,351 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:38,404 - DEBUG - Parsing shape: Straight Connector 9, Type: 9 (Line)
+2025-11-29 09:36:38,533 - DEBUG - Parsing shape: Rectangle 6, Type: 1 (AutoShape)
+2025-11-29 09:36:38,623 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:36:38,752 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:38,793 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL1_3_Title_1.png
+2025-11-29 09:36:38,795 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:38,859 - DEBUG - Parsing shape: Subtitle 2, Type: 14 (Placeholder)
+2025-11-29 09:36:38,900 - DEBUG - Exporting shape Subtitle 2 to .\results\images\slide00_shapeL1_4_Subtitle_2.png
+2025-11-29 09:36:38,901 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,059 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:39,090 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL1_5_Date_Placeholder_3.png
+2025-11-29 09:36:39,091 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,130 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:39,165 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL1_6_Footer_Placeholder_4.png
+2025-11-29 09:36:39,166 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,215 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:39,253 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL1_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:36:39,254 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,288 - DEBUG - Parsing shape: Straight Connector 8, Type: 9 (Line)
+2025-11-29 09:36:39,383 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:39,414 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL2_1_Title_1.png
+2025-11-29 09:36:39,415 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,462 - DEBUG - Parsing shape: Content Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:39,493 - DEBUG - Exporting shape Content Placeholder 2 to .\results\images\slide00_shapeL2_2_Content_Placeholder_2.png
+2025-11-29 09:36:39,495 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,539 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:39,570 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL2_3_Date_Placeholder_3.png
+2025-11-29 09:36:39,571 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,603 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:39,633 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL2_4_Footer_Placeholder_4.png
+2025-11-29 09:36:39,634 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,678 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:39,707 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL2_5_Slide_Number_Placeholder_5.png
+2025-11-29 09:36:39,708 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:39,744 - DEBUG - Parsing shape: Rectangle 6, Type: 1 (AutoShape)
+2025-11-29 09:36:39,800 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:36:39,955 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:39,989 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL3_3_Title_1.png
+2025-11-29 09:36:39,990 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,039 - DEBUG - Parsing shape: Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:40,070 - DEBUG - Exporting shape Text Placeholder 2 to .\results\images\slide00_shapeL3_4_Text_Placeholder_2.png
+2025-11-29 09:36:40,071 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,113 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:40,141 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL3_5_Date_Placeholder_3.png
+2025-11-29 09:36:40,141 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,173 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:40,202 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL3_6_Footer_Placeholder_4.png
+2025-11-29 09:36:40,203 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,247 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:40,276 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL3_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:36:40,277 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,305 - DEBUG - Parsing shape: Straight Connector 8, Type: 9 (Line)
+2025-11-29 09:36:40,382 - DEBUG - Parsing shape: Title 7, Type: 14 (Placeholder)
+2025-11-29 09:36:40,411 - DEBUG - Exporting shape Title 7 to .\results\images\slide00_shapeL4_1_Title_7.png
+2025-11-29 09:36:40,412 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,458 - DEBUG - Parsing shape: Content Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:40,489 - DEBUG - Exporting shape Content Placeholder 2 to .\results\images\slide00_shapeL4_2_Content_Placeholder_2.png
+2025-11-29 09:36:40,490 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,535 - DEBUG - Parsing shape: Content Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:40,564 - DEBUG - Exporting shape Content Placeholder 3 to .\results\images\slide00_shapeL4_3_Content_Placeholder_3.png
+2025-11-29 09:36:40,565 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,605 - DEBUG - Parsing shape: Date Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:40,637 - DEBUG - Exporting shape Date Placeholder 4 to .\results\images\slide00_shapeL4_4_Date_Placeholder_4.png
+2025-11-29 09:36:40,638 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,673 - DEBUG - Parsing shape: Footer Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:40,707 - DEBUG - Exporting shape Footer Placeholder 5 to .\results\images\slide00_shapeL4_5_Footer_Placeholder_5.png
+2025-11-29 09:36:40,709 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,770 - DEBUG - Parsing shape: Slide Number Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:36:40,804 - DEBUG - Exporting shape Slide Number Placeholder 6 to .\results\images\slide00_shapeL4_6_Slide_Number_Placeholder_6.png
+2025-11-29 09:36:40,805 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,874 - DEBUG - Parsing shape: Title 9, Type: 14 (Placeholder)
+2025-11-29 09:36:40,907 - DEBUG - Exporting shape Title 9 to .\results\images\slide00_shapeL5_1_Title_9.png
+2025-11-29 09:36:40,908 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:40,965 - DEBUG - Parsing shape: Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:41,012 - DEBUG - Exporting shape Text Placeholder 2 to .\results\images\slide00_shapeL5_2_Text_Placeholder_2.png
+2025-11-29 09:36:41,013 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:41,563 - DEBUG - Parsing shape: Content Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:41,662 - DEBUG - Exporting shape Content Placeholder 3 to .\results\images\slide00_shapeL5_3_Content_Placeholder_3.png
+2025-11-29 09:36:41,663 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:41,776 - DEBUG - Parsing shape: Text Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:41,868 - DEBUG - Exporting shape Text Placeholder 4 to .\results\images\slide00_shapeL5_4_Text_Placeholder_4.png
+2025-11-29 09:36:41,870 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:41,949 - DEBUG - Parsing shape: Content Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:42,010 - DEBUG - Exporting shape Content Placeholder 5 to .\results\images\slide00_shapeL5_5_Content_Placeholder_5.png
+2025-11-29 09:36:42,012 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:42,101 - DEBUG - Parsing shape: Date Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:36:42,450 - DEBUG - Exporting shape Date Placeholder 6 to .\results\images\slide00_shapeL5_6_Date_Placeholder_6.png
+2025-11-29 09:36:42,452 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:42,540 - DEBUG - Parsing shape: Footer Placeholder 7, Type: 14 (Placeholder)
+2025-11-29 09:36:42,589 - DEBUG - Exporting shape Footer Placeholder 7 to .\results\images\slide00_shapeL5_7_Footer_Placeholder_7.png
+2025-11-29 09:36:42,590 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:42,679 - DEBUG - Parsing shape: Slide Number Placeholder 8, Type: 14 (Placeholder)
+2025-11-29 09:36:42,749 - DEBUG - Exporting shape Slide Number Placeholder 8 to .\results\images\slide00_shapeL5_8_Slide_Number_Placeholder_8.png
+2025-11-29 09:36:42,751 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:42,909 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:42,978 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL6_1_Title_1.png
+2025-11-29 09:36:42,980 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:43,096 - DEBUG - Parsing shape: Date Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:43,140 - DEBUG - Exporting shape Date Placeholder 2 to .\results\images\slide00_shapeL6_2_Date_Placeholder_2.png
+2025-11-29 09:36:43,141 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:43,190 - DEBUG - Parsing shape: Footer Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:43,232 - DEBUG - Exporting shape Footer Placeholder 3 to .\results\images\slide00_shapeL6_3_Footer_Placeholder_3.png
+2025-11-29 09:36:43,233 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:43,288 - DEBUG - Parsing shape: Slide Number Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:43,324 - DEBUG - Exporting shape Slide Number Placeholder 4 to .\results\images\slide00_shapeL6_4_Slide_Number_Placeholder_4.png
+2025-11-29 09:36:43,325 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:43,367 - DEBUG - Parsing shape: Rectangle 4, Type: 1 (AutoShape)
+2025-11-29 09:36:43,432 - DEBUG - Parsing shape: Rectangle 5, Type: 1 (AutoShape)
+2025-11-29 09:36:43,508 - DEBUG - Parsing shape: Date Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:36:43,542 - DEBUG - Exporting shape Date Placeholder 6 to .\results\images\slide00_shapeL7_3_Date_Placeholder_6.png
+2025-11-29 09:36:43,543 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:43,579 - DEBUG - Parsing shape: Footer Placeholder 7, Type: 14 (Placeholder)
+2025-11-29 09:36:43,608 - DEBUG - Exporting shape Footer Placeholder 7 to .\results\images\slide00_shapeL7_4_Footer_Placeholder_7.png
+2025-11-29 09:36:43,609 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:43,653 - DEBUG - Parsing shape: Slide Number Placeholder 8, Type: 14 (Placeholder)
+2025-11-29 09:36:43,686 - DEBUG - Exporting shape Slide Number Placeholder 8 to .\results\images\slide00_shapeL7_5_Slide_Number_Placeholder_8.png
+2025-11-29 09:36:43,687 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:43,731 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:36:43,791 - DEBUG - Parsing shape: Rectangle 8, Type: 1 (AutoShape)
+2025-11-29 09:36:43,873 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:43,905 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL8_3_Title_1.png
+2025-11-29 09:36:43,906 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:43,954 - DEBUG - Parsing shape: Content Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:43,986 - DEBUG - Exporting shape Content Placeholder 2 to .\results\images\slide00_shapeL8_4_Content_Placeholder_2.png
+2025-11-29 09:36:43,987 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,034 - DEBUG - Parsing shape: Text Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:44,069 - DEBUG - Exporting shape Text Placeholder 3 to .\results\images\slide00_shapeL8_5_Text_Placeholder_3.png
+2025-11-29 09:36:44,070 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,117 - DEBUG - Parsing shape: Date Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:44,148 - DEBUG - Exporting shape Date Placeholder 4 to .\results\images\slide00_shapeL8_6_Date_Placeholder_4.png
+2025-11-29 09:36:44,149 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,184 - DEBUG - Parsing shape: Footer Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:44,220 - DEBUG - Exporting shape Footer Placeholder 5 to .\results\images\slide00_shapeL8_7_Footer_Placeholder_5.png
+2025-11-29 09:36:44,220 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,275 - DEBUG - Parsing shape: Slide Number Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:36:44,308 - DEBUG - Exporting shape Slide Number Placeholder 6 to .\results\images\slide00_shapeL8_8_Slide_Number_Placeholder_6.png
+2025-11-29 09:36:44,309 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,355 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:36:44,420 - DEBUG - Parsing shape: Rectangle 8, Type: 1 (AutoShape)
+2025-11-29 09:36:44,500 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:44,532 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL9_3_Title_1.png
+2025-11-29 09:36:44,533 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,571 - DEBUG - Parsing shape: Picture Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:44,606 - DEBUG - Exporting shape Picture Placeholder 2 to .\results\images\slide00_shapeL9_4_Picture_Placeholder_2.png
+2025-11-29 09:36:44,608 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,666 - DEBUG - Parsing shape: Text Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:44,714 - DEBUG - Exporting shape Text Placeholder 3 to .\results\images\slide00_shapeL9_5_Text_Placeholder_3.png
+2025-11-29 09:36:44,715 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,769 - DEBUG - Parsing shape: Date Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:44,842 - DEBUG - Exporting shape Date Placeholder 4 to .\results\images\slide00_shapeL9_6_Date_Placeholder_4.png
+2025-11-29 09:36:44,843 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:44,895 - DEBUG - Parsing shape: Footer Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:44,947 - DEBUG - Exporting shape Footer Placeholder 5 to .\results\images\slide00_shapeL9_7_Footer_Placeholder_5.png
+2025-11-29 09:36:44,948 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,024 - DEBUG - Parsing shape: Slide Number Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:36:45,074 - DEBUG - Exporting shape Slide Number Placeholder 6 to .\results\images\slide00_shapeL9_8_Slide_Number_Placeholder_6.png
+2025-11-29 09:36:45,075 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,156 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:45,199 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL10_1_Title_1.png
+2025-11-29 09:36:45,200 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,261 - DEBUG - Parsing shape: Vertical Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:45,299 - DEBUG - Exporting shape Vertical Text Placeholder 2 to .\results\images\slide00_shapeL10_2_Vertical_Text_Placeholder_2.png
+2025-11-29 09:36:45,300 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,352 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:45,386 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL10_3_Date_Placeholder_3.png
+2025-11-29 09:36:45,387 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,426 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:45,459 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL10_4_Footer_Placeholder_4.png
+2025-11-29 09:36:45,460 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,510 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:45,542 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL10_5_Slide_Number_Placeholder_5.png
+2025-11-29 09:36:45,543 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,587 - DEBUG - Parsing shape: Rectangle 6, Type: 1 (AutoShape)
+2025-11-29 09:36:45,652 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:36:45,730 - DEBUG - Parsing shape: Vertical Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:45,760 - DEBUG - Exporting shape Vertical Title 1 to .\results\images\slide00_shapeL11_3_Vertical_Title_1.png
+2025-11-29 09:36:45,761 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,809 - DEBUG - Parsing shape: Vertical Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:36:45,839 - DEBUG - Exporting shape Vertical Text Placeholder 2 to .\results\images\slide00_shapeL11_4_Vertical_Text_Placeholder_2.png
+2025-11-29 09:36:45,840 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,892 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:36:45,923 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL11_5_Date_Placeholder_3.png
+2025-11-29 09:36:45,924 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:45,962 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:36:46,002 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL11_6_Footer_Placeholder_4.png
+2025-11-29 09:36:46,003 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:46,054 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:36:46,082 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL11_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:36:46,083 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:46,167 - DEBUG - Parsing shape: 내용 개체 틀 3, Type: 17 (Text box)
+2025-11-29 09:36:46,245 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:36:46,274 - DEBUG - Exporting shape Title 1 to .\results\images\slide25_shape2_Title_1.png
+2025-11-29 09:36:46,275 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:46,319 - DEBUG - Parsing shape: TextBox 6, Type: 17 (Text box)
+2025-11-29 09:36:46,374 - DEBUG - Parsing shape: 그림 14, Type: 13 (Picture)
+2025-11-29 09:36:46,402 - DEBUG - Exporting shape 그림 14 to .\results\images\slide25_shape4_그림_14.png
+2025-11-29 09:36:46,403 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:46,434 - DEBUG - Parsing shape: 그림 17, Type: 13 (Picture)
+2025-11-29 09:36:46,464 - DEBUG - Exporting shape 그림 17 to .\results\images\slide25_shape5_그림_17.png
+2025-11-29 09:36:46,465 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:46,497 - DEBUG - Parsing shape: 그림 4, Type: 13 (Picture)
+2025-11-29 09:36:46,529 - DEBUG - Exporting shape 그림 4 to .\results\images\slide25_shape6_그림_4.png
+2025-11-29 09:36:46,530 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:36:46,557 - DEBUG - Parsing shape: Picture 4, Type: 13 (Picture)
+2025-11-29 09:36:46,584 - DEBUG - Exporting shape Picture 4 to .\results\images\slide25_shape7_Picture_4.png
+2025-11-29 09:36:46,585 - ERROR - Failed to export image: (-2147352567, '예외가 발생했습니다.', (0, 'Microsoft PowerPoint', 'Shape.Export : Invalid request.  Presentation cannot be modified.', '', 0, -2147188160), None)
+2025-11-29 09:37:21,621 - DEBUG - Parsing shape: Rectangle 6, Type: 1 (AutoShape)
+2025-11-29 09:37:21,829 - DEBUG - Parsing shape: Rectangle 8, Type: 1 (AutoShape)
+2025-11-29 09:37:21,974 - DEBUG - Parsing shape: Title Placeholder 1, Type: 14 (Placeholder)
+2025-11-29 09:37:22,028 - DEBUG - Exporting shape Title Placeholder 1 to .\results\images\slide00_shapeM3_Title_Placeholder_1.png
+2025-11-29 09:37:22,097 - DEBUG - Export success: .\results\images\slide00_shapeM3_Title_Placeholder_1.png
+2025-11-29 09:37:22,181 - DEBUG - Parsing shape: Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:22,231 - DEBUG - Exporting shape Text Placeholder 2 to .\results\images\slide00_shapeM4_Text_Placeholder_2.png
+2025-11-29 09:37:22,280 - DEBUG - Export success: .\results\images\slide00_shapeM4_Text_Placeholder_2.png
+2025-11-29 09:37:22,378 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:22,441 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeM5_Date_Placeholder_3.png
+2025-11-29 09:37:22,459 - DEBUG - Export success: .\results\images\slide00_shapeM5_Date_Placeholder_3.png
+2025-11-29 09:37:22,525 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:22,587 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeM6_Footer_Placeholder_4.png
+2025-11-29 09:37:22,601 - DEBUG - Export success: .\results\images\slide00_shapeM6_Footer_Placeholder_4.png
+2025-11-29 09:37:22,689 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:22,749 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeM7_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:22,783 - DEBUG - Export success: .\results\images\slide00_shapeM7_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:22,896 - DEBUG - Parsing shape: Straight Connector 9, Type: 9 (Line)
+2025-11-29 09:37:23,227 - DEBUG - Parsing shape: Rectangle 6, Type: 1 (AutoShape)
+2025-11-29 09:37:24,436 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:37:25,099 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:25,209 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL1_3_Title_1.png
+2025-11-29 09:37:25,263 - DEBUG - Export success: .\results\images\slide00_shapeL1_3_Title_1.png
+2025-11-29 09:37:25,367 - DEBUG - Parsing shape: Subtitle 2, Type: 14 (Placeholder)
+2025-11-29 09:37:25,608 - DEBUG - Exporting shape Subtitle 2 to .\results\images\slide00_shapeL1_4_Subtitle_2.png
+2025-11-29 09:37:25,625 - DEBUG - Export success: .\results\images\slide00_shapeL1_4_Subtitle_2.png
+2025-11-29 09:37:25,796 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:25,879 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL1_5_Date_Placeholder_3.png
+2025-11-29 09:37:25,890 - DEBUG - Export success: .\results\images\slide00_shapeL1_5_Date_Placeholder_3.png
+2025-11-29 09:37:25,979 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:26,026 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL1_6_Footer_Placeholder_4.png
+2025-11-29 09:37:26,036 - DEBUG - Export success: .\results\images\slide00_shapeL1_6_Footer_Placeholder_4.png
+2025-11-29 09:37:26,130 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:26,178 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL1_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:26,188 - DEBUG - Export success: .\results\images\slide00_shapeL1_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:26,228 - DEBUG - Parsing shape: Straight Connector 8, Type: 9 (Line)
+2025-11-29 09:37:26,353 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:26,393 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL2_1_Title_1.png
+2025-11-29 09:37:26,410 - DEBUG - Export success: .\results\images\slide00_shapeL2_1_Title_1.png
+2025-11-29 09:37:26,473 - DEBUG - Parsing shape: Content Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:26,514 - DEBUG - Exporting shape Content Placeholder 2 to .\results\images\slide00_shapeL2_2_Content_Placeholder_2.png
+2025-11-29 09:37:26,537 - DEBUG - Export success: .\results\images\slide00_shapeL2_2_Content_Placeholder_2.png
+2025-11-29 09:37:26,610 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:26,651 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL2_3_Date_Placeholder_3.png
+2025-11-29 09:37:26,663 - DEBUG - Export success: .\results\images\slide00_shapeL2_3_Date_Placeholder_3.png
+2025-11-29 09:37:26,709 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:26,758 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL2_4_Footer_Placeholder_4.png
+2025-11-29 09:37:26,772 - DEBUG - Export success: .\results\images\slide00_shapeL2_4_Footer_Placeholder_4.png
+2025-11-29 09:37:26,849 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:26,934 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL2_5_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:26,946 - DEBUG - Export success: .\results\images\slide00_shapeL2_5_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:27,077 - DEBUG - Parsing shape: Rectangle 6, Type: 1 (AutoShape)
+2025-11-29 09:37:27,263 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:37:27,630 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:27,682 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL3_3_Title_1.png
+2025-11-29 09:37:27,727 - DEBUG - Export success: .\results\images\slide00_shapeL3_3_Title_1.png
+2025-11-29 09:37:27,827 - DEBUG - Parsing shape: Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:28,115 - DEBUG - Exporting shape Text Placeholder 2 to .\results\images\slide00_shapeL3_4_Text_Placeholder_2.png
+2025-11-29 09:37:28,130 - DEBUG - Export success: .\results\images\slide00_shapeL3_4_Text_Placeholder_2.png
+2025-11-29 09:37:28,632 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:29,182 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL3_5_Date_Placeholder_3.png
+2025-11-29 09:37:29,254 - DEBUG - Export success: .\results\images\slide00_shapeL3_5_Date_Placeholder_3.png
+2025-11-29 09:37:29,429 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:29,541 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL3_6_Footer_Placeholder_4.png
+2025-11-29 09:37:29,561 - DEBUG - Export success: .\results\images\slide00_shapeL3_6_Footer_Placeholder_4.png
+2025-11-29 09:37:29,710 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:29,913 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL3_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:29,927 - DEBUG - Export success: .\results\images\slide00_shapeL3_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:30,035 - DEBUG - Parsing shape: Straight Connector 8, Type: 9 (Line)
+2025-11-29 09:37:30,366 - DEBUG - Parsing shape: Title 7, Type: 14 (Placeholder)
+2025-11-29 09:37:30,416 - DEBUG - Exporting shape Title 7 to .\results\images\slide00_shapeL4_1_Title_7.png
+2025-11-29 09:37:30,440 - DEBUG - Export success: .\results\images\slide00_shapeL4_1_Title_7.png
+2025-11-29 09:37:30,520 - DEBUG - Parsing shape: Content Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:30,592 - DEBUG - Exporting shape Content Placeholder 2 to .\results\images\slide00_shapeL4_2_Content_Placeholder_2.png
+2025-11-29 09:37:30,610 - DEBUG - Export success: .\results\images\slide00_shapeL4_2_Content_Placeholder_2.png
+2025-11-29 09:37:30,683 - DEBUG - Parsing shape: Content Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:30,736 - DEBUG - Exporting shape Content Placeholder 3 to .\results\images\slide00_shapeL4_3_Content_Placeholder_3.png
+2025-11-29 09:37:30,755 - DEBUG - Export success: .\results\images\slide00_shapeL4_3_Content_Placeholder_3.png
+2025-11-29 09:37:30,832 - DEBUG - Parsing shape: Date Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:30,880 - DEBUG - Exporting shape Date Placeholder 4 to .\results\images\slide00_shapeL4_4_Date_Placeholder_4.png
+2025-11-29 09:37:30,895 - DEBUG - Export success: .\results\images\slide00_shapeL4_4_Date_Placeholder_4.png
+2025-11-29 09:37:30,952 - DEBUG - Parsing shape: Footer Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:31,006 - DEBUG - Exporting shape Footer Placeholder 5 to .\results\images\slide00_shapeL4_5_Footer_Placeholder_5.png
+2025-11-29 09:37:31,019 - DEBUG - Export success: .\results\images\slide00_shapeL4_5_Footer_Placeholder_5.png
+2025-11-29 09:37:31,088 - DEBUG - Parsing shape: Slide Number Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:37:31,133 - DEBUG - Exporting shape Slide Number Placeholder 6 to .\results\images\slide00_shapeL4_6_Slide_Number_Placeholder_6.png
+2025-11-29 09:37:31,148 - DEBUG - Export success: .\results\images\slide00_shapeL4_6_Slide_Number_Placeholder_6.png
+2025-11-29 09:37:31,242 - DEBUG - Parsing shape: Title 9, Type: 14 (Placeholder)
+2025-11-29 09:37:31,293 - DEBUG - Exporting shape Title 9 to .\results\images\slide00_shapeL5_1_Title_9.png
+2025-11-29 09:37:31,320 - DEBUG - Export success: .\results\images\slide00_shapeL5_1_Title_9.png
+2025-11-29 09:37:31,385 - DEBUG - Parsing shape: Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:31,426 - DEBUG - Exporting shape Text Placeholder 2 to .\results\images\slide00_shapeL5_2_Text_Placeholder_2.png
+2025-11-29 09:37:31,442 - DEBUG - Export success: .\results\images\slide00_shapeL5_2_Text_Placeholder_2.png
+2025-11-29 09:37:31,512 - DEBUG - Parsing shape: Content Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:31,600 - DEBUG - Exporting shape Content Placeholder 3 to .\results\images\slide00_shapeL5_3_Content_Placeholder_3.png
+2025-11-29 09:37:31,620 - DEBUG - Export success: .\results\images\slide00_shapeL5_3_Content_Placeholder_3.png
+2025-11-29 09:37:31,697 - DEBUG - Parsing shape: Text Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:31,748 - DEBUG - Exporting shape Text Placeholder 4 to .\results\images\slide00_shapeL5_4_Text_Placeholder_4.png
+2025-11-29 09:37:31,767 - DEBUG - Export success: .\results\images\slide00_shapeL5_4_Text_Placeholder_4.png
+2025-11-29 09:37:31,853 - DEBUG - Parsing shape: Content Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:31,907 - DEBUG - Exporting shape Content Placeholder 5 to .\results\images\slide00_shapeL5_5_Content_Placeholder_5.png
+2025-11-29 09:37:31,929 - DEBUG - Export success: .\results\images\slide00_shapeL5_5_Content_Placeholder_5.png
+2025-11-29 09:37:32,000 - DEBUG - Parsing shape: Date Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:37:32,043 - DEBUG - Exporting shape Date Placeholder 6 to .\results\images\slide00_shapeL5_6_Date_Placeholder_6.png
+2025-11-29 09:37:32,058 - DEBUG - Export success: .\results\images\slide00_shapeL5_6_Date_Placeholder_6.png
+2025-11-29 09:37:32,107 - DEBUG - Parsing shape: Footer Placeholder 7, Type: 14 (Placeholder)
+2025-11-29 09:37:32,153 - DEBUG - Exporting shape Footer Placeholder 7 to .\results\images\slide00_shapeL5_7_Footer_Placeholder_7.png
+2025-11-29 09:37:32,167 - DEBUG - Export success: .\results\images\slide00_shapeL5_7_Footer_Placeholder_7.png
+2025-11-29 09:37:32,234 - DEBUG - Parsing shape: Slide Number Placeholder 8, Type: 14 (Placeholder)
+2025-11-29 09:37:32,288 - DEBUG - Exporting shape Slide Number Placeholder 8 to .\results\images\slide00_shapeL5_8_Slide_Number_Placeholder_8.png
+2025-11-29 09:37:32,305 - DEBUG - Export success: .\results\images\slide00_shapeL5_8_Slide_Number_Placeholder_8.png
+2025-11-29 09:37:32,390 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:32,432 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL6_1_Title_1.png
+2025-11-29 09:37:32,446 - DEBUG - Export success: .\results\images\slide00_shapeL6_1_Title_1.png
+2025-11-29 09:37:32,509 - DEBUG - Parsing shape: Date Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:32,555 - DEBUG - Exporting shape Date Placeholder 2 to .\results\images\slide00_shapeL6_2_Date_Placeholder_2.png
+2025-11-29 09:37:32,563 - DEBUG - Export success: .\results\images\slide00_shapeL6_2_Date_Placeholder_2.png
+2025-11-29 09:37:32,615 - DEBUG - Parsing shape: Footer Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:32,655 - DEBUG - Exporting shape Footer Placeholder 3 to .\results\images\slide00_shapeL6_3_Footer_Placeholder_3.png
+2025-11-29 09:37:32,661 - DEBUG - Export success: .\results\images\slide00_shapeL6_3_Footer_Placeholder_3.png
+2025-11-29 09:37:32,723 - DEBUG - Parsing shape: Slide Number Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:32,767 - DEBUG - Exporting shape Slide Number Placeholder 4 to .\results\images\slide00_shapeL6_4_Slide_Number_Placeholder_4.png
+2025-11-29 09:37:32,774 - DEBUG - Export success: .\results\images\slide00_shapeL6_4_Slide_Number_Placeholder_4.png
+2025-11-29 09:37:32,890 - DEBUG - Parsing shape: Rectangle 4, Type: 1 (AutoShape)
+2025-11-29 09:37:33,009 - DEBUG - Parsing shape: Rectangle 5, Type: 1 (AutoShape)
+2025-11-29 09:37:33,151 - DEBUG - Parsing shape: Date Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:37:33,222 - DEBUG - Exporting shape Date Placeholder 6 to .\results\images\slide00_shapeL7_3_Date_Placeholder_6.png
+2025-11-29 09:37:33,241 - DEBUG - Export success: .\results\images\slide00_shapeL7_3_Date_Placeholder_6.png
+2025-11-29 09:37:33,361 - DEBUG - Parsing shape: Footer Placeholder 7, Type: 14 (Placeholder)
+2025-11-29 09:37:33,422 - DEBUG - Exporting shape Footer Placeholder 7 to .\results\images\slide00_shapeL7_4_Footer_Placeholder_7.png
+2025-11-29 09:37:33,482 - DEBUG - Export success: .\results\images\slide00_shapeL7_4_Footer_Placeholder_7.png
+2025-11-29 09:37:33,625 - DEBUG - Parsing shape: Slide Number Placeholder 8, Type: 14 (Placeholder)
+2025-11-29 09:37:33,699 - DEBUG - Exporting shape Slide Number Placeholder 8 to .\results\images\slide00_shapeL7_5_Slide_Number_Placeholder_8.png
+2025-11-29 09:37:33,708 - DEBUG - Export success: .\results\images\slide00_shapeL7_5_Slide_Number_Placeholder_8.png
+2025-11-29 09:37:33,783 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:37:33,945 - DEBUG - Parsing shape: Rectangle 8, Type: 1 (AutoShape)
+2025-11-29 09:37:34,182 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:34,254 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL8_3_Title_1.png
+2025-11-29 09:37:34,288 - DEBUG - Export success: .\results\images\slide00_shapeL8_3_Title_1.png
+2025-11-29 09:37:34,375 - DEBUG - Parsing shape: Content Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:34,430 - DEBUG - Exporting shape Content Placeholder 2 to .\results\images\slide00_shapeL8_4_Content_Placeholder_2.png
+2025-11-29 09:37:34,470 - DEBUG - Export success: .\results\images\slide00_shapeL8_4_Content_Placeholder_2.png
+2025-11-29 09:37:34,686 - DEBUG - Parsing shape: Text Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:34,743 - DEBUG - Exporting shape Text Placeholder 3 to .\results\images\slide00_shapeL8_5_Text_Placeholder_3.png
+2025-11-29 09:37:34,777 - DEBUG - Export success: .\results\images\slide00_shapeL8_5_Text_Placeholder_3.png
+2025-11-29 09:37:34,894 - DEBUG - Parsing shape: Date Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:34,977 - DEBUG - Exporting shape Date Placeholder 4 to .\results\images\slide00_shapeL8_6_Date_Placeholder_4.png
+2025-11-29 09:37:35,011 - DEBUG - Export success: .\results\images\slide00_shapeL8_6_Date_Placeholder_4.png
+2025-11-29 09:37:35,148 - DEBUG - Parsing shape: Footer Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:35,256 - DEBUG - Exporting shape Footer Placeholder 5 to .\results\images\slide00_shapeL8_7_Footer_Placeholder_5.png
+2025-11-29 09:37:35,277 - DEBUG - Export success: .\results\images\slide00_shapeL8_7_Footer_Placeholder_5.png
+2025-11-29 09:37:35,392 - DEBUG - Parsing shape: Slide Number Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:37:35,460 - DEBUG - Exporting shape Slide Number Placeholder 6 to .\results\images\slide00_shapeL8_8_Slide_Number_Placeholder_6.png
+2025-11-29 09:37:35,482 - DEBUG - Export success: .\results\images\slide00_shapeL8_8_Slide_Number_Placeholder_6.png
+2025-11-29 09:37:35,601 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:37:35,709 - DEBUG - Parsing shape: Rectangle 8, Type: 1 (AutoShape)
+2025-11-29 09:37:35,838 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:35,889 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL9_3_Title_1.png
+2025-11-29 09:37:35,928 - DEBUG - Export success: .\results\images\slide00_shapeL9_3_Title_1.png
+2025-11-29 09:37:36,025 - DEBUG - Parsing shape: Picture Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:36,104 - DEBUG - Exporting shape Picture Placeholder 2 to .\results\images\slide00_shapeL9_4_Picture_Placeholder_2.png
+2025-11-29 09:37:36,393 - DEBUG - Export success: .\results\images\slide00_shapeL9_4_Picture_Placeholder_2.png
+2025-11-29 09:37:36,515 - DEBUG - Parsing shape: Text Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:36,601 - DEBUG - Exporting shape Text Placeholder 3 to .\results\images\slide00_shapeL9_5_Text_Placeholder_3.png
+2025-11-29 09:37:36,617 - DEBUG - Export success: .\results\images\slide00_shapeL9_5_Text_Placeholder_3.png
+2025-11-29 09:37:36,693 - DEBUG - Parsing shape: Date Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:36,738 - DEBUG - Exporting shape Date Placeholder 4 to .\results\images\slide00_shapeL9_6_Date_Placeholder_4.png
+2025-11-29 09:37:36,770 - DEBUG - Export success: .\results\images\slide00_shapeL9_6_Date_Placeholder_4.png
+2025-11-29 09:37:36,819 - DEBUG - Parsing shape: Footer Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:36,864 - DEBUG - Exporting shape Footer Placeholder 5 to .\results\images\slide00_shapeL9_7_Footer_Placeholder_5.png
+2025-11-29 09:37:36,876 - DEBUG - Export success: .\results\images\slide00_shapeL9_7_Footer_Placeholder_5.png
+2025-11-29 09:37:36,943 - DEBUG - Parsing shape: Slide Number Placeholder 6, Type: 14 (Placeholder)
+2025-11-29 09:37:36,980 - DEBUG - Exporting shape Slide Number Placeholder 6 to .\results\images\slide00_shapeL9_8_Slide_Number_Placeholder_6.png
+2025-11-29 09:37:37,007 - DEBUG - Export success: .\results\images\slide00_shapeL9_8_Slide_Number_Placeholder_6.png
+2025-11-29 09:37:37,084 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:37,123 - DEBUG - Exporting shape Title 1 to .\results\images\slide00_shapeL10_1_Title_1.png
+2025-11-29 09:37:37,163 - DEBUG - Export success: .\results\images\slide00_shapeL10_1_Title_1.png
+2025-11-29 09:37:37,238 - DEBUG - Parsing shape: Vertical Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:37,281 - DEBUG - Exporting shape Vertical Text Placeholder 2 to .\results\images\slide00_shapeL10_2_Vertical_Text_Placeholder_2.png
+2025-11-29 09:37:37,316 - DEBUG - Export success: .\results\images\slide00_shapeL10_2_Vertical_Text_Placeholder_2.png
+2025-11-29 09:37:37,391 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:37,435 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL10_3_Date_Placeholder_3.png
+2025-11-29 09:37:37,505 - DEBUG - Export success: .\results\images\slide00_shapeL10_3_Date_Placeholder_3.png
+2025-11-29 09:37:37,563 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:37,611 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL10_4_Footer_Placeholder_4.png
+2025-11-29 09:37:37,639 - DEBUG - Export success: .\results\images\slide00_shapeL10_4_Footer_Placeholder_4.png
+2025-11-29 09:37:37,736 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:37,786 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL10_5_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:37,805 - DEBUG - Export success: .\results\images\slide00_shapeL10_5_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:37,925 - DEBUG - Parsing shape: Rectangle 6, Type: 1 (AutoShape)
+2025-11-29 09:37:38,017 - DEBUG - Parsing shape: Rectangle 7, Type: 1 (AutoShape)
+2025-11-29 09:37:38,156 - DEBUG - Parsing shape: Vertical Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:38,203 - DEBUG - Exporting shape Vertical Title 1 to .\results\images\slide00_shapeL11_3_Vertical_Title_1.png
+2025-11-29 09:37:38,226 - DEBUG - Export success: .\results\images\slide00_shapeL11_3_Vertical_Title_1.png
+2025-11-29 09:37:38,366 - DEBUG - Parsing shape: Vertical Text Placeholder 2, Type: 14 (Placeholder)
+2025-11-29 09:37:38,416 - DEBUG - Exporting shape Vertical Text Placeholder 2 to .\results\images\slide00_shapeL11_4_Vertical_Text_Placeholder_2.png
+2025-11-29 09:37:38,511 - DEBUG - Export success: .\results\images\slide00_shapeL11_4_Vertical_Text_Placeholder_2.png
+2025-11-29 09:37:38,700 - DEBUG - Parsing shape: Date Placeholder 3, Type: 14 (Placeholder)
+2025-11-29 09:37:38,765 - DEBUG - Exporting shape Date Placeholder 3 to .\results\images\slide00_shapeL11_5_Date_Placeholder_3.png
+2025-11-29 09:37:38,782 - DEBUG - Export success: .\results\images\slide00_shapeL11_5_Date_Placeholder_3.png
+2025-11-29 09:37:38,842 - DEBUG - Parsing shape: Footer Placeholder 4, Type: 14 (Placeholder)
+2025-11-29 09:37:38,887 - DEBUG - Exporting shape Footer Placeholder 4 to .\results\images\slide00_shapeL11_6_Footer_Placeholder_4.png
+2025-11-29 09:37:38,949 - DEBUG - Export success: .\results\images\slide00_shapeL11_6_Footer_Placeholder_4.png
+2025-11-29 09:37:39,092 - DEBUG - Parsing shape: Slide Number Placeholder 5, Type: 14 (Placeholder)
+2025-11-29 09:37:39,148 - DEBUG - Exporting shape Slide Number Placeholder 5 to .\results\images\slide00_shapeL11_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:39,242 - DEBUG - Export success: .\results\images\slide00_shapeL11_7_Slide_Number_Placeholder_5.png
+2025-11-29 09:37:39,441 - DEBUG - Parsing shape: 내용 개체 틀 3, Type: 17 (Text box)
+2025-11-29 09:37:39,623 - DEBUG - Parsing shape: Title 1, Type: 14 (Placeholder)
+2025-11-29 09:37:39,685 - DEBUG - Exporting shape Title 1 to .\results\images\slide25_shape2_Title_1.png
+2025-11-29 09:37:39,720 - DEBUG - Export success: .\results\images\slide25_shape2_Title_1.png
+2025-11-29 09:37:39,805 - DEBUG - Parsing shape: TextBox 6, Type: 17 (Text box)
+2025-11-29 09:37:39,942 - DEBUG - Parsing shape: 그림 14, Type: 13 (Picture)
+2025-11-29 09:37:39,991 - DEBUG - Exporting shape 그림 14 to .\results\images\slide25_shape4_그림_14.png
+2025-11-29 09:37:40,015 - DEBUG - Export success: .\results\images\slide25_shape4_그림_14.png
+2025-11-29 09:37:40,063 - DEBUG - Parsing shape: 그림 17, Type: 13 (Picture)
+2025-11-29 09:37:40,114 - DEBUG - Exporting shape 그림 17 to .\results\images\slide25_shape5_그림_17.png
+2025-11-29 09:37:40,142 - DEBUG - Export success: .\results\images\slide25_shape5_그림_17.png
+2025-11-29 09:37:40,187 - DEBUG - Parsing shape: 그림 4, Type: 13 (Picture)
+2025-11-29 09:37:40,228 - DEBUG - Exporting shape 그림 4 to .\results\images\slide25_shape6_그림_4.png
+2025-11-29 09:37:40,256 - DEBUG - Export success: .\results\images\slide25_shape6_그림_4.png
+2025-11-29 09:37:40,302 - DEBUG - Parsing shape: Picture 4, Type: 13 (Picture)
+2025-11-29 09:37:40,358 - DEBUG - Exporting shape Picture 4 to .\results\images\slide25_shape7_Picture_4.png
+2025-11-29 09:37:40,389 - DEBUG - Export success: .\results\images\slide25_shape7_Picture_4.png
+2025-11-29 09:37:43,199 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,199 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,199 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,199 - DEBUG - STREAM b'PLTE' 70 51
+2025-11-29 09:37:43,199 - DEBUG - STREAM b'tRNS' 133 17
+2025-11-29 09:37:43,199 - DEBUG - STREAM b'pHYs' 162 9
+2025-11-29 09:37:43,199 - DEBUG - STREAM b'IDAT' 183 4641
+2025-11-29 09:37:43,229 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,229 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,229 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,229 - DEBUG - STREAM b'PLTE' 70 99
+2025-11-29 09:37:43,229 - DEBUG - STREAM b'tRNS' 181 33
+2025-11-29 09:37:43,230 - DEBUG - STREAM b'pHYs' 226 9
+2025-11-29 09:37:43,230 - DEBUG - STREAM b'IDAT' 247 5799
+2025-11-29 09:37:43,273 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,274 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,274 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,274 - DEBUG - STREAM b'PLTE' 70 51
+2025-11-29 09:37:43,274 - DEBUG - STREAM b'tRNS' 133 17
+2025-11-29 09:37:43,274 - DEBUG - STREAM b'pHYs' 162 9
+2025-11-29 09:37:43,274 - DEBUG - STREAM b'IDAT' 183 4641
+2025-11-29 09:37:43,301 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,301 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,301 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,301 - DEBUG - STREAM b'PLTE' 70 27
+2025-11-29 09:37:43,302 - DEBUG - STREAM b'tRNS' 109 9
+2025-11-29 09:37:43,302 - DEBUG - STREAM b'pHYs' 130 9
+2025-11-29 09:37:43,302 - DEBUG - STREAM b'IDAT' 151 215
+2025-11-29 09:37:43,305 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,306 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,306 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,306 - DEBUG - STREAM b'PLTE' 70 99
+2025-11-29 09:37:43,306 - DEBUG - STREAM b'tRNS' 181 33
+2025-11-29 09:37:43,306 - DEBUG - STREAM b'pHYs' 226 9
+2025-11-29 09:37:43,306 - DEBUG - STREAM b'IDAT' 247 5799
+2025-11-29 09:37:43,371 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,371 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,371 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,371 - DEBUG - STREAM b'PLTE' 70 3
+2025-11-29 09:37:43,371 - DEBUG - STREAM b'tRNS' 85 1
+2025-11-29 09:37:43,371 - DEBUG - STREAM b'pHYs' 98 9
+2025-11-29 09:37:43,371 - DEBUG - STREAM b'IDAT' 119 25
+2025-11-29 09:37:43,376 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,376 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,376 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,376 - DEBUG - STREAM b'PLTE' 70 27
+2025-11-29 09:37:43,376 - DEBUG - STREAM b'tRNS' 109 9
+2025-11-29 09:37:43,376 - DEBUG - STREAM b'pHYs' 130 9
+2025-11-29 09:37:43,376 - DEBUG - STREAM b'IDAT' 151 215
+2025-11-29 09:37:43,387 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,388 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,388 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,388 - DEBUG - STREAM b'PLTE' 70 27
+2025-11-29 09:37:43,388 - DEBUG - STREAM b'tRNS' 109 8
+2025-11-29 09:37:43,388 - DEBUG - STREAM b'pHYs' 129 9
+2025-11-29 09:37:43,388 - DEBUG - STREAM b'IDAT' 150 102
+2025-11-29 09:37:43,393 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,393 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,393 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,393 - DEBUG - STREAM b'PLTE' 70 3
+2025-11-29 09:37:43,393 - DEBUG - STREAM b'tRNS' 85 1
+2025-11-29 09:37:43,393 - DEBUG - STREAM b'pHYs' 98 9
+2025-11-29 09:37:43,393 - DEBUG - STREAM b'IDAT' 119 25
+2025-11-29 09:37:43,396 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,397 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,397 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,397 - DEBUG - STREAM b'PLTE' 70 27
+2025-11-29 09:37:43,397 - DEBUG - STREAM b'tRNS' 109 8
+2025-11-29 09:37:43,397 - DEBUG - STREAM b'pHYs' 129 9
+2025-11-29 09:37:43,397 - DEBUG - STREAM b'IDAT' 150 102
+2025-11-29 09:37:43,415 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,415 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,416 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,416 - DEBUG - STREAM b'PLTE' 70 51
+2025-11-29 09:37:43,416 - DEBUG - STREAM b'tRNS' 133 17
+2025-11-29 09:37:43,416 - DEBUG - STREAM b'pHYs' 162 9
+2025-11-29 09:37:43,416 - DEBUG - STREAM b'IDAT' 183 4293
+2025-11-29 09:37:43,456 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,457 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,457 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,457 - DEBUG - STREAM b'PLTE' 70 768
+2025-11-29 09:37:43,457 - DEBUG - STREAM b'tRNS' 850 256
+2025-11-29 09:37:43,457 - DEBUG - STREAM b'pHYs' 1118 9
+2025-11-29 09:37:43,457 - DEBUG - STREAM b'IDAT' 1139 8268
+2025-11-29 09:37:43,474 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,474 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,474 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,474 - DEBUG - STREAM b'PLTE' 70 768
+2025-11-29 09:37:43,474 - DEBUG - STREAM b'tRNS' 850 256
+2025-11-29 09:37:43,475 - DEBUG - STREAM b'pHYs' 1118 9
+2025-11-29 09:37:43,475 - DEBUG - STREAM b'IDAT' 1139 5850
+2025-11-29 09:37:43,491 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,492 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,492 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,492 - DEBUG - STREAM b'PLTE' 70 768
+2025-11-29 09:37:43,492 - DEBUG - STREAM b'tRNS' 850 256
+2025-11-29 09:37:43,492 - DEBUG - STREAM b'pHYs' 1118 9
+2025-11-29 09:37:43,492 - DEBUG - STREAM b'IDAT' 1139 5760
+2025-11-29 09:37:43,511 - DEBUG - STREAM b'IHDR' 16 13
+2025-11-29 09:37:43,511 - DEBUG - STREAM b'sRGB' 41 1
+2025-11-29 09:37:43,512 - DEBUG - STREAM b'gAMA' 54 4
+2025-11-29 09:37:43,512 - DEBUG - STREAM b'PLTE' 70 768
+2025-11-29 09:37:43,512 - DEBUG - STREAM b'tRNS' 850 256
+2025-11-29 09:37:43,512 - DEBUG - STREAM b'pHYs' 1118 9
+2025-11-29 09:37:43,512 - DEBUG - STREAM b'IDAT' 1139 4615

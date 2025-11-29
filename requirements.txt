@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pydantic
+python-multipart
+pywin32>=311
+pillow>=12.0.0
