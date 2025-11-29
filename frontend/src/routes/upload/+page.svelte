@@ -33,28 +33,33 @@
 
       // Poll for status
       while (true) {
-        await new Promise((r) => setTimeout(r, 1000));
         const statusRes = await fetch(
           `http://localhost:8000/api/project/${projectId}/status`,
         );
-        if (!statusRes.ok) continue;
 
-        const statusData = await statusRes.json();
-        progress = statusData.percent;
-        statusMessage = statusData.message;
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          progress = statusData.percent ?? progress;
+          statusMessage = statusData.message ?? statusMessage;
 
-        // Update UI (local state if needed, but we can just use uploading state)
-        // We need to expose progress to UI
-
-        if (statusData.status === "done") {
-          goto(`/viewer/${projectId}`);
-          break;
-        } else if (statusData.status === "error") {
-          throw new Error(statusData.message || "Processing failed");
+          if (statusData.status === "done") {
+            progress = 100;
+            statusMessage = statusData.message || "Processing complete";
+            uploading = false;
+            await goto("/");
+            break;
+          } else if (statusData.status === "error") {
+            throw new Error(statusData.message || "Processing failed");
+          }
+        } else {
+          statusMessage = "Waiting for parsing status...";
         }
+
+        await new Promise((r) => setTimeout(r, 1000));
       }
     } catch (e) {
       error = e.message;
+    } finally {
       uploading = false;
     }
   }
