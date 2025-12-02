@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import pythoncom
 
 import ppt_parser as parsing
+import ppt_reconstructor as reconstructor
 
 app = FastAPI()
 
@@ -367,6 +368,67 @@ def update_project_description(project_id: str, update: DescriptionUpdate):
         json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
     return {"status": "success"}
+
+
+@app.post("/api/reconstruct2img")
+def reconstruct_to_images(payload: Dict[str, Any], image_dir: str | None = None):
+    """
+    Reconstructs slides from the provided JSON payload and returns paths to exported images.
+
+    The behavior mirrors running `scripts/test_framework.py` on a full presentation, which
+    reconstructs the slides and exports them into a `recon` directory.
+    """
+
+    if not payload or "slides" not in payload:
+        raise HTTPException(
+            status_code=400, detail="Request body must include presentation slide data"
+        )
+
+    session_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    output_dir = os.path.join(RESULT_DIR, "reconstruct2img", session_id)
+    os.makedirs(output_dir, exist_ok=True)
+
+    ppt_output_path = os.path.join(output_dir, "reconstructed.pptx")
+
+    # Prefer explicit image_dir argument; fallback to payload hint.
+    base_image_dir = image_dir or payload.get("image_dir")
+    if base_image_dir:
+        base_image_dir = os.path.abspath(base_image_dir)
+
+    try:
+        pythoncom.CoInitialize()
+
+        success = reconstructor.reconstruct_presentation(
+            payload, ppt_output_path, image_dir=base_image_dir
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=500, detail="Failed to reconstruct presentation from JSON"
+            )
+
+        recon_dir = os.path.join(output_dir, "recon")
+        images = []
+        if os.path.exists(recon_dir):
+            for file_name in sorted(os.listdir(recon_dir)):
+                if file_name.lower().endswith((".png", ".jpg", ".jpeg")):
+                    images.append(
+                        f"/results/reconstruct2img/{session_id}/recon/{file_name}"
+                    )
+
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "ppt_path": f"/results/reconstruct2img/{session_id}/reconstructed.pptx",
+            "recon_images": images,
+        }
+    except HTTPException:
+        # Pass FastAPI HTTP exceptions through untouched
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        pythoncom.CoUninitialize()
 
 
 @app.post("/api/project/{project_id}/reparse_all")
