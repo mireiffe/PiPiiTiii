@@ -99,7 +99,7 @@
           id="file-upload"
           type="file"
           class="hidden"
-          accept=".pptx"
+          accept=".ppt*"
           bind:files
           on:change={handleUpload}
         />
