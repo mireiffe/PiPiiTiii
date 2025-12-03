@@ -37,7 +37,7 @@ def main(ppt_path_raw, slide_index):
     # Output directory in the same folder as the PPT or project root?
     # Let's put it in project root for consistency with previous behavior
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    out_dir = os.path.join(project_root, "results", "debug", f"{base_name}_out")
+    out_dir = os.path.join(project_root, "debug", f"{base_name}_out")
 
     if slide_index is not None:
         print(f"Parsing slide {slide_index} of {ppt_path}...")

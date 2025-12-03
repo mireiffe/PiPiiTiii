@@ -12,9 +12,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pythoncom
 
+import uuid
 import ppt_parser as parsing
+from database import Database
 
 app = FastAPI()
+
+# Database setup
+DB_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "backend",
+    "projects.db",
+)
+db = Database(DB_PATH)
 
 # CORS settings
 app.add_middleware(
@@ -38,6 +48,54 @@ app.mount("/results", StaticFiles(directory=RESULT_DIR), name="results")
 
 # Global progress store: { project_id: { "percent": int, "message": str, "status": "processing"|"done"|"error" } }
 progress_store: Dict[str, Dict[str, Any]] = {}
+
+
+def sync_legacy_projects():
+    """Import existing projects from disk to DB if not present."""
+    if not os.path.exists(RESULT_DIR):
+        return
+
+    existing_ids = {p["id"] for p in db.list_projects()}
+
+    for folder_name in os.listdir(RESULT_DIR):
+        if folder_name in existing_ids:
+            continue
+
+        folder_path = os.path.join(RESULT_DIR, folder_name)
+        if not os.path.isdir(folder_path):
+            continue
+
+        json_path = os.path.join(folder_path, f"{folder_name}.json")
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                stats = os.stat(json_path)
+                created_at = datetime.fromtimestamp(stats.st_ctime).isoformat()
+                metadata = data.get("metadata", {})
+                builtin = metadata.get("builtin_properties", {})
+
+                db.add_project(
+                    {
+                        "id": folder_name,
+                        "original_filename": f"{folder_name}.pptx",  # Best guess for legacy
+                        "created_at": created_at,
+                        "status": "done",
+                        "slide_count": data.get("slides_count", 0),
+                        "title": builtin.get("Title") or "",
+                        "subject": builtin.get("Subject") or "",
+                        "last_modified_by": builtin.get("Last Author") or "",
+                        "revision_number": str(builtin.get("Revision Number") or ""),
+                    }
+                )
+                print(f"Imported legacy project: {folder_name}")
+            except Exception as e:
+                print(f"Error importing {folder_name}: {e}")
+
+
+# Sync on startup
+sync_legacy_projects()
 
 
 def update_progress(project_id: str, percent: int, message: str):
@@ -133,64 +191,35 @@ async def log_requests(request, call_next):
 
 @app.get("/api/projects", response_model=List[ProjectSummary])
 def list_projects():
-    projects = []
-    if not os.path.exists(RESULT_DIR):
-        return []
-
-    for folder_name in os.listdir(RESULT_DIR):
-        folder_path = os.path.join(RESULT_DIR, folder_name)
-        if not os.path.isdir(folder_path):
-            continue
-
-        json_path = os.path.join(folder_path, f"{folder_name}.json")
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-
-                # Extract metadata
-                stats = os.stat(json_path)
-                created_at = datetime.fromtimestamp(stats.st_ctime).isoformat()
-
-                metadata = data.get("metadata", {})
-                builtin = metadata.get("builtin_properties", {})
-
-                projects.append(
-                    ProjectSummary(
-                        id=folder_name,
-                        name=folder_name,
-                        created_at=created_at,
-                        author=builtin.get("Author") or "Unknown",
-                        slide_count=data.get("slides_count", 0),
-                        title=builtin.get("Title") or "",
-                        subject=builtin.get("Subject") or "",
-                        last_modified_by=builtin.get("Last Author") or "",
-                        revision_number=str(builtin.get("Revision Number") or ""),
-                    )
-                )
-            except Exception as e:
-                print(f"Error reading {json_path}: {e}")
-
-    # Sort by creation time desc
-    projects.sort(key=lambda x: x.created_at, reverse=True)
-    return projects
+    projects = db.list_projects()
+    # Convert DB rows to ProjectSummary objects
+    summary_list = []
+    for p in projects:
+        p_dict = dict(p)
+        p_dict["name"] = p_dict.pop("original_filename", "Unknown")
+        summary_list.append(ProjectSummary(**p_dict))
+    return summary_list
 
 
 @app.post("/api/upload")
 async def upload_ppt(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    # Generate a unique ID or use filename
+    # Generate a unique ID
+    project_id = str(uuid.uuid4())
     filename = file.filename
-    base_name = os.path.splitext(filename)[0]
-    base_name = parsing.make_safe_filename(base_name)
 
-    project_id = base_name
-    project_dir = os.path.join(RESULT_DIR, project_id)
-    os.makedirs(project_dir, exist_ok=True)
-
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    # Save to uploads with UUID name to avoid filesystem issues
+    ext = os.path.splitext(filename)[1]
+    if not ext:
+        ext = ".pptx"
+    upload_filename = f"{project_id}{ext}"
+    file_path = os.path.join(UPLOAD_DIR, upload_filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+    # Create result directory
+    project_dir = os.path.join(RESULT_DIR, project_id)
+    os.makedirs(project_dir, exist_ok=True)
 
     # Initialize progress
     progress_store[project_id] = {
@@ -198,6 +227,17 @@ async def upload_ppt(background_tasks: BackgroundTasks, file: UploadFile = File(
         "message": "Uploaded",
         "status": "processing",
     }
+
+    # Add to DB
+    db.add_project(
+        {
+            "id": project_id,
+            "original_filename": filename,
+            "created_at": datetime.now().isoformat(),
+            "status": "processing",
+            "slide_count": 0,
+        }
+    )
 
     # Run parsing in background
     background_tasks.add_task(run_parsing_task, file_path, project_dir, project_id)
@@ -388,8 +428,15 @@ def reparse_all_project(project_id: str):
 
     if not ppt_path or not os.path.exists(ppt_path):
         # Try to find it in uploads if absolute path is missing or wrong
-        ppt_path = os.path.join(UPLOAD_DIR, f"{project_id}.pptx")
-        if not os.path.exists(ppt_path):
+        # Search for any file starting with project_id in uploads
+        found_ppt = False
+        for f in os.listdir(UPLOAD_DIR):
+            if f.startswith(project_id) and os.path.isfile(os.path.join(UPLOAD_DIR, f)):
+                ppt_path = os.path.join(UPLOAD_DIR, f)
+                found_ppt = True
+                break
+
+        if not found_ppt:
             raise HTTPException(status_code=404, detail="Original PPT file not found")
 
     try:
@@ -439,8 +486,15 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
         ppt_path = os.path.join(BASE_DIR, ppt_path)
 
     if not ppt_path or not os.path.exists(ppt_path):
-        ppt_path = os.path.join(UPLOAD_DIR, f"{project_id}.pptx")
-        if not os.path.exists(ppt_path):
+        # Try to find it in uploads if absolute path is missing or wrong
+        found_ppt = False
+        for f in os.listdir(UPLOAD_DIR):
+            if f.startswith(project_id) and os.path.isfile(os.path.join(UPLOAD_DIR, f)):
+                ppt_path = os.path.join(UPLOAD_DIR, f)
+                found_ppt = True
+                break
+
+        if not found_ppt:
             raise HTTPException(status_code=404, detail="Original PPT file not found")
 
     try:
