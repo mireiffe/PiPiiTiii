@@ -14,14 +14,16 @@
     function getTextStyle(style) {
         if (!style) return "";
         const color = getCssColor(style.color_rgb || [0, 0, 0]);
-        const size = style.font_size || 18;
+        // PPT font size is in points (pt). 1pt = 1.333px (96/72)
+        const sizePt = style.font_size || 18;
+        const sizePx = sizePt * (96 / 72);
         const bold = style.bold ? "bold" : "normal";
         const italic = style.italic ? "italic" : "normal";
         const underline = style.underline ? "underline" : "none";
 
         return `
       color: ${color};
-      font-size: ${size}px;
+      font-size: ${sizePx}px;
       font-weight: ${bold};
       font-style: ${italic};
       text-decoration: ${underline};
@@ -44,10 +46,12 @@
     // Helper for border
     function getBorderStyle(line) {
         if (!line || line.visible === false) return "";
-        const width = line.weight || 1;
+        // PPT weight is in points
+        const widthPt = line.weight || 1;
+        const widthPx = widthPt * (96 / 72);
         const color = getCssColor(line.color_rgb || [0, 0, 0]);
         // Dash style mapping could be added here
-        return `border: ${width}px solid ${color};`;
+        return `border: ${widthPx}px solid ${color};`;
     }
 
     // Helper for cell individual borders
@@ -63,10 +67,11 @@
                 if (border.visible === false) {
                     style += `border-${side}: 0;`;
                 } else {
-                    const width = border.weight || 1;
+                    const widthPt = border.weight || 1;
+                    const widthPx = widthPt * (96 / 72);
                     const color = getCssColor(border.color_rgb || [0, 0, 0]);
                     // Default to solid for now, could map dash styles if needed
-                    style += `border-${side}: ${width}px solid ${color};`;
+                    style += `border-${side}: ${widthPx}px solid ${color};`;
                 }
             } else {
                 // If specific side info is missing but borders object exists,
@@ -213,7 +218,7 @@
     $: fillColor = shape.fill?.fore_color_rgb ||
         shape.fill?.back_color_rgb || [255, 255, 255];
     $: lineColor = shape.line?.color_rgb || [0, 0, 0];
-    $: lineWidth = shape.line?.weight || 1;
+    $: lineWidth = (shape.line?.weight || 1) * (96 / 72);
 
     import { IMAGE_BASE_URL } from "$lib/api/client";
 </script>
@@ -262,6 +267,88 @@
             style="filter: drop-shadow(0 0 2px #3b82f6);"
         ></div>
     </div>
+{:else if shape.is_connector}
+    <!-- Connector Rendering -->
+    <div
+        {style}
+        class="absolute select-none group pointer-events-none"
+        data-shape-id={shape.shape_index}
+    >
+        <svg
+            width="100%"
+            height="100%"
+            viewBox={`0 0 ${shape.width} ${shape.height}`}
+            style="overflow: visible;"
+        >
+            {#if shape.auto_shape_type === -2 || shape.type_code === 3}
+                <!-- Elbow Connector Logic -->
+                {@const hFlip = shape.horizontal_flip}
+                {@const vFlip = shape.vertical_flip}
+                {@const w = shape.width}
+                {@const h = shape.height}
+
+                <!-- 
+                        Determine Start (x1, y1) and End (x2, y2) based on flips.
+                        Bounding box is (0,0) to (w,h).
+                     -->
+                {@const x1 = hFlip ? w : 0}
+                {@const y1 = vFlip ? h : 0}
+                {@const x2 = hFlip ? 0 : w}
+                {@const y2 = vFlip ? 0 : h}
+
+                <!-- 
+                        Calculate Elbow Point.
+                        Default L-shape: Move horizontally from Start to intersection, then vertically to End.
+                        Or vertically first? 
+                        PowerPoint elbow connectors usually try to exit the shape perpendicularly.
+                        Without exact path, we can try a simple 50% split or just a direct L.
+                        
+                        Let's try a simple L-shape first: (x2, y1) corner.
+                        Path: (x1, y1) -> (x2, y1) -> (x2, y2)
+                        
+                        Refinement with adjustments:
+                        Adjustment[0] is often the position of the elbow relative to width/height.
+                        If available, we can use it.
+                     -->
+                {@const adj =
+                    shape.adjustments && shape.adjustments.length > 0
+                        ? shape.adjustments[0]
+                        : -1}
+
+                <!-- 
+                        If adj is present, it might define the split. 
+                        Let's assume it's a ratio along the primary axis.
+                     -->
+                {@const elbowX =
+                    adj !== -1
+                        ? hFlip
+                            ? w - w * Math.abs(adj)
+                            : w * Math.abs(adj)
+                        : x2}
+
+                <!-- 
+                        Construct Path Data.
+                        Simple L for now: Start -> Corner -> End
+                     -->
+                <path
+                    d={`M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`}
+                    fill="none"
+                    stroke={getCssColor(lineColor)}
+                    stroke-width={lineWidth}
+                />
+            {:else}
+                <!-- Straight Line or other connector -->
+                <line
+                    x1={shape.horizontal_flip ? shape.width : 0}
+                    y1={shape.vertical_flip ? shape.height : 0}
+                    x2={shape.horizontal_flip ? 0 : shape.width}
+                    y2={shape.vertical_flip ? 0 : shape.height}
+                    stroke={getCssColor(lineColor)}
+                    stroke-width={lineWidth}
+                />
+            {/if}
+        </svg>
+    </div>
 {:else}
     <!-- 기존 Shape 렌더링 -->
     <div
@@ -292,18 +379,18 @@
             <div
                 class="w-full h-full grid pointer-events-none"
                 style={`
-                    grid-template-columns: ${getGridTemplateColumns(shape.table)};
-                    grid-template-rows: ${getGridTemplateRows(shape.table)};
-                `}
+                        grid-template-columns: ${getGridTemplateColumns(shape.table)};
+                        grid-template-rows: ${getGridTemplateRows(shape.table)};
+                    `}
             >
                 {#each shape.table.cells as cell}
                     <div
                         class="overflow-hidden"
                         style={`
-                            ${getCellFillStyle(cell)}
-                            ${getTextStyle(cell.text_style)}
-                            ${getCellBorderStyle(cell.borders)}
-                        `}
+                                ${getCellFillStyle(cell)}
+                                ${getTextStyle(cell.text_style)}
+                                ${getCellBorderStyle(cell.borders)}
+                            `}
                     >
                         {cell.text}
                     </div>
@@ -315,10 +402,10 @@
         {#if shape.children && shape.children.length > 0}
             {#each shape.children as child}
                 <!-- 
-                    IMPORTANT: Children in JSON have absolute coordinates (slide-relative).
-                    But here they are rendered inside the parent div, which is already positioned.
-                    So we must adjust their coordinates to be relative to the parent.
-                -->
+                        IMPORTANT: Children in JSON have absolute coordinates (slide-relative).
+                        But here they are rendered inside the parent div, which is already positioned.
+                        So we must adjust their coordinates to be relative to the parent.
+                    -->
                 <svelte:self
                     shape={{
                         ...child,

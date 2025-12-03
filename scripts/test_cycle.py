@@ -191,9 +191,11 @@ if __name__ == "__main__":
     # =========================================================================
     # Edit these variables before running:
 
-    ppt_path_raw = r"samples/sample_presentation.pptx"
-    slide_index = None  # Set to None to test entire PPT, or integer (e.g. 1) to test specific slide
-    output_base = "debug_cycle"
+    ppt_path_raw = r"uploads/260dcc56-5f1b-4189-9978-95aac007f029.pptx"
+    slide_index = (
+        1  # Set to None to test entire PPT, or integer (e.g. 1) to test specific slide
+    )
+    output_base = "debug/cycle"
 
     # =========================================================================
     # RUN CYCLE TEST

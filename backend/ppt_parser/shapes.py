@@ -121,7 +121,53 @@ def parse_shape(
         "geometry": geometry_info,
         "children": [],
         "table": None,
+        "is_connector": False,
+        "horizontal_flip": False,
+        "vertical_flip": False,
+        "adjustments": [],
     }
+
+    # Connector Detection & Properties
+    try:
+        # Check if it's a connector (Type 3 = msoConnector, or AutoShapeType 2 = msoConnectorElbow)
+        # Also check shape.Connector property if available
+        is_connector = False
+        try:
+            if shape.Connector:
+                is_connector = True
+        except Exception:
+            pass
+
+        if not is_connector:
+            if shape.Type == 3:  # msoConnector
+                is_connector = True
+            elif (
+                shape.Type == 1 and auto_shape_type == -2
+            ):  # msoAutoShape and msoConnectorElbow (sometimes -2)
+                is_connector = True
+
+        if is_connector:
+            shape_info["is_connector"] = True
+
+            try:
+                shape_info["horizontal_flip"] = bool(shape.HorizontalFlip)
+            except Exception:
+                pass
+
+            try:
+                shape_info["vertical_flip"] = bool(shape.VerticalFlip)
+            except Exception:
+                pass
+
+            try:
+                adj_count = shape.Adjustments.Count
+                shape_info["adjustments"] = [
+                    shape.Adjustments.Item(i) for i in range(1, adj_count + 1)
+                ]
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"{prefix}  [WARN] Failed to extract connector info: {e}")
 
     # 이미지 도형 (그림/그래픽/3D 등)
     if shape.Type in (
