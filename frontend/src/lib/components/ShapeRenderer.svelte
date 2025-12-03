@@ -30,10 +30,13 @@
     }
 
     // Helper for fill
-    function getFillStyle(fill) {
-        if (!fill || fill.visible === false) return "";
+    function getFillStyle(fill, forceTransparent = false) {
+        if (!fill || fill.visible === false) {
+            // 테이블 셀 등에서 명시적으로 transparent 필요한 경우
+            return forceTransparent ? "background-color: transparent;" : "";
+        }
         const color = fill.fore_color_rgb || fill.back_color_rgb;
-        if (!color) return "";
+        if (!color) return forceTransparent ? "background-color: transparent;" : "";
         return `background-color: ${getCssColor(color)};`;
     }
 
@@ -100,6 +103,53 @@
         }
         // Cloud는 여기서 처리 안 함 (SVG로 대체)
         return "";
+    }
+
+    // 테이블 행/열 크기 계산 헬퍼 함수들 (비율 기반, scale 미적용)
+    function getGridTemplateRows(table) {
+        if (!table || !table.cells) return `repeat(${table.rows}, 1fr)`;
+        const heights = [];
+        for (let r = 0; r < table.rows; r++) {
+            const cellIndex = r * table.cols;
+            const cell = table.cells[cellIndex];
+            // height 값을 fr 단위의 비율로 사용
+            heights.push(cell?.height || 1);
+        }
+        return heights.map(h => `${h}fr`).join(' ');
+    }
+
+    function getGridTemplateColumns(table) {
+        if (!table || !table.cells) return `repeat(${table.cols}, 1fr)`;
+        const widths = [];
+        for (let c = 0; c < table.cols; c++) {
+            const cell = table.cells[c];
+            // width 값을 fr 단위의 비율로 사용
+            widths.push(cell?.width || 1);
+        }
+        return widths.map(w => `${w}fr`).join(' ');
+    }
+
+    // 셀 배경색 스타일
+    function getCellFillStyle(cell) {
+        // cell 자체가 visible=false면 투명 (셀 자체를 숨김)
+        if (cell.visible === false) {
+            return "background-color: transparent;";
+        }
+        
+        // fill이 없으면 흰색 기본값
+        if (!cell.fill) {
+            return "background-color: white;";
+        }
+        
+        // fill.visible 여부와 관계없이 색상 정보가 있으면 사용
+        // (PPT에서 fill.visible=false는 "채우기 효과 없음"이지 투명이 아님)
+        const color = cell.fill.fore_color_rgb || cell.fill.back_color_rgb;
+        if (color) {
+            return `background-color: ${getCssColor(color)};`;
+        }
+        
+        // 색상 정보도 없으면 흰색 기본값
+        return "background-color: white;";
     }
 
     $: style = `
@@ -212,17 +262,17 @@
             <div
                 class="w-full h-full grid pointer-events-none"
                 style={`
-      grid-template-columns: repeat(${shape.table.cols}, 1fr);
-      grid-template-rows: repeat(${shape.table.rows}, 1fr);
-    `}
+                    grid-template-columns: ${getGridTemplateColumns(shape.table)};
+                    grid-template-rows: ${getGridTemplateRows(shape.table)};
+                `}
             >
                 {#each shape.table.cells as cell}
                     <div
                         class="border border-gray-400 p-1 overflow-hidden"
                         style={`
-          ${getFillStyle(cell.fill)}
-          ${getTextStyle(cell.text_style)}
-        `}
+                            ${getCellFillStyle(cell)}
+                            ${getTextStyle(cell.text_style)}
+                        `}
                     >
                         {cell.text}
                     </div>
