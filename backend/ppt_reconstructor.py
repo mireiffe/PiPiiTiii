@@ -357,7 +357,8 @@ def reconstruct_presentation(json_data, output_path, image_dir=None):
             slide_num = i + 1
             image_path = os.path.join(recon_dir, f"slide_{slide_num:02d}.png")
             try:
-                slide.Export(image_path, "PNG")
+                # slide.Export(image_path, "PNG")
+                slide.Export(image_path, "PNG", SHAPE_PNG_SIZE, SHAPE_PNG_SIZE)
             except Exception as e:
                 print(f"[WARN] Failed to export slide {slide_num}: {e}")
         return True
