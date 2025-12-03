@@ -1,5 +1,6 @@
 import os
-
+import uvicorn
+import sys
 import shutil
 
 import json
@@ -501,6 +502,13 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
 
 
 if __name__ == "__main__":
-    import uvicorn
+    port = 8000
+    if os.environ.get("BACKEND_PORT"):
+        port = int(os.environ.get("BACKEND_PORT"))
+    elif len(sys.argv) > 1:
+        try:
+            port = int(sys.argv[1])
+        except ValueError:
+            pass
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

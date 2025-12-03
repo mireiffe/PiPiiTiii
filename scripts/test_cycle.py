@@ -191,11 +191,8 @@ if __name__ == "__main__":
     # =========================================================================
     # Edit these variables before running:
 
-    ppt_path_raw = r"samples/250215_GenerativeModels.pptx"
-    ppt_path_raw = r"uploads/프레젠테이션.pptx"
-    slide_index = (
-        12  # Set to None to test entire PPT, or integer (e.g. 1) to test specific slide
-    )
+    ppt_path_raw = r"samples/sample_presentation.pptx"
+    slide_index = None  # Set to None to test entire PPT, or integer (e.g. 1) to test specific slide
     output_base = "results/debug_cycle"
 
     # =========================================================================

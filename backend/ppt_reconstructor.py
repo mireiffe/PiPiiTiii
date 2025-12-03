@@ -1,6 +1,6 @@
 import os
 import win32com.client as win32
-from .constants import PP_SHAPE_FORMAT_PNG, SHAPE_PNG_SIZE
+from .ppt_parser.constants import SHAPE_PNG_SIZE
 
 
 def rgb_to_com_int(rgb_list):
@@ -221,8 +221,12 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
 
         # 3. Handle Standard Shapes (if not a group and not an image, or image failed)
         if shape is None and not children:
+            # Table
+            if shape_data.get("table"):
+                shape = reconstruct_table(slide, shape_data)
+
             # msoTextBox = 17
-            if type_code == 17:
+            elif type_code == 17:
                 # msoTextOrientationHorizontal = 1
                 shape = slide.Shapes.AddTextbox(1, left, top, width, height)
                 shape.Rotation = rotation
@@ -267,7 +271,8 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
                     )
 
             # Text - validate HasTextFrame first
-            if text:
+            # Table cells have their own text handling in reconstruct_table, so skip here for tables
+            if text and not shape_data.get("table"):
                 try:
                     if shape.HasTextFrame:
                         shape.TextFrame.TextRange.Text = text
@@ -279,9 +284,11 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
                     print(f"[WARN] Failed to set text for shape '{name}': {e}")
 
             # Styles
-            apply_fill_format(shape, shape_data.get("fill"))
-            apply_line_format(shape, shape_data.get("line"))
-            apply_text_style(shape, shape_data.get("text_style"))
+            # Tables handle their own styles per cell
+            if not shape_data.get("table"):
+                apply_fill_format(shape, shape_data.get("fill"))
+                apply_line_format(shape, shape_data.get("line"))
+                apply_text_style(shape, shape_data.get("text_style"))
 
             # Z-order adjustment
             target_z = shape_data.get("z_order_position")
@@ -302,6 +309,106 @@ def reconstruct_shape(slide, shape_data, image_dir=None):
 
     except Exception as e:
         print(f"[WARN] Failed to reconstruct shape: {e}")
+        return None
+
+
+def reconstruct_table(slide, shape_data):
+    try:
+        table_data = shape_data.get("table")
+        if not table_data:
+            return None
+
+        rows = table_data.get("rows", 0)
+        cols = table_data.get("cols", 0)
+        if rows == 0 or cols == 0:
+            return None
+
+        left = shape_data.get("left", 0)
+        top = shape_data.get("top", 0)
+        width = shape_data.get("width", 100)
+        height = shape_data.get("height", 100)
+
+        # Add Table
+        shape = slide.Shapes.AddTable(rows, cols, left, top, width, height)
+        table = shape.Table
+
+        cells_data = table_data.get("cells", [])
+
+        # Map cells data for easier access
+        cell_map = {}
+        for c in cells_data:
+            cell_map[(c["row"], c["col"])] = c
+
+        for r in range(1, rows + 1):
+            for c in range(1, cols + 1):
+                cell = table.Cell(r, c)
+                cell_info = cell_map.get((r, c))
+
+                if not cell_info:
+                    continue
+
+                # Text
+                cell_text = cell_info.get("text", "")
+                if cell_text:
+                    cell.Shape.TextFrame.TextRange.Text = cell_text
+
+                # Text Style
+                text_style = cell_info.get("text_style")
+                if text_style:
+                    apply_text_style(cell.Shape, text_style)
+
+                # Fill
+                cell_fill = cell_info.get("fill")
+                if cell_fill:
+                    apply_fill_format(cell.Shape, cell_fill)
+
+                # Borders
+                borders_info = cell_info.get("borders")
+                if borders_info:
+                    # ppBorderTop = 1, ppBorderLeft = 2, ppBorderBottom = 3, ppBorderRight = 4
+                    # ppBorderDiagonalDown = 5, ppBorderDiagonalUp = 6
+                    side_map = {"top": 1, "left": 2, "bottom": 3, "right": 4}
+
+                    for side_name, side_enum in side_map.items():
+                        border_data = borders_info.get(side_name)
+                        if border_data:
+                            try:
+                                border = cell.Borders(side_enum)
+
+                                # Visibility
+                                visible = border_data.get("visible")
+                                if visible is not None:
+                                    border.Visible = visible
+
+                                if visible is not False:
+                                    # Weight
+                                    weight = border_data.get("weight")
+                                    if weight and weight > 0:
+                                        border.Weight = weight
+
+                                    # Color
+                                    color = border_data.get("color_rgb")
+                                    if color:
+                                        border.ForeColor.RGB = rgb_to_com_int(color)
+
+                                    # DashStyle
+                                    dash = border_data.get("dash_style")
+                                    if dash:
+                                        border.DashStyle = dash
+
+                                    # LineStyle
+                                    style = border_data.get("line_style")
+                                    if style:
+                                        border.Style = style
+                            except Exception as e:
+                                print(
+                                    f"[WARN] Failed to set {side_name} border for cell ({r},{c}): {e}"
+                                )
+
+        return shape
+
+    except Exception as e:
+        print(f"[WARN] Failed to reconstruct table: {e}")
         return None
 
 

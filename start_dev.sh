@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Default port
+PORT=${1:-8000}
+export BACKEND_PORT=$PORT
+export VITE_API_PORT=$PORT
+
+echo "Using Backend Port: $PORT"
+
 # Function to kill processes on exit
 cleanup() {
     echo "Stopping processes..."
@@ -17,11 +24,11 @@ trap cleanup SIGINT SIGTERM
 # Kill existing processes on ports
 echo "Checking for existing processes..."
 
-# Kill process on port 8000 (Backend)
-PORT_8000_PID=$(lsof -ti:8000 2>/dev/null)
-if [ -n "$PORT_8000_PID" ]; then
-    echo "Killing process on port 8000 (PID: $PORT_8000_PID)..."
-    kill -9 $PORT_8000_PID 2>/dev/null
+# Kill process on selected port (Backend)
+PORT_PID=$(lsof -ti:$PORT 2>/dev/null)
+if [ -n "$PORT_PID" ]; then
+    echo "Killing process on port $PORT (PID: $PORT_PID)..."
+    kill -9 $PORT_PID 2>/dev/null
     sleep 1
 fi
 
@@ -33,7 +40,7 @@ if [ -n "$PORT_5173_PID" ]; then
     sleep 1
 fi
 
-echo "Starting Backend..."
+echo "Starting Backend on port $PORT..."
 if [ -f ".venv/Scripts/python" ]; then
     PYTHON=".venv/Scripts/python"
 elif [ -f ".venv/bin/python" ]; then

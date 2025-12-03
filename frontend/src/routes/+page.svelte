@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
   import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
+  import { fetchProjects, fetchProject } from "$lib/api/project";
 
   let projects = [];
   let loading = true;
@@ -35,7 +36,7 @@
 
   onMount(async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/projects");
+      const res = await fetchProjects();
       if (res.ok) {
         projects = await res.json();
       }
@@ -52,9 +53,7 @@
     loadingDetails = true;
 
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/project/${project.id}`,
-      );
+      const res = await fetchProject(project.id);
       if (res.ok) {
         selectedProjectDetails = await res.json();
       }

@@ -1,5 +1,6 @@
 <script>
   import { goto } from "$app/navigation";
+  import { uploadProject, fetchProjectStatus } from "$lib/api/project";
 
   let files;
   let uploading = false;
@@ -15,14 +16,8 @@
     progress = 0;
     statusMessage = "Uploading...";
 
-    const formData = new FormData();
-    formData.append("file", files[0]);
-
     try {
-      const res = await fetch("http://localhost:8000/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      const res = await uploadProject(files[0]);
 
       if (!res.ok) {
         throw new Error("Upload failed");
@@ -33,9 +28,7 @@
 
       // Poll for status
       while (true) {
-        const statusRes = await fetch(
-          `http://localhost:8000/api/project/${projectId}/status`,
-        );
+        const statusRes = await fetchProjectStatus(projectId);
 
         if (statusRes.ok) {
           const statusData = await statusRes.json();

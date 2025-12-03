@@ -96,7 +96,7 @@ if __name__ == "__main__":
     # Configuration
     # ==========================================
     # Change these variables to test different files or slides
-    ppt_path_raw = r"samples/250215_GenerativeModels.pptx"
-    slide_index = 5  # Set to None to parse the entire presentation
+    ppt_path_raw = r"samples/sample_presentation.pptx"
+    slide_index = None  # Set to None to parse the entire presentation
 
     main(ppt_path_raw, slide_index)

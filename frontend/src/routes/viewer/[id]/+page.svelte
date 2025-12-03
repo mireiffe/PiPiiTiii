@@ -2,6 +2,13 @@
     import { page } from "$app/stores";
     import { onMount, tick } from "svelte";
     import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
+    import {
+        fetchProject,
+        updateShapePositions,
+        updateShapeDescription,
+        reparseProject,
+        reparseSlide,
+    } from "$lib/api/project";
 
     const projectId = $page.params.id;
     let project = null;
@@ -42,9 +49,7 @@
 
     async function loadProject() {
         try {
-            const res = await fetch(
-                `http://localhost:8000/api/project/${projectId}`,
-            );
+            const res = await fetchProject(projectId);
             if (res.ok) {
                 project = await res.json();
 
@@ -259,14 +264,7 @@
                 top: s.top,
             }));
 
-            const res = await fetch(
-                `http://localhost:8000/api/project/${projectId}/update_positions`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ updates }),
-                },
-            );
+            const res = await updateShapePositions(projectId, updates);
 
             if (res.ok) {
                 isDirty = false;
@@ -313,18 +311,11 @@
         currentSlide = currentSlide;
 
         try {
-            const res = await fetch(
-                `http://localhost:8000/api/project/${projectId}/update_description`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        slide_index: currentSlide.slide_index,
-                        shape_index: selectedShape.shape_index,
-                        description: editingDescription,
-                    }),
-                },
-            );
+            const res = await updateShapeDescription(projectId, {
+                slide_index: currentSlide.slide_index,
+                shape_index: selectedShape.shape_index,
+                description: editingDescription,
+            });
             if (!res.ok) {
                 console.error("Failed to save description");
                 alert("Failed to save description");
@@ -345,10 +336,7 @@
 
         loading = true;
         try {
-            const res = await fetch(
-                `http://localhost:8000/api/project/${projectId}/reparse_all`,
-                { method: "POST" },
-            );
+            const res = await reparseProject(projectId);
 
             if (res.ok) {
                 await loadProject();
@@ -375,10 +363,7 @@
 
         loading = true;
         try {
-            const res = await fetch(
-                `http://localhost:8000/api/project/${projectId}/slides/${currentSlide.slide_index}/reparse`,
-                { method: "POST" },
-            );
+            const res = await reparseSlide(projectId, currentSlide.slide_index);
 
             if (res.ok) {
                 const data = await res.json();

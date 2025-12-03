@@ -57,3 +57,20 @@ You can use the provided helper scripts to start both backend and frontend:
     ```bash
     npm run dev
     ```
+
+```powershell
+npm list
+frontend@0.0.1 PiPiiTiii\frontend
+├── @sveltejs/adapter-auto@7.0.0
+├── @sveltejs/kit@2.49.0
+├── @sveltejs/vite-plugin-svelte@6.2.1
+├── autoprefixer@10.4.22
+├── detect-libc@2.1.2 extraneous
+├── lightningcss-win32-x64-msvc@1.30.2 extraneous
+├── postcss@8.5.6
+├── svelte-check@4.3.4
+├── svelte@5.45.2
+├── tailwindcss@3.4.17
+├── typescript@5.9.3
+└── vite@7.2.4
+```

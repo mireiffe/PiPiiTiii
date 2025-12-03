@@ -36,7 +36,8 @@
             return forceTransparent ? "background-color: transparent;" : "";
         }
         const color = fill.fore_color_rgb || fill.back_color_rgb;
-        if (!color) return forceTransparent ? "background-color: transparent;" : "";
+        if (!color)
+            return forceTransparent ? "background-color: transparent;" : "";
         return `background-color: ${getCssColor(color)};`;
     }
 
@@ -47,6 +48,35 @@
         const color = getCssColor(line.color_rgb || [0, 0, 0]);
         // Dash style mapping could be added here
         return `border: ${width}px solid ${color};`;
+    }
+
+    // Helper for cell individual borders
+    function getCellBorderStyle(borders) {
+        if (!borders) return "border: 1px solid #9ca3af;"; // Fallback to gray-400 if no border info
+
+        let style = "";
+        const sides = ["top", "bottom", "left", "right"];
+
+        sides.forEach((side) => {
+            const border = borders[side];
+            if (border) {
+                if (border.visible === false) {
+                    style += `border-${side}: 0;`;
+                } else {
+                    const width = (border.weight || 1) * scale;
+                    const color = getCssColor(border.color_rgb || [0, 0, 0]);
+                    // Default to solid for now, could map dash styles if needed
+                    style += `border-${side}: ${width}px solid ${color};`;
+                }
+            } else {
+                // If specific side info is missing but borders object exists,
+                // we might want a default or just no border.
+                // Let's assume no border if not specified in the detailed object.
+                style += `border-${side}: 0;`;
+            }
+        });
+
+        return style;
     }
 
     // Helper for clip-path based on shape type
@@ -115,7 +145,7 @@
             // height 값을 fr 단위의 비율로 사용
             heights.push(cell?.height || 1);
         }
-        return heights.map(h => `${h}fr`).join(' ');
+        return heights.map((h) => `${h}fr`).join(" ");
     }
 
     function getGridTemplateColumns(table) {
@@ -126,7 +156,7 @@
             // width 값을 fr 단위의 비율로 사용
             widths.push(cell?.width || 1);
         }
-        return widths.map(w => `${w}fr`).join(' ');
+        return widths.map((w) => `${w}fr`).join(" ");
     }
 
     // 셀 배경색 스타일
@@ -135,19 +165,19 @@
         if (cell.visible === false) {
             return "background-color: transparent;";
         }
-        
+
         // fill이 없으면 흰색 기본값
         if (!cell.fill) {
             return "background-color: white;";
         }
-        
+
         // fill.visible 여부와 관계없이 색상 정보가 있으면 사용
         // (PPT에서 fill.visible=false는 "채우기 효과 없음"이지 투명이 아님)
         const color = cell.fill.fore_color_rgb || cell.fill.back_color_rgb;
         if (color) {
             return `background-color: ${getCssColor(color)};`;
         }
-        
+
         // 색상 정보도 없으면 흰색 기본값
         return "background-color: white;";
     }
@@ -185,7 +215,7 @@
     $: lineColor = shape.line?.color_rgb || [0, 0, 0];
     $: lineWidth = (shape.line?.weight || 1) * scale;
 
-    const IMAGE_BASE = "http://localhost:8000";
+    import { IMAGE_BASE_URL } from "$lib/api/client";
 </script>
 
 {#if isCloud(shape)}
@@ -242,7 +272,7 @@
         <!-- Image -->
         {#if shape.image_file}
             <img
-                src={`${IMAGE_BASE}/results/${projectId}/${shape.image_file}`}
+                src={`${IMAGE_BASE_URL}/results/${projectId}/${shape.image_file}`}
                 alt={shape.name}
                 class="w-full h-full object-contain pointer-events-none"
             />
@@ -268,10 +298,11 @@
             >
                 {#each shape.table.cells as cell}
                     <div
-                        class="border border-gray-400 p-1 overflow-hidden"
+                        class="overflow-hidden"
                         style={`
                             ${getCellFillStyle(cell)}
                             ${getTextStyle(cell.text_style)}
+                            ${getCellBorderStyle(cell.borders)}
                         `}
                     >
                         {cell.text}
