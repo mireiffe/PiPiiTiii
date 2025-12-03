@@ -450,11 +450,7 @@
                             >
                                 {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
                                     <div class="absolute top-0 left-0">
-                                        <ShapeRenderer
-                                            {shape}
-                                            scale={1}
-                                            {projectId}
-                                        />
+                                        <ShapeRenderer {shape} {projectId} />
                                     </div>
                                 {/each}
                             </div>
@@ -547,34 +543,41 @@
         >
             {#if currentSlide}
                 <div
-                    class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-center"
                     style={`
             width: ${project.slide_width * scale}px;
             height: ${project.slide_height * scale}px;
           `}
                 >
-                    {#each sortedShapes as shape (shape.shape_index)}
-                        <!-- svelte-ignore a11y-no-static-element-interactions -->
-                        <div
-                            on:mousedown={(e) => handleMouseDown(e, shape)}
-                            class="absolute"
-                            style={`
+                    <div
+                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left"
+                        style={`
+            width: ${project.slide_width}px;
+            height: ${project.slide_height}px;
+            transform: scale(${scale});
+          `}
+                    >
+                        {#each sortedShapes as shape (shape.shape_index)}
+                            <!-- svelte-ignore a11y-no-static-element-interactions -->
+                            <div
+                                on:mousedown={(e) => handleMouseDown(e, shape)}
+                                class="absolute"
+                                style={`
                 left: 0; 
                 top: 0; 
                 width: 0; 
                 height: 0;
                 cursor: grab;
               `}
-                        >
-                            <ShapeRenderer
-                                {shape}
-                                {scale}
-                                {projectId}
-                                highlight={selectedShapeId ===
-                                    shape.shape_index}
-                            />
-                        </div>
-                    {/each}
+                            >
+                                <ShapeRenderer
+                                    {shape}
+                                    {projectId}
+                                    highlight={selectedShapeId ===
+                                        shape.shape_index}
+                                />
+                            </div>
+                        {/each}
+                    </div>
                 </div>
             {/if}
         </div>

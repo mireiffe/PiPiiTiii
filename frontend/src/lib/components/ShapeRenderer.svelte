@@ -1,6 +1,6 @@
 <script>
     export let shape;
-    export let scale = 1;
+    // scale prop removed, we rely on CSS transform on parent
     export let projectId = "";
     export let highlight = false;
 
@@ -14,7 +14,7 @@
     function getTextStyle(style) {
         if (!style) return "";
         const color = getCssColor(style.color_rgb || [0, 0, 0]);
-        const size = (style.font_size || 18) * scale;
+        const size = style.font_size || 18;
         const bold = style.bold ? "bold" : "normal";
         const italic = style.italic ? "italic" : "normal";
         const underline = style.underline ? "underline" : "none";
@@ -44,7 +44,7 @@
     // Helper for border
     function getBorderStyle(line) {
         if (!line || line.visible === false) return "";
-        const width = (line.weight || 1) * scale;
+        const width = line.weight || 1;
         const color = getCssColor(line.color_rgb || [0, 0, 0]);
         // Dash style mapping could be added here
         return `border: ${width}px solid ${color};`;
@@ -63,7 +63,7 @@
                 if (border.visible === false) {
                     style += `border-${side}: 0;`;
                 } else {
-                    const width = (border.weight || 1) * scale;
+                    const width = border.weight || 1;
                     const color = getCssColor(border.color_rgb || [0, 0, 0]);
                     // Default to solid for now, could map dash styles if needed
                     style += `border-${side}: ${width}px solid ${color};`;
@@ -184,10 +184,10 @@
 
     $: style = `
     position: absolute;
-    left: ${shape.left * scale}px;
-    top: ${shape.top * scale}px;
-    width: ${shape.width * scale}px;
-    height: ${shape.height * scale}px;
+    left: ${shape.left}px;
+    top: ${shape.top}px;
+    width: ${shape.width}px;
+    height: ${shape.height}px;
     transform: rotate(${shape.rotation || 0}deg);
     ${getFillStyle(shape.fill)}
     ${getBorderStyle(shape.line)}
@@ -200,10 +200,10 @@
     // Cloud용 style (clip-path 제외)
     $: cloudStyle = `
         position: absolute;
-        left: ${shape.left * scale}px;
-        top: ${shape.top * scale}px;
-        width: ${shape.width * scale}px;
-        height: ${shape.height * scale}px;
+        left: ${shape.left}px;
+        top: ${shape.top}px;
+        width: ${shape.width}px;
+        height: ${shape.height}px;
         transform: rotate(${shape.rotation || 0}deg);
         z-index: ${shape.z_order_position || 1};
         overflow: visible;
@@ -213,7 +213,7 @@
     $: fillColor = shape.fill?.fore_color_rgb ||
         shape.fill?.back_color_rgb || [255, 255, 255];
     $: lineColor = shape.line?.color_rgb || [0, 0, 0];
-    $: lineWidth = (shape.line?.weight || 1) * scale;
+    $: lineWidth = shape.line?.weight || 1;
 
     import { IMAGE_BASE_URL } from "$lib/api/client";
 </script>
@@ -325,7 +325,6 @@
                         left: child.left - shape.left,
                         top: child.top - shape.top,
                     }}
-                    {scale}
                     {projectId}
                     {highlight}
                 />
