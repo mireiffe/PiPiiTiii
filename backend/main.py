@@ -207,11 +207,9 @@ async def upload_ppt(background_tasks: BackgroundTasks, file: UploadFile = File(
     project_id = str(uuid.uuid4())
     filename = file.filename
 
-    # Save to uploads with UUID name to avoid filesystem issues
-    ext = os.path.splitext(filename)[1]
-    if not ext:
-        ext = ".pptx"
-    upload_filename = f"{project_id}{ext}"
+    # Save to uploads with ORIGINAL filename
+    # WARNING: This overwrites existing files with the same name!
+    upload_filename = filename
     file_path = os.path.join(UPLOAD_DIR, upload_filename)
 
     with open(file_path, "wb") as buffer:
@@ -427,14 +425,43 @@ def reparse_all_project(project_id: str):
         ppt_path = os.path.join(BASE_DIR, ppt_path)
 
     if not ppt_path or not os.path.exists(ppt_path):
-        # Try to find it in uploads if absolute path is missing or wrong
-        # Search for any file starting with project_id in uploads
+        # Try to find it in uploads
+        # 1. Try original filename from DB or JSON if available (we don't have it in JSON root easily, but maybe in DB)
+        # But we can try to guess from the ppt_path basename if it was saved there
+
         found_ppt = False
-        for f in os.listdir(UPLOAD_DIR):
-            if f.startswith(project_id) and os.path.isfile(os.path.join(UPLOAD_DIR, f)):
-                ppt_path = os.path.join(UPLOAD_DIR, f)
+
+        # Strategy 1: Check if the file exists in uploads with the basename of the stored path
+        if ppt_path:
+            basename = os.path.basename(ppt_path)
+            candidate = os.path.join(UPLOAD_DIR, basename)
+            if os.path.exists(candidate):
+                ppt_path = candidate
                 found_ppt = True
-                break
+
+        # Strategy 2: Legacy fallback - search for project_id prefix
+        if not found_ppt:
+            for f in os.listdir(UPLOAD_DIR):
+                if f.startswith(project_id) and os.path.isfile(
+                    os.path.join(UPLOAD_DIR, f)
+                ):
+                    ppt_path = os.path.join(UPLOAD_DIR, f)
+                    found_ppt = True
+                    break
+
+        if not found_ppt:
+            # Strategy 3: Try to look up original filename from DB
+            # This requires DB access which we have via `db` global
+            try:
+                project_info = db.get_project(project_id)
+                if project_info and project_info.get("original_filename"):
+                    orig_name = project_info["original_filename"]
+                    candidate = os.path.join(UPLOAD_DIR, orig_name)
+                    if os.path.exists(candidate):
+                        ppt_path = candidate
+                        found_ppt = True
+            except Exception as e:
+                print(f"DB lookup failed during reparse: {e}")
 
         if not found_ppt:
             raise HTTPException(status_code=404, detail="Original PPT file not found")
@@ -486,13 +513,39 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
         ppt_path = os.path.join(BASE_DIR, ppt_path)
 
     if not ppt_path or not os.path.exists(ppt_path):
-        # Try to find it in uploads if absolute path is missing or wrong
+        # Try to find it in uploads
         found_ppt = False
-        for f in os.listdir(UPLOAD_DIR):
-            if f.startswith(project_id) and os.path.isfile(os.path.join(UPLOAD_DIR, f)):
-                ppt_path = os.path.join(UPLOAD_DIR, f)
+
+        # Strategy 1: Check if the file exists in uploads with the basename of the stored path
+        if ppt_path:
+            basename = os.path.basename(ppt_path)
+            candidate = os.path.join(UPLOAD_DIR, basename)
+            if os.path.exists(candidate):
+                ppt_path = candidate
                 found_ppt = True
-                break
+
+        # Strategy 2: Legacy fallback - search for project_id prefix
+        if not found_ppt:
+            for f in os.listdir(UPLOAD_DIR):
+                if f.startswith(project_id) and os.path.isfile(
+                    os.path.join(UPLOAD_DIR, f)
+                ):
+                    ppt_path = os.path.join(UPLOAD_DIR, f)
+                    found_ppt = True
+                    break
+
+        if not found_ppt:
+            # Strategy 3: Try to look up original filename from DB
+            try:
+                project_info = db.get_project(project_id)
+                if project_info and project_info.get("original_filename"):
+                    orig_name = project_info["original_filename"]
+                    candidate = os.path.join(UPLOAD_DIR, orig_name)
+                    if os.path.exists(candidate):
+                        ppt_path = candidate
+                        found_ppt = True
+            except Exception as e:
+                print(f"DB lookup failed during slide reparse: {e}")
 
         if not found_ppt:
             raise HTTPException(status_code=404, detail="Original PPT file not found")
