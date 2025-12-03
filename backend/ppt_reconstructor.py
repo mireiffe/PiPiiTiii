@@ -1,5 +1,6 @@
 import os
 import win32com.client as win32
+from .constants import PP_SHAPE_FORMAT_PNG, SHAPE_PNG_SIZE
 
 
 def rgb_to_com_int(rgb_list):
