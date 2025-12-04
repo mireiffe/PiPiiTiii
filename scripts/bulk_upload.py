@@ -1,11 +1,17 @@
 import os
 import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import json
 import time
 import argparse
+import urllib.request
+import urllib.error
+import urllib.parse
+import uuid
 
-import requests
-
+from backend.ppt_parser.slides import get_presentation_metadata
+import pythoncom
 
 # Configuration
 API_BASE_URL = "http://localhost:8000/api"
@@ -16,56 +22,52 @@ def upload_file(file_path):
     url = f"{API_BASE_URL}/upload"
     filename = os.path.basename(file_path)
 
-    # requests가 multipart/form-data를 알아서 만들어주므로 직접 boundary 만들 필요 없음
-    files = {
-        "file": (
-            filename,
-            open(file_path, "rb"),
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        )
-    }
-
-    proxies = {
-        "http": None,
-        "https": None,
-    }
+    boundary = "----WebKitFormBoundary" + uuid.uuid4().hex
+    data = []
+    data.append(f"--{boundary}")
+    data.append(f'Content-Disposition: form-data; name="file"; filename="{filename}"')
+    data.append(
+        "Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    )
+    data.append("")
 
     try:
-        # 필요하면 timeout 값 조정 가능
-        resp = requests.post(url, files=files, timeout=10, proxies=proxies)
-        resp.raise_for_status()
-        result = resp.json()
-        return result.get("id")
-    except requests.exceptions.HTTPError as e:
-        print(f"Error uploading {filename}: {resp.status_code} {resp.reason}")
+        with open(file_path, "rb") as f:
+            file_content = f.read()
+
+        body = b""
+        for item in data:
+            body += item.encode("utf-8") + b"\r\n"
+
+        body += file_content + b"\r\n"
+        body += f"--{boundary}--\r\n".encode("utf-8")
+
+        req = urllib.request.Request(url, data=body)
+        req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return result.get("id")
+
+    except urllib.error.HTTPError as e:
+        print(f"Error uploading {filename}: {e.code} {e.reason}")
         try:
-            print(resp.text)
+            print(e.read().decode("utf-8"))
         except Exception:
             pass
         return None
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         print(f"Error uploading {filename}: {str(e)}")
         return None
-    finally:
-        # 파일 핸들 닫기
-        try:
-            files["file"][1].close()
-        except Exception:
-            pass
 
 
 def check_status(project_id):
     """Checks the processing status of a project."""
     url = f"{API_BASE_URL}/project/{project_id}/status"
-    proxies = {
-        "http": None,
-        "https": None,
-    }
     try:
-        resp = requests.get(url, timeout=10, proxies=proxies)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.exceptions.RequestException as e:
+        with urllib.request.urlopen(url, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception as e:
         print(f"Error checking status for {project_id}: {str(e)}")
         return None
 
@@ -82,7 +84,6 @@ def find_ppt_files_recursive(directory_path):
                 full_path = os.path.join(root, f)
                 ppt_files.append(full_path)
 
-    # 정렬해두면 재현성 있음 (원하면 제거 가능)
     ppt_files.sort()
     return ppt_files
 
@@ -106,11 +107,9 @@ def process_directory(directory_path, dry_run=True, max_upload=None):
     print(f"Found {total_found} PPT files under '{directory_path}':")
 
     for f in ppt_files:
-        # 루트 기준 상대경로로 보여주면 보기 편함
         rel_path = os.path.relpath(f, directory_path)
         print(f" - {rel_path}")
 
-    # 업로드 개수 제한 처리
     if max_upload is not None:
         if max_upload <= 0:
             print("\n[INFO] --max 값이 0 이하라서 실제 업로드는 수행하지 않습니다.")
@@ -127,12 +126,62 @@ def process_directory(directory_path, dry_run=True, max_upload=None):
         print("Will upload all found PPT files.")
 
     if dry_run:
+        print("\n[DRY RUN] Checking for duplicates...")
+
+        for i, file_path in enumerate(files_to_upload, 1):
+            filename = os.path.basename(file_path)
+            rel_path = os.path.relpath(file_path, directory_path)
+
+            status_msg = "New"
+
+            if get_presentation_metadata:
+                try:
+                    pythoncom.CoInitialize()
+                    try:
+                        # COM requires absolute path
+                        abs_path = os.path.abspath(file_path)
+                        metadata = get_presentation_metadata(abs_path)
+                    finally:
+                        pythoncom.CoUninitialize()
+
+                    if metadata:
+                        title = metadata.get("title", "")
+                        slide_count = metadata.get("slide_count", 0)
+                        seed = f"{filename}|{title}|{slide_count}"
+                        APP_NAMESPACE = uuid.uuid5(
+                            uuid.NAMESPACE_DNS, "pipiitiii.local"
+                        )
+                        project_id = str(uuid.uuid5(APP_NAMESPACE, seed))
+
+                        check_url = f"{API_BASE_URL}/project/{project_id}"
+                        try:
+                            with urllib.request.urlopen(check_url, timeout=5) as resp:
+                                if resp.status == 200:
+                                    status_msg = f"Duplicate (ID: {project_id})"
+                        except urllib.error.HTTPError as e:
+                            if e.code == 404:
+                                status_msg = "New"
+                            else:
+                                status_msg = f"Error checking ({e.code})"
+                        except Exception as e:
+                            status_msg = f"Check failed: {e}"
+                    else:
+                        status_msg = "Metadata extraction failed"
+                except Exception as e:
+                    status_msg = f"Error: {e}"
+            else:
+                status_msg = "Skipped check (no backend module)"
+
+            print(f" - {rel_path} : {status_msg}")
+
         print("\n[DRY RUN] No files were uploaded.")
         print("To perform the actual upload, run with the --upload flag:")
         extra = ""
         if max_upload is not None:
             extra = f" --max {max_upload}"
-        print(f"  python {os.path.basename(sys.argv[0])} {directory_path} --upload{extra}")
+        print(
+            f"  python {os.path.basename(sys.argv[0])} {directory_path} --upload{extra}"
+        )
         return
 
     num_to_upload = len(files_to_upload)
@@ -156,7 +205,6 @@ def process_directory(directory_path, dry_run=True, max_upload=None):
         print(f"  -> Uploaded. Project ID: {project_id}")
         print("  -> Waiting for processing...", end="", flush=True)
 
-        # Poll for completion
         while True:
             status = check_status(project_id)
             if not status:

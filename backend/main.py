@@ -15,6 +15,9 @@ import pythoncom
 import uuid
 import ppt_parser as parsing
 from database import Database
+import asyncio
+from attributes.manager import AttributeManager
+
 
 app = FastAPI()
 
@@ -25,6 +28,7 @@ DB_PATH = os.path.join(
     "projects.db",
 )
 db = Database(DB_PATH)
+
 
 # CORS settings
 app.add_middleware(
@@ -39,6 +43,11 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RESULT_DIR = os.path.join(BASE_DIR, "results")
+
+attr_manager = AttributeManager(
+    db, os.path.join(BASE_DIR, "backend", "attributes", "definitions")
+)
+
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
@@ -148,26 +157,11 @@ def run_parsing_task(file_path: str, project_dir: str, project_id: str):
             db.update_project_status(project_id, "error")
             return
 
-        # JSON 읽어서 메타데이터 추출
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        # JSON 읽어서 메타데이터 추출 (필요하다면)
+        # with open(json_path, "r", encoding="utf-8") as f:
+        #     data = json.load(f)
 
-        slides = data.get("slides", [])
-        slide_count = len(slides)
-
-        metadata = data.get("metadata", {})
-        builtin = metadata.get("builtin_properties", {})
-
-        db.update_project_database(
-            project_id=project_id,
-            status="done",
-            slide_count=slide_count,
-            title=builtin.get("Title") or "",
-            author=builtin.get("Author") or "",
-            subject=builtin.get("Subject") or "",
-            last_modified_by=builtin.get("Last Author") or "",
-            revision_number=str(builtin.get("Revision Number") or ""),
-        )
+        db.update_project_status(project_id, "done")
 
         update_progress(project_id, 100, "Done")
 
@@ -228,10 +222,31 @@ def list_projects():
     return summary_list
 
 
+@app.get("/api/filters")
+def get_filters():
+    """Get available filters and their options."""
+    active_attrs = attr_manager.get_active_attributes()
+    filters = []
+    for attr in active_attrs:
+        key = attr["key"]
+        options = db.get_distinct_values(key)
+        filters.append(
+            {"key": key, "display_name": attr["display_name"], "options": options}
+        )
+    return filters
+
+
+def get_metadata_with_com(file_path):
+    """Wrapper to run metadata extraction in a separate thread with COM init."""
+    pythoncom.CoInitialize()
+    try:
+        return parsing.get_presentation_metadata(file_path)
+    finally:
+        pythoncom.CoUninitialize()
+
+
 @app.post("/api/upload")
 async def upload_ppt(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    # Generate a unique ID
-    project_id = str(uuid.uuid4())
     filename = file.filename
 
     # Save to uploads with ORIGINAL filename
@@ -241,6 +256,50 @@ async def upload_ppt(background_tasks: BackgroundTasks, file: UploadFile = File(
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+    # Extract metadata for deterministic UID
+    # Run in thread pool to avoid blocking event loop
+    loop = asyncio.get_event_loop()
+    metadata = await loop.run_in_executor(None, get_metadata_with_com, file_path)
+
+    if metadata is None:
+        print(f"[WARN] Could not extract metadata for {filename}. Using random UUID.")
+        project_id = str(uuid.uuid4())
+        # Default values
+        slide_count = 0
+        title = ""
+        subject = ""
+        author = ""
+        last_modified_by = ""
+        revision_number = ""
+    else:
+        title = metadata.get("title", "")
+        slide_count = metadata.get("slide_count", 0)
+        subject = metadata.get("subject", "")
+        author = metadata.get("author", "")
+        last_modified_by = metadata.get("last_modified_by", "")
+        revision_number = metadata.get("revision_number", "")
+
+        # Generate deterministic UID
+        # Seed: filename|title|slide_count
+        seed = f"{filename}|{title}|{slide_count}"
+
+        APP_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "pipiitiii.local")
+        project_id = str(uuid.uuid5(APP_NAMESPACE, seed))
+
+        print(f"[INFO] Generated UID {project_id} for {filename}")
+
+    # Check if project already exists
+    existing_project = db.get_project(project_id)
+    if existing_project:
+        print(f"[INFO] Project {project_id} already exists. Returning existing status.")
+        status = existing_project.get("status", "unknown")
+        return {
+            "id": project_id,
+            "message": "Project already exists (duplicate detected)",
+            "status": status,
+            "is_duplicate": True,
+        }
 
     # Create result directory
     project_dir = os.path.join(RESULT_DIR, project_id)
@@ -253,16 +312,42 @@ async def upload_ppt(background_tasks: BackgroundTasks, file: UploadFile = File(
         "status": "processing",
     }
 
-    # Add to DB
+    # Add to DB with FULL metadata
     db.add_project(
         {
             "id": project_id,
             "original_filename": filename,
             "created_at": datetime.now().isoformat(),
             "status": "processing",
-            "slide_count": 0,
+            "slide_count": slide_count,
+            "title": title,
+            "subject": subject,
+            "author": author,
+            "last_modified_by": last_modified_by,
+            "revision_number": revision_number,
         }
     )
+
+    # Calculate and save dynamic attributes
+    try:
+        project_data = {
+            "original_filename": filename,
+            "title": title,
+            "slide_count": slide_count,
+            "subject": subject,
+            "author": author,
+            "last_modified_by": last_modified_by,
+            "revision_number": revision_number,
+        }
+        attributes = attr_manager.calculate_attributes(project_data)
+        db.update_project_attributes(project_id, attributes)
+    except Exception as e:
+        print(f"[ERROR] Failed to calculate attributes for {project_id}: {e}")
+
+    # Run parsing in background
+    background_tasks.add_task(run_parsing_task, file_path, project_dir, project_id)
+
+    return {"id": project_id, "message": "Upload successful, processing started"}
 
     # Run parsing in background
     background_tasks.add_task(run_parsing_task, file_path, project_dir, project_id)

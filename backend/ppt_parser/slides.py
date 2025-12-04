@@ -224,6 +224,52 @@ def extract_metadata(presentation) -> dict:
     return metadata
 
 
+def get_presentation_metadata(ppt_path):
+    """
+    Opens the presentation to extract metadata needed for deterministic UID generation.
+    Returns a dict with 'title' and 'slide_count'.
+    """
+    if not os.path.exists(ppt_path):
+        return None
+
+    powerpoint = win32.gencache.EnsureDispatch("PowerPoint.Application")
+    presentation = None
+
+    try:
+        # Open ReadOnly to be faster and safer
+        presentation = powerpoint.Presentations.Open(
+            ppt_path, ReadOnly=True, Untitled=False, WithWindow=False
+        )
+
+        slide_count = presentation.Slides.Count
+
+        def get_prop(name):
+            try:
+                val = presentation.BuiltInDocumentProperties(name).Value
+                return str(val) if val else ""
+            except Exception:
+                return ""
+
+        return {
+            "title": get_prop("Title"),
+            "subject": get_prop("Subject"),
+            "author": get_prop("Author"),
+            "last_modified_by": get_prop("Last Author"),
+            "revision_number": get_prop("Revision Number"),
+            "slide_count": slide_count,
+        }
+
+    except Exception as e:
+        print(f"[ERROR] Failed to extract metadata from {ppt_path}: {e}")
+        return None
+    finally:
+        if presentation:
+            try:
+                presentation.Close()
+            except Exception:
+                pass
+
+
 def parse_presentation(
     ppt_path, out_dir, debug=False, progress_callback=None, preserved_data=None
 ):

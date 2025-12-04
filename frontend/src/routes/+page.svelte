@@ -1,12 +1,16 @@
 <script>
   import { onMount } from "svelte";
   import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
-  import { fetchProjects, fetchProject } from "$lib/api/project";
+  import { fetchProjects, fetchProject, fetchFilters } from "$lib/api/project";
 
   let projects = [];
   let loading = true;
   let searchTerm = "";
   let sortBy = "date";
+
+  // Dynamic filters
+  let filters = [];
+  let selectedFilters = {};
 
   // Selection state
   let selectedProjectId = null;
@@ -26,12 +30,27 @@
   $: filteredProjects = projects
     .filter((p) => {
       const term = searchTerm.toLowerCase();
-      return (
+      const matchesSearch =
         p.name.toLowerCase().includes(term) ||
         (p.author && p.author.toLowerCase().includes(term)) ||
         (p.title && p.title.toLowerCase().includes(term)) ||
-        (p.subject && p.subject.toLowerCase().includes(term))
-      );
+        (p.subject && p.subject.toLowerCase().includes(term));
+
+      if (!matchesSearch) return false;
+
+      // Check dynamic filters
+      for (const filter of filters) {
+        const selectedValue = selectedFilters[filter.key];
+        if (selectedValue && selectedValue !== "") {
+          const projectValue = p[filter.key];
+          // Handle null/undefined project values
+          if (projectValue != selectedValue) {
+            return false;
+          }
+        }
+      }
+
+      return true;
     })
     .sort((a, b) => {
       if (sortBy === "date")
@@ -46,9 +65,20 @@
 
   onMount(async () => {
     try {
-      const res = await fetchProjects();
-      if (res.ok) {
-        projects = await res.json();
+      const [projectsRes, filtersRes] = await Promise.all([
+        fetchProjects(),
+        fetchFilters(),
+      ]);
+
+      if (projectsRes.ok) {
+        projects = await projectsRes.json();
+      }
+      if (filtersRes.ok) {
+        filters = await filtersRes.json();
+        // Initialize selectedFilters
+        filters.forEach((f) => {
+          selectedFilters[f.key] = "";
+        });
       }
     } catch (e) {
       console.error(e);
@@ -104,14 +134,28 @@
           bind:value={searchTerm}
           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <select
-          bind:value={sortBy}
-          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-        >
-          <option value="date">Date (Newest)</option>
-          <option value="name">Name (A-Z)</option>
-          <option value="author">Author (A-Z)</option>
-        </select>
+        <div class="flex gap-2">
+          <select
+            bind:value={sortBy}
+            class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="date">Date (Newest)</option>
+            <option value="name">Name (A-Z)</option>
+            <option value="author">Author (A-Z)</option>
+          </select>
+
+          {#each filters as filter}
+            <select
+              bind:value={selectedFilters[filter.key]}
+              class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">{filter.display_name} (All)</option>
+              {#each filter.options as option}
+                <option value={option}>{option}</option>
+              {/each}
+            </select>
+          {/each}
+        </div>
       </div>
 
       <!-- List -->

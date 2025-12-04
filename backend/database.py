@@ -135,3 +135,105 @@ class Database:
                 "DELETE FROM projects WHERE id = ?",
                 (str(project_id),),
             )
+
+    def execute_ddl(self, sql: str):
+        """Execute Data Definition Language (DDL) statements."""
+        conn = self.get_connection()
+        try:
+            conn.execute(sql)
+            conn.commit()
+        except Exception as e:
+            print(f"DDL Execution Error: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def get_active_attributes(self) -> List[str]:
+        """Get list of active attribute keys."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attributes (
+                key TEXT PRIMARY KEY,
+                display_name TEXT
+            )
+        """)
+        cursor.execute("SELECT key FROM attributes")
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+
+    def sync_active_attributes(self, attributes: List[Dict[str, str]]):
+        """
+        Sync the attributes table with the provided list of active attributes.
+        attributes: List of dicts with 'key' and 'display_name'
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attributes (
+                key TEXT PRIMARY KEY,
+                display_name TEXT
+            )
+        """)
+
+        # Get current keys
+        cursor.execute("SELECT key FROM attributes")
+        current_keys = {row[0] for row in cursor.fetchall()}
+
+        new_keys = {attr["key"] for attr in attributes}
+
+        # Insert new ones
+        for attr in attributes:
+            if attr["key"] not in current_keys:
+                cursor.execute(
+                    "INSERT INTO attributes (key, display_name) VALUES (?, ?)",
+                    (attr["key"], attr["display_name"]),
+                )
+
+        # Remove old ones
+        for key in current_keys:
+            if key not in new_keys:
+                cursor.execute("DELETE FROM attributes WHERE key = ?", (key,))
+
+        conn.commit()
+        conn.close()
+
+    def update_project_attributes(self, project_id: str, attributes: Dict[str, Any]):
+        """Update dynamic attribute columns for a project."""
+        if not attributes:
+            return
+
+        set_clause = ", ".join([f"{key} = ?" for key in attributes.keys()])
+        values = list(attributes.values())
+        values.append(project_id)
+
+        sql = f"UPDATE projects SET {set_clause} WHERE id = ?"
+
+        conn = self.get_connection()
+        try:
+            conn.execute(sql, values)
+            conn.commit()
+        except Exception as e:
+            print(f"Error updating attributes for {project_id}: {e}")
+        finally:
+            conn.close()
+
+    def get_distinct_values(self, column: str) -> List[Any]:
+        """Get distinct values for a specific column (used for filters)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                f"SELECT DISTINCT {column} FROM projects WHERE {column} IS NOT NULL ORDER BY {column}"
+            )
+            rows = cursor.fetchall()
+            return [row[0] for row in rows]
+        except Exception:
+            # Column might not exist yet
+            return []
+        finally:
+            conn.close()

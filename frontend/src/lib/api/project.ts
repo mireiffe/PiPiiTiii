@@ -48,3 +48,6 @@ export async function reparseSlide(id: string, slideIndex: number) {
         method: "POST",
     });
 }
+export async function fetchFilters() {
+    return apiFetch("/api/filters");
+}
