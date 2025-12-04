@@ -145,9 +145,36 @@ def run_parsing_task(file_path: str, project_dir: str, project_id: str):
 
         if not json_path:
             update_progress(project_id, -1, "Parsing failed to produce JSON")
+            db.update_project_status(project_id, "error")
+            return
+
+        # JSON 읽어서 메타데이터 추출
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        slides = data.get("slides", [])
+        slide_count = len(slides)
+
+        metadata = data.get("metadata", {})
+        builtin = metadata.get("builtin_properties", {})
+
+        db.update_project_database(
+            project_id=project_id,
+            status="done",
+            slide_count=slide_count,
+            title=builtin.get("Title") or "",
+            author=builtin.get("Author") or "",
+            subject=builtin.get("Subject") or "",
+            last_modified_by=builtin.get("Last Author") or "",
+            revision_number=str(builtin.get("Revision Number") or ""),
+        )
+
+        update_progress(project_id, 100, "Done")
+
     except Exception as e:
         print(f"Background task error: {e}")
         update_progress(project_id, -1, str(e))
+        db.update_project_status(project_id, "error")
     finally:
         # Uninitialize COM when done
         pythoncom.CoUninitialize()

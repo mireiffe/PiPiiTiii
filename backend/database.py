@@ -85,6 +85,45 @@ class Database:
         conn.commit()
         conn.close()
 
+    def update_project_database(
+        self,
+        project_id: str,
+        slide_count: int,
+        title: str = "",
+        author: str = "",
+        subject: str = "",
+        last_modified_by: str = "",
+        revision_number: str = "",
+        status: str = "done",
+    ):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE projects
+            SET status = ?,
+                slide_count = ?,
+                title = ?,
+                author = ?,
+                subject = ?,
+                last_modified_by = ?,
+                revision_number = ?
+            WHERE id = ?
+            """,
+            (
+                status,
+                slide_count,
+                title,
+                author,
+                subject,
+                last_modified_by,
+                revision_number,
+                project_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
     def delete_project(self, project_id):
         """
         projects 테이블에서 주어진 project_id를 가진 행을 삭제한다.

@@ -37,6 +37,27 @@
     let selectedShapeId = null;
     let editingDescription = "";
 
+    let otherShapesExpanded = false;
+
+    let allowEdit = false;
+
+    // 이미지 shape 필터링 (image_path가 있거나 shape_type이 'picture'인 경우)
+    $: imageShapes = allShapes.filter(
+        (s) =>
+            s.image_path ||
+            s.type_code === "picture" ||
+            s.type_code === "image" ||
+            s.type_code === 13, // MSO_SHAPE_TYPE.PICTURE
+    );
+
+    $: otherShapes = allShapes.filter(
+        (s) =>
+            !s.image_path &&
+            s.type_code !== "picture" &&
+            s.type_code !== "image" &&
+            s.type_code !== 13,
+    );
+
     onMount(async () => {
         await loadProject();
         window.addEventListener("resize", updateScale);
@@ -226,7 +247,7 @@
     }
 
     function handleMouseMove(e) {
-        if (!draggingId) return;
+        if (!draggingId | !allowEdit) return;
 
         const dx = (e.clientX - startX) / scale;
         const dy = (e.clientY - startY) / scale;
@@ -473,38 +494,42 @@
         <div
             class="min-h-[3.5rem] h-auto bg-white border-b border-gray-200 flex flex-wrap items-center justify-between px-4 py-2 gap-2 shrink-0 z-10"
         >
-            <div class="flex items-center space-x-2">
-                <button
-                    class="p-2 hover:bg-gray-100 rounded disabled:opacity-50"
-                    disabled={historyIndex <= 0}
-                    on:click={undo}
-                    title="Undo (Ctrl+Z)"
-                >
-                    ↩️ Undo
-                </button>
-                <button
-                    class="p-2 hover:bg-gray-100 rounded disabled:opacity-50"
-                    disabled={historyIndex >= history.length - 1}
-                    on:click={redo}
-                    title="Redo (Ctrl+Y)"
-                >
-                    ↪️ Redo
-                </button>
-                <div class="w-px h-6 bg-gray-300 mx-2"></div>
-                <button
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium transition disabled:bg-blue-300"
-                    disabled={!isDirty || saving}
-                    on:click={handleSaveState}
-                >
-                    {saving ? "Saving..." : "Save State"}
-                </button>
-                <button
-                    class="text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded text-sm transition"
-                    on:click={handleReset}
-                >
-                    Reset to Original
-                </button>
-            </div>
+            {#if allowEdit}
+                <div class="flex items-center space-x-2">
+                    <button
+                        class="p-2 hover:bg-gray-100 rounded disabled:opacity-50"
+                        disabled={historyIndex <= 0}
+                        on:click={undo}
+                        title="Undo (Ctrl+Z)"
+                    >
+                        ↩️ Undo
+                    </button>
+                    <button
+                        class="p-2 hover:bg-gray-100 rounded disabled:opacity-50"
+                        disabled={historyIndex >= history.length - 1}
+                        on:click={redo}
+                        title="Redo (Ctrl+Y)"
+                    >
+                        ↪️ Redo
+                    </button>
+                    <div class="w-px h-6 bg-gray-300 mx-2"></div>
+                    <button
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-medium transition disabled:bg-blue-300"
+                        disabled={!isDirty || saving}
+                        on:click={handleSaveState}
+                    >
+                        {saving ? "Saving..." : "Save State"}
+                    </button>
+                    <button
+                        class="text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded text-sm transition"
+                        on:click={handleReset}
+                    >
+                        Reset to Original
+                    </button>
+                </div>
+            {:else}
+                <div class="w-2"></div>
+            {/if}
 
             <div class="flex items-center space-x-2 shrink-0">
                 <button
@@ -544,17 +569,17 @@
             {#if currentSlide}
                 <div
                     style={`
-            width: ${project.slide_width * scale}px;
-            height: ${project.slide_height * scale}px;
-          `}
+                        width: ${project.slide_width * scale}px;
+                        height: ${project.slide_height * scale}px;
+                    `}
                 >
                     <div
                         class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left"
                         style={`
-            width: ${project.slide_width}px;
-            height: ${project.slide_height}px;
-            transform: scale(${scale});
-          `}
+                            width: ${project.slide_width}px;
+                            height: ${project.slide_height}px;
+                            transform: scale(${scale});
+                        `}
                     >
                         {#each sortedShapes as shape (shape.shape_index)}
                             <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -562,12 +587,12 @@
                                 on:mousedown={(e) => handleMouseDown(e, shape)}
                                 class="absolute"
                                 style={`
-                left: 0; 
-                top: 0; 
-                width: 0; 
-                height: 0;
-                cursor: grab;
-              `}
+                                    left: 0; 
+                                    top: 0; 
+                                    width: 0; 
+                                    height: 0;
+                                    cursor: grab;
+                                `}
                             >
                                 <ShapeRenderer
                                     {shape}
@@ -594,30 +619,104 @@
                 <div class="text-gray-400 text-sm text-center mt-10">
                     No objects found
                 </div>
-            {/if}
-            <ul class="space-y-1">
-                {#each allShapes as shape}
-                    <li>
-                        <button
-                            class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group {selectedShapeId ===
-                            shape.shape_index
-                                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-300'
-                                : 'hover:bg-gray-50 text-gray-700'}"
-                            on:click={() =>
-                                (selectedShapeId = shape.shape_index)}
-                        >
-                            <span class="truncate" title={shape.name}
-                                >{shape.name}</span
+            {:else}
+                <!-- 이미지 객체 섹션 (항상 펼쳐짐) -->
+                {#if imageShapes.length > 0}
+                    <div class="mb-4">
+                        <div class="flex items-center gap-2 px-2 py-1 mb-2">
+                            <span class="text-sm font-bold text-orange-600"
+                                >🖼️ 이미지</span
                             >
-                            {#if shape.description}
-                                <span class="text-xs text-gray-400 ml-2"
-                                    >📝</span
-                                >
-                            {/if}
+                            <span
+                                class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full"
+                            >
+                                설명을 달아주세요!!
+                            </span>
+                        </div>
+                        <ul class="space-y-1">
+                            {#each imageShapes as shape}
+                                <li>
+                                    <button
+                                        class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group border-l-4 border-orange-400 {selectedShapeId ===
+                                        shape.shape_index
+                                            ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-300'
+                                            : 'hover:bg-orange-50 text-gray-700 bg-orange-50/50'}"
+                                        on:click={() =>
+                                            (selectedShapeId =
+                                                shape.shape_index)}
+                                    >
+                                        <span
+                                            class="truncate"
+                                            title={shape.name}
+                                            >{shape.name}</span
+                                        >
+                                        {#if shape.description}
+                                            <span
+                                                class="text-xs text-green-500 ml-2"
+                                                >✅</span
+                                            >
+                                        {:else}
+                                            <span
+                                                class="text-xs text-orange-400 ml-2"
+                                                >⚠️</span
+                                            >
+                                        {/if}
+                                    </button>
+                                </li>
+                            {/each}
+                        </ul>
+                    </div>
+                {/if}
+
+                <!-- 기타 객체 섹션 (접을 수 있음) -->
+                {#if otherShapes.length > 0}
+                    <div class="border-t border-gray-200 pt-2">
+                        <button
+                            class="w-full flex items-center justify-between px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded"
+                            on:click={() =>
+                                (otherShapesExpanded = !otherShapesExpanded)}
+                        >
+                            <span>기타 객체 ({otherShapes.length})</span>
+                            <span
+                                class="text-gray-400 transition-transform duration-200"
+                                class:rotate-180={otherShapesExpanded}
+                            >
+                                ▼
+                            </span>
                         </button>
-                    </li>
-                {/each}
-            </ul>
+
+                        {#if otherShapesExpanded}
+                            <ul class="space-y-1 mt-1">
+                                {#each otherShapes as shape}
+                                    <li>
+                                        <button
+                                            class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group {selectedShapeId ===
+                                            shape.shape_index
+                                                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-300'
+                                                : 'hover:bg-gray-50 text-gray-700'}"
+                                            on:click={() =>
+                                                (selectedShapeId =
+                                                    shape.shape_index)}
+                                        >
+                                            <span
+                                                class="truncate"
+                                                title={shape.name}
+                                                >{shape.name}</span
+                                            >
+                                            {#if shape.description}
+                                                <span
+                                                    class="text-xs text-gray-400 ml-2"
+                                                    >📝</span
+                                                >
+                                            {/if}
+                                        </button>
+                                    </li>
+                                {/each}
+                            </ul>
+                        {/if}
+                    </div>
+                {/if}
+            {/if}
         </div>
 
         <!-- Description Editor -->
