@@ -185,6 +185,9 @@ class ProjectSummary(BaseModel):
     last_modified_by: str = ""
     revision_number: str = ""
 
+    class Config:
+        extra = "allow"
+
 
 class PositionUpdate(BaseModel):
     slide_index: int
@@ -217,7 +220,7 @@ def list_projects():
     summary_list = []
     for p in projects:
         p_dict = dict(p)
-        p_dict["name"] = p_dict.pop("original_filename", "Unknown")
+        p_dict["name"] = p_dict.get("original_filename", "Unknown")
         summary_list.append(ProjectSummary(**p_dict))
     return summary_list
 
