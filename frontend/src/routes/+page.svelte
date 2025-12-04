@@ -63,6 +63,8 @@
       loadingDetails = false;
     }
   }
+
+  $: console.log("selectedProjectDetails", selectedProjectDetails)
 </script>
 
 <div class="h-screen flex flex-col bg-gray-100 overflow-hidden">

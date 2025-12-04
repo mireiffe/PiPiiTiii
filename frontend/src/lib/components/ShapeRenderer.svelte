@@ -3,6 +3,7 @@
     // scale prop removed, we rely on CSS transform on parent
     export let projectId = "";
     export let highlight = false;
+    export let textScaleFactor = 0.6;
 
     // Helper to convert PPT color to CSS
     function getCssColor(rgb) {
@@ -15,7 +16,7 @@
         if (!style) return "";
         const color = getCssColor(style.color_rgb || [0, 0, 0]);
         // PPT font size is in points (pt). 1pt = 1.333px (96/72)
-        const sizePt = style.font_size || 18;
+        const sizePt = style.font_size || 12;
         const sizePx = sizePt * (96 / 72);
         const bold = style.bold ? "bold" : "normal";
         const italic = style.italic ? "italic" : "normal";
@@ -200,7 +201,7 @@
     z-index: ${shape.z_order_position || 1};
     overflow: hidden;
     ${highlight ? "box-shadow: 0 0 0 4px #ef4444; z-index: 9999;" : ""} 
-  `;
+    `;
 
     // Cloud용 style (clip-path 제외)
     $: cloudStyle = `
@@ -238,12 +239,12 @@
         >
             <path
                 d="M25,50 
-                   a15,15 0 0,1 0,-25 
-                   a18,18 0 0,1 30,-10 
-                   a15,15 0 0,1 25,5 
-                   a12,12 0 0,1 0,20 
-                   a10,10 0 0,1 -10,10 
-                   z"
+                    a15,15 0 0,1 0,-25 
+                    a18,18 0 0,1 30,-10 
+                    a15,15 0 0,1 25,5 
+                    a12,12 0 0,1 0,20 
+                    a10,10 0 0,1 -10,10 
+                    z"
                 fill={getCssColor(fillColor)}
                 stroke={shape.line?.visible !== false
                     ? getCssColor(lineColor)
@@ -256,9 +257,19 @@
         {#if shape.text && !shape.table}
             <div
                 class="absolute inset-0 flex items-center justify-center p-2 whitespace-pre-wrap break-words pointer-events-none text-center"
-                style={getTextStyle(shape.text_style)}
             >
-                {shape.text}
+                <div
+                    class="whitespace-pre-wrap break-words"
+                    style={`
+                ${getTextStyle(shape.text_style)}
+                transform: scale(${textScaleFactor});
+                transform-origin: top left;
+                width: ${100 / textScaleFactor}%;
+                height: ${100 / textScaleFactor}%;
+            `}
+                >
+                    {shape.text}
+                </div>
             </div>
         {/if}
 
@@ -366,11 +377,19 @@
         {/if}
 
         {#if shape.text && !shape.table}
-            <div
-                class="w-full h-full p-1 whitespace-pre-wrap break-words pointer-events-none"
-                style={getTextStyle(shape.text_style)}
-            >
-                {shape.text}
+            <div class="w-full h-full p-1 overflow-hidden pointer-events-none">
+                <div
+                    class="whitespace-pre-wrap break-words"
+                    style={`
+                        ${getTextStyle(shape.text_style)}
+                        transform: scale(${textScaleFactor});
+                        transform-origin: top left;
+                        width: ${100 / textScaleFactor}%;
+                        height: ${100 / textScaleFactor}%;
+                    `}
+                >
+                    {shape.text}
+                </div>
             </div>
         {/if}
 
@@ -388,11 +407,21 @@
                         class="overflow-hidden"
                         style={`
                                 ${getCellFillStyle(cell)}
-                                ${getTextStyle(cell.text_style)}
                                 ${getCellBorderStyle(cell.borders)}
                             `}
                     >
-                        {cell.text}
+                        <div
+                            class="whitespace-pre-wrap break-words"
+                            style={`
+                        ${getTextStyle(cell.text_style)}
+                        transform: scale(${textScaleFactor});
+                        transform-origin: top left;
+                        width: ${100 / textScaleFactor}%;
+                        height: ${100 / textScaleFactor}%;
+                    `}
+                        >
+                            {cell.text}
+                        </div>
                     </div>
                 {/each}
             </div>

@@ -126,7 +126,7 @@ def parse_single_slide(ppt_path, slide_index, out_dir, preserved_data=None):
     try:
         # Untitled=True로 열어서 사본으로 작업 (Protected View 등 회피 시도)
         presentation = powerpoint.Presentations.Open(
-            ppt_path, ReadOnly=False, Untitled=True, WithWindow=True
+            ppt_path, ReadOnly=False, Untitled=False, WithWindow=True
         )
 
         try:
@@ -159,9 +159,9 @@ def parse_single_slide(ppt_path, slide_index, out_dir, preserved_data=None):
 
         print(f"--- Slide {slide_index} (Design: {design_name}) ---")
 
-        for shape_index in range(1, shapes_count + 1):
+        for shape_index, shape in enumerate(slide.Shapes):
             try:
-                shape = slide.Shapes.Item(shape_index)
+                shape_index += 1
                 shape_info_data = parse_shape(
                     shape,
                     slide_index=slide_index,
@@ -293,7 +293,7 @@ def parse_presentation(
                 progress_callback(percent, f"Parsing Slide {i + 1}/{total_slides}")
 
             try:
-                slide = presentation.Slides.Item(slide_index)
+                slide = presentation.Slides(slide_index)
                 shapes_count = slide.Shapes.Count
 
                 try:
@@ -317,8 +317,8 @@ def parse_presentation(
 
                 print(f"--- Slide {slide_index} (Design: {design_name}) ---")
 
-                for shape_index in range(1, shapes_count + 1):
-                    shape = slide.Shapes.Item(shape_index)
+                for shape_index, shape in enumerate(slide.Shapes):
+                    shape_index += 1
                     shape_info = parse_shape(
                         shape,
                         slide_index=slide_index,
@@ -346,7 +346,7 @@ def parse_presentation(
         if progress_callback:
             progress_callback(95, "Saving JSON...")
 
-        base_name = os.path.splitext(os.path.basename(ppt_path))[0]
+        base_name = os.path.splitext(os.path.basename(out_dir))[0]
         json_path = os.path.join(out_dir, f"{base_name}.json")
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2, default=str)

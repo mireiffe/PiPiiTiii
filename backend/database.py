@@ -84,3 +84,15 @@ class Database:
         )
         conn.commit()
         conn.close()
+
+    def delete_project(self, project_id):
+        """
+        projects 테이블에서 주어진 project_id를 가진 행을 삭제한다.
+        필요한 경우, 관련된 다른 테이블도 여기에서 같이 삭제하도록 확장하세요.
+        """
+        conn = self.get_connection()
+        with conn:
+            conn.execute(
+                "DELETE FROM projects WHERE id = ?",
+                (str(project_id),),
+            )

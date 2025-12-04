@@ -2,12 +2,10 @@ import os
 import sys
 import json
 import time
-import urllib.request
-import urllib.parse
-import urllib.error
-import mimetypes
-import uuid
 import argparse
+
+import requests
+
 
 # Configuration
 API_BASE_URL = "http://localhost:8000/api"
@@ -17,52 +15,57 @@ def upload_file(file_path):
     """Uploads a single file to the backend and returns the project ID."""
     url = f"{API_BASE_URL}/upload"
     filename = os.path.basename(file_path)
-    boundary = uuid.uuid4().hex
 
-    # Prepare the body
-    data = []
-    data.append(f"--{boundary}")
-    data.append(f'Content-Disposition: form-data; name="file"; filename="{filename}"')
-    data.append(
-        "Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    )
-    data.append("")
+    # requests가 multipart/form-data를 알아서 만들어주므로 직접 boundary 만들 필요 없음
+    files = {
+        "file": (
+            filename,
+            open(file_path, "rb"),
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    }
 
-    with open(file_path, "rb") as f:
-        file_content = f.read()
-
-    body = (
-        "\r\n".join(data).encode("utf-8")
-        + b"\r\n"
-        + file_content
-        + b"\r\n"
-        + f"--{boundary}--".encode("utf-8")
-        + b"\r\n"
-    )
-
-    req = urllib.request.Request(url, data=body)
-    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    proxies = {
+        "http": None,
+        "https": None,
+    }
 
     try:
-        with urllib.request.urlopen(req) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            return result.get("id")
-    except urllib.error.HTTPError as e:
-        print(f"Error uploading {filename}: {e.code} {e.reason}")
-        print(e.read().decode("utf-8"))
+        # 필요하면 timeout 값 조정 가능
+        resp = requests.post(url, files=files, timeout=10, proxies=proxies)
+        resp.raise_for_status()
+        result = resp.json()
+        return result.get("id")
+    except requests.exceptions.HTTPError as e:
+        print(f"Error uploading {filename}: {resp.status_code} {resp.reason}")
+        try:
+            print(resp.text)
+        except Exception:
+            pass
         return None
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(f"Error uploading {filename}: {str(e)}")
         return None
+    finally:
+        # 파일 핸들 닫기
+        try:
+            files["file"][1].close()
+        except Exception:
+            pass
 
 
 def check_status(project_id):
     """Checks the processing status of a project."""
     url = f"{API_BASE_URL}/project/{project_id}/status"
+    proxies = {
+        "http": None,
+        "https": None,
+    }
     try:
-        with urllib.request.urlopen(url) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except Exception as e:
+        resp = requests.get(url, timeout=10, proxies=proxies)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.RequestException as e:
         print(f"Error checking status for {project_id}: {str(e)}")
         return None
 

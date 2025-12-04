@@ -12,6 +12,9 @@ wheels/
 results
 samples
 uploads
+test
+
+scripts/test*
 
 debug
 debug_log.txt
