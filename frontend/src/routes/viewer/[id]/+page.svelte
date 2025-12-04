@@ -247,7 +247,7 @@
     }
 
     function handleMouseMove(e) {
-        if (!draggingId | !allowEdit) return;
+        if (!draggingId || !allowEdit) return;
 
         const dx = (e.clientX - startX) / scale;
         const dy = (e.clientY - startY) / scale;
