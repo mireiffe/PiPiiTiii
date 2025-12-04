@@ -13,6 +13,15 @@
   let selectedProjectDetails = null;
   let loadingDetails = false;
 
+  let thumbnailWidth = 0;
+
+  // 선택된 프로젝트의 기본 슬라이드 크기
+  $: baseSlideWidth = selectedProjectDetails?.slide_width || 960;
+  $: baseSlideHeight = selectedProjectDetails?.slide_height || 540;
+
+  // 썸네일 스케일
+  $: thumbnailScale = thumbnailWidth ? thumbnailWidth / baseSlideWidth : 0;
+  
   $: filteredProjects = projects
     .filter((p) => {
       const term = searchTerm.toLowerCase();
@@ -64,7 +73,7 @@
     }
   }
 
-  $: console.log("selectedProjectDetails", selectedProjectDetails)
+  $: console.log("selectedProjectDetails", selectedProjectDetails);
 </script>
 
 <div class="h-screen flex flex-col bg-gray-100 overflow-hidden">
@@ -84,7 +93,7 @@
   <div class="flex-1 flex overflow-hidden">
     <!-- Left Panel: Project List -->
     <div
-      class="w-1/3 min-w-[350px] max-w-[500px] flex flex-col border-r border-gray-200 bg-white"
+      class="w-2/3 min-w-[120vh] max-w-[200vh] flex flex-col border-r border-gray-200 bg-white"
     >
       <!-- Search & Sort -->
       <div class="p-4 border-b border-gray-100 space-y-3">
@@ -211,26 +220,23 @@
 
         <!-- Slides Grid -->
         <div class="flex-1 overflow-y-auto p-8">
-          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div class="grid grid-cols-1 md:grid-cols-1 xl:grid-cols-1 gap-6">
             {#each selectedProjectDetails.slides as slide}
               <div class="group">
                 <div
-                  class="aspect-video bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative group-hover:shadow-md transition"
+                  class="aspect-video bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative group-hover:shadow-md"
+                  bind:clientWidth={thumbnailWidth}
                 >
                   <!-- Thumbnail Renderer -->
                   <div
                     class="absolute top-0 left-0 origin-top-left pointer-events-none"
-                    style="transform: scale({300 /
-                      (selectedProjectDetails.slide_width ||
-                        960)}); width: {selectedProjectDetails.slide_width}px; height: {selectedProjectDetails.slide_height}px;"
+                    style={`width: ${baseSlideWidth}px;
+                  height: ${baseSlideHeight}px;
+                  transform: scale(${thumbnailScale});`}
                   >
                     {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
                       <div class="absolute top-0 left-0">
-                        <ShapeRenderer
-                          {shape}
-                          scale={1}
-                          projectId={selectedProjectId}
-                        />
+                        <ShapeRenderer {shape} projectId={selectedProjectId} />
                       </div>
                     {/each}
                   </div>
@@ -242,6 +248,7 @@
                   >
                   </a>
                 </div>
+
                 <p class="text-center text-sm text-gray-500 mt-2 font-medium">
                   Slide {slide.slide_index}
                 </p>
