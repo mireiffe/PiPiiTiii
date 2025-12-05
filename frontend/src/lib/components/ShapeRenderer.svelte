@@ -370,7 +370,7 @@
         <!-- Image -->
         {#if shape.image_file}
             <img
-                src={`${IMAGE_BASE_URL}/results/${projectId}/${shape.image_file}`}
+                src={`${IMAGE_BASE_URL}/api/results/${projectId}/${shape.image_file}`}
                 alt={shape.name}
                 class="w-full h-full object-contain pointer-events-none"
             />

@@ -25,6 +25,7 @@ app = FastAPI()
 DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "backend",
+    "data",
     "projects.db",
 )
 db = Database(DB_PATH)
@@ -53,7 +54,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
 
 # Mount static files for images - serve from project-specific directories
-app.mount("/results", StaticFiles(directory=RESULT_DIR), name="results")
+app.mount("/api/results", StaticFiles(directory=RESULT_DIR), name="results")
 
 # Global progress store: { project_id: { "percent": int, "message": str, "status": "processing"|"done"|"error" } }
 progress_store: Dict[str, Dict[str, Any]] = {}
