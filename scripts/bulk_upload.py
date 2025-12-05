@@ -5,59 +5,59 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 import json
 import time
 import argparse
-import urllib.request
-import urllib.error
-import urllib.parse
 import uuid
+
+import requests
+from requests.exceptions import HTTPError, RequestException
 
 from backend.ppt_parser.slides import get_presentation_metadata
 import pythoncom
 
 # Configuration
 API_BASE_URL = "http://localhost:8000/api"
+PROXIES = {
+        "http": None,
+        "https": None,
+    }
 
 
 def upload_file(file_path):
     """Uploads a single file to the backend and returns the project ID."""
     url = f"{API_BASE_URL}/upload"
-    filename = os.path.basename(file_path)
+    filename    = os.path.basename(file_path)
+    parent      = os.path.basename(os.path.dirname(file_path))
+    grandparent = os.path.basename(os.path.dirname(os.path.dirname(file_path)))
 
-    boundary = "----WebKitFormBoundary" + uuid.uuid4().hex
-    data = []
-    data.append(f"--{boundary}")
-    data.append(f'Content-Disposition: form-data; name="file"; filename="{filename}"')
-    data.append(
-        "Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    )
-    data.append("")
+    # 필요에 맞게 이어 붙이기
+    genealogy = os.path.join(grandparent, parent, filename)
+
+    files = {
+        "file": (
+            filename,
+            genealogy,
+            open(file_path, "rb"),
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    }
 
     try:
-        with open(file_path, "rb") as f:
-            file_content = f.read()
-
-        body = b""
-        for item in data:
-            body += item.encode("utf-8") + b"\r\n"
-
-        body += file_content + b"\r\n"
-        body += f"--{boundary}--\r\n".encode("utf-8")
-
-        req = urllib.request.Request(url, data=body)
-        req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
-
-        with urllib.request.urlopen(req, timeout=60) as response:
-            result = json.loads(response.read().decode("utf-8"))
+        with requests.post(url, files=files, timeout=60, proxies=PROXIES) as response:
+            response.raise_for_status()
+            result = response.json()
             return result.get("id")
 
-    except urllib.error.HTTPError as e:
-        print(f"Error uploading {filename}: {e.code} {e.reason}")
+    except HTTPError as e:
+        print(f"Error uploading {filename}: {e.response.status_code} {e.response.reason}")
         try:
-            print(e.read().decode("utf-8"))
+            print(e.response.text)
         except Exception:
             pass
         return None
-    except Exception as e:
+    except RequestException as e:
         print(f"Error uploading {filename}: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error uploading {filename}: {str(e)}")
         return None
 
 
@@ -65,10 +65,24 @@ def check_status(project_id):
     """Checks the processing status of a project."""
     url = f"{API_BASE_URL}/project/{project_id}/status"
     try:
-        with urllib.request.urlopen(url, timeout=10) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except Exception as e:
+        response = requests.get(url, timeout=10, proxies=PROXIES)
+        response.raise_for_status()
+        return response.json()
+    except HTTPError as e:
+        print(
+            f"Error checking status for {project_id}: "
+            f"{e.response.status_code} {e.response.reason}"
+        )
+        try:
+            print(e.response.text)
+        except Exception:
+            pass
+        return None
+    except RequestException as e:
         print(f"Error checking status for {project_id}: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error checking status for {project_id}: {str(e)}")
         return None
 
 
@@ -155,15 +169,14 @@ def process_directory(directory_path, dry_run=True, max_upload=None):
 
                         check_url = f"{API_BASE_URL}/project/{project_id}"
                         try:
-                            with urllib.request.urlopen(check_url, timeout=5) as resp:
-                                if resp.status == 200:
-                                    status_msg = f"Duplicate (ID: {project_id})"
-                        except urllib.error.HTTPError as e:
-                            if e.code == 404:
+                            resp = requests.get(check_url, timeout=5, proxies=PROXIES)
+                            if resp.status_code == 200:
+                                status_msg = f"Duplicate (ID: {project_id})"
+                            elif resp.status_code == 404:
                                 status_msg = "New"
                             else:
-                                status_msg = f"Error checking ({e.code})"
-                        except Exception as e:
+                                status_msg = f"Error checking ({resp.status_code})"
+                        except RequestException as e:
                             status_msg = f"Check failed: {e}"
                     else:
                         status_msg = "Metadata extraction failed"
@@ -211,10 +224,10 @@ def process_directory(directory_path, dry_run=True, max_upload=None):
                 print("\n  -> Status check failed.")
                 break
 
-            if status["status"] == "done":
+            if status.get("status") == "done":
                 print(" Done!")
                 break
-            elif status["status"] == "error":
+            elif status.get("status") == "error":
                 print(f"\n  -> Processing failed: {status.get('message')}")
                 break
 

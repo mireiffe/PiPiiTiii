@@ -20,4 +20,4 @@ debug
 debug_log.txt
 CLAUDE.md
 
-projects.db
+backend/data

@@ -8,7 +8,7 @@ from database import Database
 from attributes.manager import AttributeManager
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "backend", "projects.db")
+DB_PATH = os.path.join(BASE_DIR, "backend", "data", "projects.db")
 ATTR_DIR = os.path.join(BASE_DIR, "backend", "attributes", "definitions")
 
 

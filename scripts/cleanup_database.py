@@ -11,7 +11,7 @@ from database import Database
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULT_DIR = os.path.join(BASE_DIR, "results")
-DB_PATH = os.path.join(BASE_DIR, "backend", "projects.db")
+DB_PATH = os.path.join(BASE_DIR, "backend", "data", "projects.db")
 
 
 def cleanup_db(delete=False):
