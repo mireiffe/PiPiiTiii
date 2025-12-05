@@ -1,76 +1,56 @@
 # PiPiiTiii
 
-PiPiiTiii is a PowerPoint (PPT) Rebuilder and Parser application. It allows users to upload PowerPoint files, parse their content (slides, shapes, images), and view or reconstruct them in a web-based interface.
+PiPiiTiii is a presentation rebuilder and parser that automates Microsoft PowerPoint through Python's `win32com` library. It opens `.pptx` files, extracts slide contents (shapes, images, metadata), and surfaces them in a web interface for inspection and reconstruction.
 
 ## Features
-
--   **PPT Parsing**: Extracts slides, shapes, and metadata from `.pptx` files.
--   **Web Viewer**: Interactive dashboard to view and manage parsed projects.
--   **Reconstruction**: (In progress) Capability to rebuild or modify presentations.
+- **PowerPoint-native parsing**: Uses `pywin32` (`win32com`) to drive Microsoft PowerPoint for high-fidelity reads of presentations.
+- **Project dashboard**: Upload PowerPoint files, monitor parsing progress, and browse slide data from the backend API.
+- **Web viewer & reconstruction**: SvelteKit UI for visualizing parsed slides and iterating on rebuilt presentations.
 
 ## Tech Stack
+- **Backend**: Python, FastAPI, PowerPoint COM automation
+- **Frontend**: SvelteKit, TailwindCSS, TypeScript
 
--   **Backend**: Python, FastAPI
--   **Frontend**: SvelteKit, TailwindCSS, TypeScript
+## Prerequisites
+- Windows environment with Microsoft PowerPoint installed (required for COM automation).
+- Python 3.10+ with [`uv`](https://docs.astral.sh/uv/) available in your PATH.
+- Node.js and npm for the frontend.
 
-## Installation & Usage
-
-### Prerequisites
-
--   Python 3.8+
--   Node.js & npm
-
-### Quick Start
-
-You can use the provided helper scripts to start both backend and frontend:
-
-**Windows (PowerShell):**
-```powershell
-./start_dev.ps1
-```
-
-**Linux/macOS:**
+## Setup & Usage
+### 1) Backend environment
+Install Python dependencies with `uv` (this creates or updates `.venv` automatically):
 ```bash
-./start_dev.sh
+uv sync
 ```
 
-### Manual Setup
-
-**Backend:**
-1.  Navigate to the `backend` directory.
-2.  Install dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-3.  Run the server:
-    ```bash
-    python main.py
-    ```
-
-**Frontend:**
-1.  Navigate to the `frontend` directory.
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  Run the development server:
-    ```bash
-    npm run dev
-    ```
-
-```powershell
-npm list
-frontend@0.0.1 PiPiiTiii\frontend
-├── @sveltejs/adapter-auto@7.0.0
-├── @sveltejs/kit@2.49.0
-├── @sveltejs/vite-plugin-svelte@6.2.1
-├── autoprefixer@10.4.22
-├── detect-libc@2.1.2 extraneous
-├── lightningcss-win32-x64-msvc@1.30.2 extraneous
-├── postcss@8.5.6
-├── svelte-check@4.3.4
-├── svelte@5.45.2
-├── tailwindcss@3.4.17
-├── typescript@5.9.3
-└── vite@7.2.4
+### 2) Run the backend API
+Start the FastAPI server (default port `8000`). Ensure PowerPoint is installed and available on the host:
+```bash
+uv run python backend/main.py
 ```
+To change the port, set `BACKEND_PORT` (e.g., `BACKEND_PORT=9000 uv run python backend/main.py`).
+
+### 3) Frontend
+Install and run the SvelteKit app:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+If you customized the backend port, set `VITE_API_PORT` to match when starting the frontend (e.g., `VITE_API_PORT=9000 npm run dev`).
+
+### 4) Combined dev helper
+The repo includes helper scripts that start both services after dependencies are installed with `uv sync`:
+- **Windows (PowerShell):**
+  ```powershell
+  ./start_dev.ps1
+  ```
+- **Linux/macOS:**
+  ```bash
+  ./start_dev.sh
+  ```
+
+## Usage
+1. Open the frontend (default `http://localhost:5173`).
+2. Upload a `.pptx` file. The backend drives Microsoft PowerPoint to parse slides and stores results in `results/`.
+3. Monitor progress, review parsed slide data, and iterate on reconstructions through the web UI.
