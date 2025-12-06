@@ -54,7 +54,11 @@ class AttributeManager:
         """Ensure DB has columns for all active attributes."""
         # 1. Update attributes table
         active_attrs = [
-            {"key": attr.key, "display_name": attr.display_name}
+            {
+                "key": attr.key,
+                "display_name": attr.display_name,
+                "attr_type": attr.attr_type.asdict(),
+            }
             for attr in self.attributes.values()
         ]
         self.db.sync_active_attributes(active_attrs)
@@ -86,8 +90,12 @@ class AttributeManager:
                 results[key] = None
         return results
 
-    def get_active_attributes(self) -> List[Dict[str, str]]:
+    def get_active_attributes(self) -> List[Dict[str, Any]]:
         return [
-            {"key": attr.key, "display_name": attr.display_name}
+            {
+                "key": attr.key,
+                "display_name": attr.display_name,
+                "attr_type": attr.attr_type.asdict(),
+            }
             for attr in self.attributes.values()
         ]

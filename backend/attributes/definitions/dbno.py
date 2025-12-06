@@ -2,6 +2,7 @@ import os
 import json
 from typing import Any, Dict
 from attributes.base import BaseAttribute
+from attributes.types import FilteringAttributeType
 
 
 class SourceAttribute(BaseAttribute):
@@ -14,6 +15,10 @@ class SourceAttribute(BaseAttribute):
     @property
     def display_name(self) -> str:
         return "DB No."
+
+    @property
+    def attr_type(self) -> FilteringAttributeType:
+        return FilteringAttributeType(variant="multi_select")
 
     def extract(self, project_data: Dict[str, Any]) -> Any:
         filename = project_data.get("original_filename", "")

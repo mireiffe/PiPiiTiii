@@ -12,6 +12,10 @@
   let filters = [];
   let selectedFilters = {};
 
+  const getVariant = (filter) => filter?.attr_type?.variant || "multi_select";
+  const normalizeBool = (value) =>
+    value === true || value === "true" || value === 1 || value === "1";
+
   // Selection state
   let selectedProjectId = null;
   let selectedProjectDetails = null;
@@ -40,10 +44,40 @@
 
       // Check dynamic filters
       for (const filter of filters) {
+        const variant = getVariant(filter);
         const selectedValue = selectedFilters[filter.key];
-        if (selectedValue && selectedValue !== "") {
-          const projectValue = p[filter.key];
-          // Handle null/undefined project values
+        const projectValue = p[filter.key];
+
+        if (variant === "multi_select") {
+          if (Array.isArray(selectedValue) && selectedValue.length > 0) {
+            if (!selectedValue.includes(projectValue)) {
+              return false;
+            }
+          }
+        } else if (variant === "range") {
+          const min = selectedValue?.min;
+          const max = selectedValue?.max;
+          const numericValue = Number(projectValue);
+
+          if (min !== "" && min !== undefined && min !== null) {
+            if (Number.isNaN(numericValue) || numericValue < Number(min)) {
+              return false;
+            }
+          }
+
+          if (max !== "" && max !== undefined && max !== null) {
+            if (Number.isNaN(numericValue) || numericValue > Number(max)) {
+              return false;
+            }
+          }
+        } else if (variant === "toggle") {
+          if (selectedValue === "on" && !normalizeBool(projectValue)) {
+            return false;
+          }
+          if (selectedValue === "off" && normalizeBool(projectValue)) {
+            return false;
+          }
+        } else if (selectedValue && selectedValue !== "") {
           if (projectValue != selectedValue) {
             return false;
           }
@@ -74,11 +108,26 @@
         projects = await projectsRes.json();
       }
       if (filtersRes.ok) {
-        filters = await filtersRes.json();
-        // Initialize selectedFilters
-        filters.forEach((f) => {
-          selectedFilters[f.key] = "";
-        });
+        const fetchedFilters = await filtersRes.json();
+        filters = fetchedFilters;
+        selectedFilters = fetchedFilters.reduce((acc, f) => {
+          const variant = getVariant(f);
+
+          if (variant === "multi_select") {
+            acc[f.key] = [];
+          } else if (variant === "range") {
+            acc[f.key] = {
+              min: f.range?.min ?? "",
+              max: f.range?.max ?? "",
+            };
+          } else if (variant === "toggle") {
+            acc[f.key] = "";
+          } else {
+            acc[f.key] = "";
+          }
+
+          return acc;
+        }, {});
       }
     } catch (e) {
       console.error(e);
@@ -134,28 +183,76 @@
           bind:value={searchTerm}
           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <select
             bind:value={sortBy}
-            class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[180px]"
           >
             <option value="date">Date (Newest)</option>
             <option value="name">Name (A-Z)</option>
             <option value="author">Author (A-Z)</option>
           </select>
-
-          {#each filters as filter}
-            <select
-              bind:value={selectedFilters[filter.key]}
-              class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="">{filter.display_name} (All)</option>
-              {#each filter.options as option}
-                <option value={option}>{option}</option>
-              {/each}
-            </select>
-          {/each}
         </div>
+
+        {#if filters.length > 0}
+          <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {#each filters as filter (filter.key)}
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center justify-between text-xs text-gray-500">
+                  <span class="font-semibold text-gray-600">{filter.display_name}</span>
+                  <span class="uppercase text-[10px] tracking-wide">{getVariant(filter).replace("_", " ")}</span>
+                </div>
+
+                {#if getVariant(filter) === "multi_select"}
+                  <select
+                    multiple
+                    bind:value={selectedFilters[filter.key]}
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white h-24"
+                  >
+                    {#if (filter.options || []).length === 0}
+                      <option disabled>(No options)</option>
+                    {:else}
+                      {#each filter.options || [] as option}
+                        <option value={option}>{option}</option>
+                      {/each}
+                    {/if}
+                  </select>
+                {:else if getVariant(filter) === "range"}
+                  <div class="flex gap-2">
+                    <input
+                      type="number"
+                      bind:value={selectedFilters[filter.key].min}
+                      placeholder={filter.range?.min ?? "Min"}
+                      class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="number"
+                      bind:value={selectedFilters[filter.key].max}
+                      placeholder={filter.range?.max ?? "Max"}
+                      class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                {:else if getVariant(filter) === "toggle"}
+                  <select
+                    bind:value={selectedFilters[filter.key]}
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">All</option>
+                    <option value="on">On</option>
+                    <option value="off">Off</option>
+                  </select>
+                {:else}
+                  <input
+                    type="text"
+                    bind:value={selectedFilters[filter.key]}
+                    placeholder={`Filter by ${filter.display_name}`}
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
 
       <!-- List -->
