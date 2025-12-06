@@ -255,3 +255,22 @@ class Database:
             return []
         finally:
             conn.close()
+
+    def get_numeric_range(self, column: str) -> Optional[Dict[str, float]]:
+        """Return min/max numeric values for a column if available."""
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                f"SELECT MIN(CAST({column} AS REAL)), MAX(CAST({column} AS REAL)) "
+                f"FROM projects WHERE {column} IS NOT NULL"
+            )
+            min_val, max_val = cursor.fetchone()
+            if min_val is None or max_val is None:
+                return None
+            return {"min": float(min_val), "max": float(max_val)}
+        except Exception:
+            return None
+        finally:
+            conn.close()
