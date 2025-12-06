@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from typing import List, Dict, Optional, Any
 
@@ -156,18 +157,20 @@ class Database:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attributes (
                 key TEXT PRIMARY KEY,
-                display_name TEXT
+                display_name TEXT,
+                attr_type TEXT
             )
         """)
+        self._ensure_attribute_type_column(cursor)
         cursor.execute("SELECT key FROM attributes")
         rows = cursor.fetchall()
         conn.close()
         return [row[0] for row in rows]
 
-    def sync_active_attributes(self, attributes: List[Dict[str, str]]):
+    def sync_active_attributes(self, attributes: List[Dict[str, Any]]):
         """
         Sync the attributes table with the provided list of active attributes.
-        attributes: List of dicts with 'key' and 'display_name'
+        attributes: List of dicts with 'key', 'display_name', and 'attr_type'
         """
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -176,9 +179,11 @@ class Database:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attributes (
                 key TEXT PRIMARY KEY,
-                display_name TEXT
+                display_name TEXT,
+                attr_type TEXT
             )
         """)
+        self._ensure_attribute_type_column(cursor)
 
         # Get current keys
         cursor.execute("SELECT key FROM attributes")
@@ -188,10 +193,16 @@ class Database:
 
         # Insert new ones
         for attr in attributes:
+            attr_type_json = json.dumps(attr.get("attr_type", {}))
             if attr["key"] not in current_keys:
                 cursor.execute(
-                    "INSERT INTO attributes (key, display_name) VALUES (?, ?)",
-                    (attr["key"], attr["display_name"]),
+                    "INSERT INTO attributes (key, display_name, attr_type) VALUES (?, ?, ?)",
+                    (attr["key"], attr["display_name"], attr_type_json),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE attributes SET display_name = ?, attr_type = ? WHERE key = ?",
+                    (attr["display_name"], attr_type_json, attr["key"]),
                 )
 
         # Remove old ones
@@ -201,6 +212,13 @@ class Database:
 
         conn.commit()
         conn.close()
+
+    @staticmethod
+    def _ensure_attribute_type_column(cursor):
+        cursor.execute("PRAGMA table_info(attributes)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "attr_type" not in columns:
+            cursor.execute("ALTER TABLE attributes ADD COLUMN attr_type TEXT")
 
     def update_project_attributes(self, project_id: str, attributes: Dict[str, Any]):
         """Update dynamic attribute columns for a project."""

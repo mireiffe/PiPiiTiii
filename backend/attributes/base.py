@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
+from attributes.types import AttributeType
+
 
 class BaseAttribute(ABC):
     """
@@ -24,6 +26,15 @@ class BaseAttribute(ABC):
         """
         Human-readable name for the attribute.
         This will be used in the UI.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def attr_type(self) -> AttributeType:
+        """
+        Additional metadata describing how this attribute should be handled.
+        This is primarily used to drive UI behaviours such as filtering styles.
         """
         pass
 
