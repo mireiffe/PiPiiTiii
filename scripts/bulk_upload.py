@@ -1,33 +1,25 @@
 import os
 import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-import json
+import sqlite3
 import time
 import argparse
-import uuid
 
 import requests
 from requests.exceptions import HTTPError, RequestException
 
-from backend.ppt_parser.slides import get_presentation_metadata
-import pythoncom
-from cleanup_projects import RESULT_DIR, validate_result_folder
-
-APP_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "pipiitiii.local")
-
 # Configuration
 API_BASE_URL = "http://localhost:8000/api"
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "backend", "data", "projects.db")
 PROXIES = {
-        "http": None,
-        "https": None,
-    }
+    "http": None,
+    "https": None,
+}
 
 
 def upload_file(file_path):
-    """Uploads a single file to the backend and returns the project ID."""
+    """Upload a single file to the backend and return the project ID."""
     url = f"{API_BASE_URL}/upload"
-    filename    = os.path.basename(file_path)
+    filename = os.path.basename(file_path)
 
     files = {
         "file": (
@@ -59,17 +51,14 @@ def upload_file(file_path):
 
 
 def check_status(project_id):
-    """Checks the processing status of a project."""
+    """Check the processing status of a project."""
     url = f"{API_BASE_URL}/project/{project_id}/status"
     try:
         response = requests.get(url, timeout=10, proxies=PROXIES)
         response.raise_for_status()
         return response.json()
     except HTTPError as e:
-        print(
-            f"Error checking status for {project_id}: "
-            f"{e.response.status_code} {e.response.reason}"
-        )
+        print(f"Error checking status for {project_id}: {e.response.status_code} {e.response.reason}")
         try:
             print(e.response.text)
         except Exception:
@@ -83,37 +72,31 @@ def check_status(project_id):
         return None
 
 
-def check_duplicate(project_id: str, use_api: bool = False) -> str:
-    """Check if the project already exists via API or filesystem."""
+def check_duplicate_by_db(filename: str) -> tuple[bool, str | None]:
+    """Check if a project with the same original_filename exists in DB."""
+    if not os.path.exists(DB_PATH):
+        return False, None
 
-    if use_api:
-        check_url = f"{API_BASE_URL}/project/{project_id}"
-        try:
-            resp = requests.get(check_url, timeout=5, proxies=PROXIES)
-            if resp.status_code == 200:
-                return f"Duplicate (ID: {project_id})"
-            if resp.status_code == 404:
-                return "New"
-            return f"Error checking ({resp.status_code})"
-        except RequestException as e:
-            return f"Check failed: {e}"
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM projects WHERE original_filename = ?",
+            (filename,)
+        )
+        row = cursor.fetchone()
+        conn.close()
 
-    folder_path = os.path.join(RESULT_DIR, project_id)
-    if not os.path.isdir(folder_path):
-        return "New"
-
-    ok, reason = validate_result_folder(project_id, folder_path)
-    if ok:
-        return f"Duplicate (ID: {project_id})"
-
-    return f"Existing but invalid: {reason}"
+        if row:
+            return True, row[0]
+        return False, None
+    except Exception as e:
+        print(f"DB check error: {e}")
+        return False, None
 
 
 def find_ppt_files_recursive(directory_path):
-    """
-    주어진 디렉토리 하위(서브디렉토리 포함)를 모두 돌면서
-    .ppt, .pptx 파일의 전체 경로 리스트를 반환.
-    """
+    """Find all .ppt and .pptx files recursively under the given directory."""
     ppt_files = []
     for root, dirs, files in os.walk(directory_path):
         for f in files:
@@ -125,59 +108,41 @@ def find_ppt_files_recursive(directory_path):
     return ppt_files
 
 
-def analyze_files(files_to_check, directory_path, use_api_check=False):
-    """Return status analysis for the provided files."""
-
+def analyze_files(files_to_check, directory_path):
+    """Analyze files and check for duplicates in the database."""
     results = []
+    total = len(files_to_check)
 
-    for file_path in files_to_check:
+    for idx, file_path in enumerate(files_to_check, 1):
         rel_path = os.path.relpath(file_path, directory_path)
+        print(f"[{idx}/{total}] Analyzing {rel_path}...", flush=True)
 
-        if not get_presentation_metadata:
-            status_msg = "Skipped check (no backend module)"
+        filename = os.path.basename(file_path)
+        is_duplicate, project_id = check_duplicate_by_db(filename)
+
+        if is_duplicate:
+            status_msg = f"Duplicate (ID: {project_id})"
             is_new = False
         else:
-            try:
-                pythoncom.CoInitialize()
-                try:
-                    abs_path = os.path.abspath(file_path)
-                    metadata = get_presentation_metadata(abs_path)
-                finally:
-                    pythoncom.CoUninitialize()
+            status_msg = "New"
+            is_new = True
 
-                if metadata:
-                    title = metadata.get("title", "")
-                    slide_count = metadata.get("slide_count", 0)
-                    seed = f"{os.path.basename(file_path)}|{title}|{slide_count}"
-                    project_id = str(uuid.uuid5(APP_NAMESPACE, seed))
-
-                    status_msg = check_duplicate(
-                        project_id, use_api=use_api_check
-                    )
-                    is_new = status_msg == "New"
-                else:
-                    status_msg = "Metadata extraction failed"
-                    is_new = False
-            except Exception as e:
-                status_msg = f"Error: {e}"
-                is_new = False
-
-        results.append(
-            {
-                "file_path": file_path,
-                "rel_path": rel_path,
-                "status": status_msg,
-                "is_new": is_new,
-            }
-        )
+        results.append({
+            "file_path": file_path,
+            "rel_path": rel_path,
+            "status": status_msg,
+            "is_new": is_new,
+        })
 
     return results
 
 
-def process_directory(directory_path, dry_run=True, max_upload=None, use_api_check=False):
+def process_directory(directory_path, dry_run=True, max_upload=None):
     """
-    1) 폴더 하위 전체를 돌면서 ppt* 파일을 찾고
-    2) (옵션) 업로드할 파일 개수를 max_upload 로 제한해서 업로드.
+    Process a directory:
+    1. Find all PPT files recursively
+    2. Check for duplicates in DB
+    3. Upload new files (respecting max_upload limit)
     """
     if not os.path.isdir(directory_path):
         print(f"Error: Directory '{directory_path}' not found.")
@@ -194,29 +159,28 @@ def process_directory(directory_path, dry_run=True, max_upload=None, use_api_che
 
     for f in ppt_files:
         rel_path = os.path.relpath(f, directory_path)
-        print(f" - {rel_path}")
+        print(f"  - {rel_path}")
 
-    if max_upload is not None:
-        if max_upload <= 0:
-            print("\n[INFO] --max 값이 0 이하라서 실제 업로드는 수행하지 않습니다.")
-            files_to_upload = []
-        else:
-            files_to_upload = ppt_files[:max_upload]
+    # Apply max_upload limit
+    if max_upload is not None and max_upload > 0:
+        files_to_check = ppt_files[:max_upload]
+    elif max_upload is not None and max_upload <= 0:
+        print("\n[INFO] --max is 0 or less, no upload will be performed.")
+        return
     else:
-        files_to_upload = ppt_files
+        files_to_check = ppt_files
 
     print(f"\nTotal PPTs found: {total_found}")
     if max_upload is not None and max_upload < total_found:
-        print(f"Will upload at most {max_upload} file(s).")
-    else:
-        print("Will upload all found PPT files.")
+        print(f"Will check at most {max_upload} file(s).")
 
-    check_source = "API" if use_api_check else "filesystem results"
-    print(f"\n[INFO] Checking for duplicates using {check_source}...")
-    analysis_results = analyze_files(files_to_upload, directory_path, use_api_check)
+    # Check for duplicates
+    print("\n[INFO] Checking for duplicates in database...")
+    analysis_results = analyze_files(files_to_check, directory_path)
 
+    print("\nAnalysis results:")
     for result in analysis_results:
-        print(f" - {result['rel_path']} : {result['status']}")
+        print(f"  - {result['rel_path']} : {result['status']}")
 
     new_files = [res for res in analysis_results if res["is_new"]]
 
@@ -224,14 +188,11 @@ def process_directory(directory_path, dry_run=True, max_upload=None, use_api_che
         print(f"\n[DRY RUN] Eligible new files: {len(new_files)}")
         print("[DRY RUN] No files were uploaded.")
         print("To perform the actual upload, run with the --upload flag:")
-        extra = ""
-        if max_upload is not None:
-            extra = f" --max {max_upload}"
-        print(
-            f"  python {os.path.basename(sys.argv[0])} {directory_path} --upload{extra}"
-        )
+        extra = f" --max {max_upload}" if max_upload is not None else ""
+        print(f"  python {os.path.basename(sys.argv[0])} {directory_path} --upload{extra}")
         return
 
+    # Upload new files
     files_to_upload = [res["file_path"] for res in new_files]
     num_to_upload = len(files_to_upload)
 
@@ -242,7 +203,6 @@ def process_directory(directory_path, dry_run=True, max_upload=None, use_api_che
     print(f"\nStarting upload of {num_to_upload} files...")
 
     for i, file_path in enumerate(files_to_upload, 1):
-        filename = os.path.basename(file_path)
         rel_path = os.path.relpath(file_path, directory_path)
         print(f"\n[{i}/{num_to_upload}] Uploading '{rel_path}'...")
 
@@ -283,16 +243,10 @@ if __name__ == "__main__":
         help="Perform actual upload (default is dry-run)",
     )
     parser.add_argument(
-        "-m",
-        "--max",
+        "-m", "--max",
         type=int,
         default=None,
         help="Maximum number of PPT files to upload (default: all)",
-    )
-    parser.add_argument(
-        "--use-api-duplicate-check",
-        action="store_true",
-        help="Use API to check duplicates instead of filesystem results",
     )
 
     args = parser.parse_args()
@@ -301,5 +255,4 @@ if __name__ == "__main__":
         args.directory,
         dry_run=not args.upload,
         max_upload=args.max,
-        use_api_check=args.use_api_duplicate_check,
     )
