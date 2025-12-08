@@ -233,10 +233,24 @@ def get_filters():
     filters = []
     for attr in active_attrs:
         key = attr["key"]
-        options = db.get_distinct_values(key)
-        filters.append(
-            {"key": key, "display_name": attr["display_name"], "options": options}
-        )
+        attr_type = attr.get("attr_type", {})
+        variant = attr_type.get("variant")
+        filter_entry = {
+            "key": key,
+            "display_name": attr["display_name"],
+            "attr_type": attr_type,
+        }
+
+        if attr_type.get("category") == "filtering" and variant == "multi_select":
+            filter_entry["options"] = db.get_distinct_values(key)
+        elif attr_type.get("category") == "filtering" and variant == "range":
+            bounds = db.get_numeric_range(key)
+            if bounds:
+                filter_entry["range"] = bounds
+        elif attr_type.get("category") == "filtering" and variant == "toggle":
+            filter_entry["options"] = [True, False]
+
+        filters.append(filter_entry)
     return filters
 
 
