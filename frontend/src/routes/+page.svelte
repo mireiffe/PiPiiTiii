@@ -12,6 +12,12 @@
   let filters = [];
   let selectedFilters = {};
 
+  // Attribute display mapping
+  $: attributeDisplayMap = filters.reduce((acc, filter) => {
+    acc[filter.key] = filter.display_name;
+    return acc;
+  }, {});
+
   const getVariant = (filter) => filter?.attr_type?.variant || "multi_select";
   const normalizeBool = (value) =>
     value === true || value === "true" || value === 1 || value === "1";
@@ -154,6 +160,32 @@
   }
 
   $: console.log("selectedProjectDetails", selectedProjectDetails);
+
+  const formatAttributeValue = (value) => {
+    if (value === undefined || value === null) return "";
+    if (Array.isArray(value)) return value.join(", ");
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    return value === "" ? "" : String(value);
+  };
+
+  const projectAttributes = (project) => {
+    if (!project || filters.length === 0) return [];
+
+    return filters
+      .map((filter) => {
+        const value = project[filter.key];
+        const formatted = formatAttributeValue(value);
+
+        if (!formatted) return null;
+
+        return {
+          key: filter.key,
+          label: attributeDisplayMap[filter.key] || filter.key,
+          value: formatted,
+        };
+      })
+      .filter(Boolean);
+  };
 </script>
 
 <div class="h-screen flex flex-col bg-gray-100 overflow-hidden">
@@ -266,6 +298,7 @@
         {:else}
           <div class="divide-y divide-gray-100">
             {#each filteredProjects as project}
+              {@const projectAttrs = projectAttributes(project)}
               <button
                 class="w-full text-left p-4 hover:bg-gray-50 transition flex flex-col gap-1 {selectedProjectId ===
                 project.id
@@ -292,6 +325,18 @@
                     <span>by {project.author}</span>
                   {/if}
                 </div>
+
+                {#if projectAttrs.length}
+                  <div class="flex flex-wrap gap-2 mt-2">
+                    {#each projectAttrs as attr}
+                      <span
+                        class="px-2 py-1 text-[11px] rounded-full bg-blue-50 text-blue-700 border border-blue-100 font-medium"
+                      >
+                        {attr.label}: {attr.value}
+                      </span>
+                    {/each}
+                  </div>
+                {/if}
               </button>
             {/each}
           </div>
@@ -338,6 +383,18 @@
                 selectedProjectDetails.created_at,
               ).toLocaleDateString()}
             </p>
+
+            {#if projectAttributes(selectedProjectDetails).length}
+              <div class="flex flex-wrap gap-2 mt-2">
+                {#each projectAttributes(selectedProjectDetails) as attr}
+                  <span
+                    class="px-2 py-1 text-[11px] rounded-full bg-blue-50 text-blue-700 border border-blue-100 font-medium"
+                  >
+                    {attr.label}: {attr.value}
+                  </span>
+                {/each}
+              </div>
+            {/if}
           </div>
           <a
             href={`/viewer/${selectedProjectId}`}

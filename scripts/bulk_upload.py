@@ -28,16 +28,10 @@ def upload_file(file_path):
     """Uploads a single file to the backend and returns the project ID."""
     url = f"{API_BASE_URL}/upload"
     filename    = os.path.basename(file_path)
-    parent      = os.path.basename(os.path.dirname(file_path))
-    grandparent = os.path.basename(os.path.dirname(os.path.dirname(file_path)))
-
-    # 필요에 맞게 이어 붙이기
-    genealogy = os.path.join(grandparent, parent, filename)
 
     files = {
         "file": (
             filename,
-            genealogy,
             open(file_path, "rb"),
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
