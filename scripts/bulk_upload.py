@@ -14,6 +14,8 @@ from backend.ppt_parser.slides import get_presentation_metadata
 import pythoncom
 from cleanup_projects import RESULT_DIR, validate_result_folder
 
+APP_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "pipiitiii.local")
+
 # Configuration
 API_BASE_URL = "http://localhost:8000/api"
 PROXIES = {
@@ -26,16 +28,10 @@ def upload_file(file_path):
     """Uploads a single file to the backend and returns the project ID."""
     url = f"{API_BASE_URL}/upload"
     filename    = os.path.basename(file_path)
-    parent      = os.path.basename(os.path.dirname(file_path))
-    grandparent = os.path.basename(os.path.dirname(os.path.dirname(file_path)))
-
-    # 필요에 맞게 이어 붙이기
-    genealogy = os.path.join(grandparent, parent, filename)
 
     files = {
         "file": (
             filename,
-            genealogy,
             open(file_path, "rb"),
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
@@ -129,6 +125,55 @@ def find_ppt_files_recursive(directory_path):
     return ppt_files
 
 
+def analyze_files(files_to_check, directory_path, use_api_check=False):
+    """Return status analysis for the provided files."""
+
+    results = []
+
+    for file_path in files_to_check:
+        rel_path = os.path.relpath(file_path, directory_path)
+
+        if not get_presentation_metadata:
+            status_msg = "Skipped check (no backend module)"
+            is_new = False
+        else:
+            try:
+                pythoncom.CoInitialize()
+                try:
+                    abs_path = os.path.abspath(file_path)
+                    metadata = get_presentation_metadata(abs_path)
+                finally:
+                    pythoncom.CoUninitialize()
+
+                if metadata:
+                    title = metadata.get("title", "")
+                    slide_count = metadata.get("slide_count", 0)
+                    seed = f"{os.path.basename(file_path)}|{title}|{slide_count}"
+                    project_id = str(uuid.uuid5(APP_NAMESPACE, seed))
+
+                    status_msg = check_duplicate(
+                        project_id, use_api=use_api_check
+                    )
+                    is_new = status_msg == "New"
+                else:
+                    status_msg = "Metadata extraction failed"
+                    is_new = False
+            except Exception as e:
+                status_msg = f"Error: {e}"
+                is_new = False
+
+        results.append(
+            {
+                "file_path": file_path,
+                "rel_path": rel_path,
+                "status": status_msg,
+                "is_new": is_new,
+            }
+        )
+
+    return results
+
+
 def process_directory(directory_path, dry_run=True, max_upload=None, use_api_check=False):
     """
     1) 폴더 하위 전체를 돌면서 ppt* 파일을 찾고
@@ -166,45 +211,18 @@ def process_directory(directory_path, dry_run=True, max_upload=None, use_api_che
     else:
         print("Will upload all found PPT files.")
 
+    check_source = "API" if use_api_check else "filesystem results"
+    print(f"\n[INFO] Checking for duplicates using {check_source}...")
+    analysis_results = analyze_files(files_to_upload, directory_path, use_api_check)
+
+    for result in analysis_results:
+        print(f" - {result['rel_path']} : {result['status']}")
+
+    new_files = [res for res in analysis_results if res["is_new"]]
+
     if dry_run:
-        print("\n[DRY RUN] Checking for duplicates...")
-
-        for i, file_path in enumerate(files_to_upload, 1):
-            filename = os.path.basename(file_path)
-            rel_path = os.path.relpath(file_path, directory_path)
-
-            status_msg = "New"
-
-            if get_presentation_metadata:
-                try:
-                    pythoncom.CoInitialize()
-                    try:
-                        # COM requires absolute path
-                        abs_path = os.path.abspath(file_path)
-                        metadata = get_presentation_metadata(abs_path)
-                    finally:
-                        pythoncom.CoUninitialize()
-
-                    if metadata:
-                        title = metadata.get("title", "")
-                        slide_count = metadata.get("slide_count", 0)
-                        seed = f"{filename}|{title}|{slide_count}"
-                        APP_NAMESPACE = uuid.uuid5(
-                            uuid.NAMESPACE_DNS, "pipiitiii.local"
-                        )
-                        project_id = str(uuid.uuid5(APP_NAMESPACE, seed))
-
-                        status_msg = check_duplicate(project_id, use_api=use_api_check)
-                    else:
-                        status_msg = "Metadata extraction failed"
-                except Exception as e:
-                    status_msg = f"Error: {e}"
-            else:
-                status_msg = "Skipped check (no backend module)"
-
-            print(f" - {rel_path} : {status_msg}")
-
-        print("\n[DRY RUN] No files were uploaded.")
+        print(f"\n[DRY RUN] Eligible new files: {len(new_files)}")
+        print("[DRY RUN] No files were uploaded.")
         print("To perform the actual upload, run with the --upload flag:")
         extra = ""
         if max_upload is not None:
@@ -214,9 +232,11 @@ def process_directory(directory_path, dry_run=True, max_upload=None, use_api_che
         )
         return
 
+    files_to_upload = [res["file_path"] for res in new_files]
     num_to_upload = len(files_to_upload)
+
     if num_to_upload == 0:
-        print("\nNo files selected for upload (maybe --max 0?). Exiting.")
+        print("\nNo new files to upload after duplicate check. Exiting.")
         return
 
     print(f"\nStarting upload of {num_to_upload} files...")
