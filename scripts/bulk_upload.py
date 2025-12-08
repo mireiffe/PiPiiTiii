@@ -12,6 +12,7 @@ from requests.exceptions import HTTPError, RequestException
 
 from backend.ppt_parser.slides import get_presentation_metadata
 import pythoncom
+from cleanup_projects import RESULT_DIR, validate_result_folder
 
 # Configuration
 API_BASE_URL = "http://localhost:8000/api"
@@ -86,6 +87,32 @@ def check_status(project_id):
         return None
 
 
+def check_duplicate(project_id: str, use_api: bool = False) -> str:
+    """Check if the project already exists via API or filesystem."""
+
+    if use_api:
+        check_url = f"{API_BASE_URL}/project/{project_id}"
+        try:
+            resp = requests.get(check_url, timeout=5, proxies=PROXIES)
+            if resp.status_code == 200:
+                return f"Duplicate (ID: {project_id})"
+            if resp.status_code == 404:
+                return "New"
+            return f"Error checking ({resp.status_code})"
+        except RequestException as e:
+            return f"Check failed: {e}"
+
+    folder_path = os.path.join(RESULT_DIR, project_id)
+    if not os.path.isdir(folder_path):
+        return "New"
+
+    ok, reason = validate_result_folder(project_id, folder_path)
+    if ok:
+        return f"Duplicate (ID: {project_id})"
+
+    return f"Existing but invalid: {reason}"
+
+
 def find_ppt_files_recursive(directory_path):
     """
     주어진 디렉토리 하위(서브디렉토리 포함)를 모두 돌면서
@@ -102,7 +129,7 @@ def find_ppt_files_recursive(directory_path):
     return ppt_files
 
 
-def process_directory(directory_path, dry_run=True, max_upload=None):
+def process_directory(directory_path, dry_run=True, max_upload=None, use_api_check=False):
     """
     1) 폴더 하위 전체를 돌면서 ppt* 파일을 찾고
     2) (옵션) 업로드할 파일 개수를 max_upload 로 제한해서 업로드.
@@ -167,17 +194,7 @@ def process_directory(directory_path, dry_run=True, max_upload=None):
                         )
                         project_id = str(uuid.uuid5(APP_NAMESPACE, seed))
 
-                        check_url = f"{API_BASE_URL}/project/{project_id}"
-                        try:
-                            resp = requests.get(check_url, timeout=5, proxies=PROXIES)
-                            if resp.status_code == 200:
-                                status_msg = f"Duplicate (ID: {project_id})"
-                            elif resp.status_code == 404:
-                                status_msg = "New"
-                            else:
-                                status_msg = f"Error checking ({resp.status_code})"
-                        except RequestException as e:
-                            status_msg = f"Check failed: {e}"
+                        status_msg = check_duplicate(project_id, use_api=use_api_check)
                     else:
                         status_msg = "Metadata extraction failed"
                 except Exception as e:
@@ -252,6 +269,11 @@ if __name__ == "__main__":
         default=None,
         help="Maximum number of PPT files to upload (default: all)",
     )
+    parser.add_argument(
+        "--use-api-duplicate-check",
+        action="store_true",
+        help="Use API to check duplicates instead of filesystem results",
+    )
 
     args = parser.parse_args()
 
@@ -259,4 +281,5 @@ if __name__ == "__main__":
         args.directory,
         dry_run=not args.upload,
         max_upload=args.max,
+        use_api_check=args.use_api_duplicate_check,
     )
