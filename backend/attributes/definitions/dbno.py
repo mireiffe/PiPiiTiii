@@ -6,7 +6,7 @@ from attributes.types import FilteringAttributeType
 
 
 class SourceAttribute(BaseAttribute):
-    info_path = "./backend/genealogy.json"
+    info_path = "./backend/data/genealogy.json"
 
     @property
     def key(self) -> str:
