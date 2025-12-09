@@ -18,7 +18,7 @@ class SourceAttribute(BaseAttribute):
 
     @property
     def attr_type(self) -> FilteringAttributeType:
-        return FilteringAttributeType(variant="multi_select")
+        return FilteringAttributeType(variant="range")
 
     def extract(self, project_data: Dict[str, Any]) -> Any:
         filename = project_data.get("original_filename", "")

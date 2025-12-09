@@ -1,7 +1,7 @@
 from dataclasses import dataclass, asdict
 from typing import Literal, TypedDict
 
-FilteringVariant = Literal["multi_select", "range", "toggle"]
+FilteringVariant = Literal["multi_select", "range", "toggle", "sort_only"]
 
 
 class AttributeTypeDict(TypedDict):

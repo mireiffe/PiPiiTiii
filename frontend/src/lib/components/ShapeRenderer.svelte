@@ -221,93 +221,106 @@
     $: lineColor = shape.line?.color_rgb || [0, 0, 0];
     $: lineWidth = (shape.line?.weight || 1) * (96 / 72);
 
+    // Master shape filtering logic
+    $: isMaster = shape.context === "master";
+    $: isTitle =
+        (shape.name || "").toLowerCase().includes("title") ||
+        (shape.type_name || "").toLowerCase().includes("title");
+    $: isPlaceholder =
+        (shape.name || "").toLowerCase().includes("placeholder") ||
+        (shape.type_name || "").toLowerCase().includes("placeholder");
+    $: isIndexing = (shape.text || "").includes("<#>");
+
+    $: shouldRender = !isMaster || (!isTitle && !isPlaceholder && !isIndexing);
+
     import { IMAGE_BASE_URL } from "$lib/api/client";
 </script>
 
-{#if isCloud(shape)}
-    <!-- Cloud Shape - SVG 렌더링 -->
-    <div
-        style={cloudStyle}
-        class="absolute select-none group"
-        data-shape-id={shape.shape_index}
-    >
-        <svg
-            viewBox="0 0 100 60"
-            width="100%"
-            height="100%"
-            preserveAspectRatio="none"
+{#if shouldRender}
+    {#if isCloud(shape)}
+        <!-- Cloud Shape - SVG 렌더링 -->
+        <div
+            style={cloudStyle}
+            class="absolute select-none group"
+            data-shape-id={shape.shape_index}
         >
-            <path
-                d="M25,50 
+            <svg
+                viewBox="0 0 100 60"
+                width="100%"
+                height="100%"
+                preserveAspectRatio="none"
+            >
+                <path
+                    d="M25,50 
                     a15,15 0 0,1 0,-25 
                     a18,18 0 0,1 30,-10 
                     a15,15 0 0,1 25,5 
                     a12,12 0 0,1 0,20 
                     a10,10 0 0,1 -10,10 
                     z"
-                fill={getCssColor(fillColor)}
-                stroke={shape.line?.visible !== false
-                    ? getCssColor(lineColor)
-                    : "none"}
-                stroke-width={lineWidth}
-            />
-        </svg>
+                    fill={getCssColor(fillColor)}
+                    stroke={shape.line?.visible !== false
+                        ? getCssColor(lineColor)
+                        : "none"}
+                    stroke-width={lineWidth}
+                />
+            </svg>
 
-        <!-- Text overlay for cloud -->
-        {#if shape.text && !shape.table}
-            <div
-                class="absolute inset-0 flex items-center justify-center p-2 whitespace-pre-wrap break-words pointer-events-none text-center"
-            >
+            <!-- Text overlay for cloud -->
+            {#if shape.text && !shape.table}
                 <div
-                    class="whitespace-pre-wrap break-words"
-                    style={`
+                    class="absolute inset-0 flex items-center justify-center p-2 whitespace-pre-wrap break-words pointer-events-none text-center"
+                >
+                    <div
+                        class="whitespace-pre-wrap break-words"
+                        style={`
                 ${getTextStyle(shape.text_style)}
                 transform: scale(${textScaleFactor});
                 transform-origin: top left;
                 width: ${100 / textScaleFactor}%;
                 height: ${100 / textScaleFactor}%;
             `}
-                >
-                    {shape.text}
+                    >
+                        {shape.text}
+                    </div>
                 </div>
-            </div>
-        {/if}
+            {/if}
 
+            <div
+                class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                style="filter: drop-shadow(0 0 2px #3b82f6);"
+            ></div>
+        </div>
+    {:else if shape.is_connector}
+        <!-- Connector Rendering -->
         <div
-            class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-            style="filter: drop-shadow(0 0 2px #3b82f6);"
-        ></div>
-    </div>
-{:else if shape.is_connector}
-    <!-- Connector Rendering -->
-    <div
-        {style}
-        class="absolute select-none group pointer-events-none"
-        data-shape-id={shape.shape_index}
-    >
-        <svg
-            width="100%"
-            height="100%"
-            viewBox={`0 0 ${shape.width} ${shape.height}`}
-            style="overflow: visible;"
+            {style}
+            class="absolute select-none group pointer-events-none"
+            data-shape-id={shape.shape_index}
         >
-            {#if shape.auto_shape_type === -2 || shape.type_code === 3}
-                <!-- Elbow Connector Logic -->
-                {@const hFlip = shape.horizontal_flip}
-                {@const vFlip = shape.vertical_flip}
-                {@const w = shape.width}
-                {@const h = shape.height}
+            <svg
+                width="100%"
+                height="100%"
+                viewBox={`0 0 ${shape.width} ${shape.height}`}
+                style="overflow: visible;"
+            >
+                {#if shape.auto_shape_type === -2 || shape.type_code === 3}
+                    <!-- Elbow Connector Logic -->
+                    {@const hFlip = shape.horizontal_flip}
+                    {@const vFlip = shape.vertical_flip}
+                    {@const w = shape.width}
+                    {@const h = shape.height}
 
-                <!-- 
+                    <!-- 
                         Determine Start (x1, y1) and End (x2, y2) based on flips.
                         Bounding box is (0,0) to (w,h).
                      -->
-                {@const x1 = hFlip ? w : 0}
-                {@const y1 = vFlip ? h : 0}
-                {@const x2 = hFlip ? 0 : w}
-                {@const y2 = vFlip ? 0 : h}
+                    {@const x1 = hFlip ? w : 0}
+                    {@const y1 = vFlip ? h : 0}
+                    {@const x2 = hFlip ? 0 : w}
+                    {@const y2 = vFlip ? 0 : h}
 
-                <!-- 
+                    <!-- 
                         Calculate Elbow Point.
                         Default L-shape: Move horizontally from Start to intersection, then vertically to End.
                         Or vertically first? 
@@ -321,134 +334,137 @@
                         Adjustment[0] is often the position of the elbow relative to width/height.
                         If available, we can use it.
                      -->
-                {@const adj =
-                    shape.adjustments && shape.adjustments.length > 0
-                        ? shape.adjustments[0]
-                        : -1}
+                    {@const adj =
+                        shape.adjustments && shape.adjustments.length > 0
+                            ? shape.adjustments[0]
+                            : -1}
 
-                <!-- 
+                    <!-- 
                         If adj is present, it might define the split. 
                         Let's assume it's a ratio along the primary axis.
                      -->
-                {@const elbowX =
-                    adj !== -1
-                        ? hFlip
-                            ? w - w * Math.abs(adj)
-                            : w * Math.abs(adj)
-                        : x2}
+                    {@const elbowX =
+                        adj !== -1
+                            ? hFlip
+                                ? w - w * Math.abs(adj)
+                                : w * Math.abs(adj)
+                            : x2}
 
-                <!-- 
+                    <!-- 
                         Construct Path Data.
                         Simple L for now: Start -> Corner -> End
                      -->
-                <path
-                    d={`M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`}
-                    fill="none"
-                    stroke={getCssColor(lineColor)}
-                    stroke-width={lineWidth}
-                />
-            {:else}
-                <!-- Straight Line or other connector -->
-                <line
-                    x1={shape.horizontal_flip ? shape.width : 0}
-                    y1={shape.vertical_flip ? shape.height : 0}
-                    x2={shape.horizontal_flip ? 0 : shape.width}
-                    y2={shape.vertical_flip ? 0 : shape.height}
-                    stroke={getCssColor(lineColor)}
-                    stroke-width={lineWidth}
+                    <path
+                        d={`M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`}
+                        fill="none"
+                        stroke={getCssColor(lineColor)}
+                        stroke-width={lineWidth}
+                    />
+                {:else}
+                    <!-- Straight Line or other connector -->
+                    <line
+                        x1={shape.horizontal_flip ? shape.width : 0}
+                        y1={shape.vertical_flip ? shape.height : 0}
+                        x2={shape.horizontal_flip ? 0 : shape.width}
+                        y2={shape.vertical_flip ? 0 : shape.height}
+                        stroke={getCssColor(lineColor)}
+                        stroke-width={lineWidth}
+                    />
+                {/if}
+            </svg>
+        </div>
+    {:else}
+        <!-- 기존 Shape 렌더링 -->
+        <div
+            {style}
+            class="absolute select-none group"
+            data-shape-id={shape.shape_index}
+        >
+            <!-- Image -->
+            {#if shape.image_file}
+                <img
+                    src={`${IMAGE_BASE_URL}/api/results/${projectId}/${shape.image_file}`}
+                    alt={shape.name}
+                    class="w-full h-full object-contain pointer-events-none"
                 />
             {/if}
-        </svg>
-    </div>
-{:else}
-    <!-- 기존 Shape 렌더링 -->
-    <div
-        {style}
-        class="absolute select-none group"
-        data-shape-id={shape.shape_index}
-    >
-        <!-- Image -->
-        {#if shape.image_file}
-            <img
-                src={`${IMAGE_BASE_URL}/api/results/${projectId}/${shape.image_file}`}
-                alt={shape.name}
-                class="w-full h-full object-contain pointer-events-none"
-            />
-        {/if}
 
-        {#if shape.text && !shape.table}
-            <div class="w-full h-full p-1 overflow-hidden pointer-events-none">
+            {#if shape.text && !shape.table}
                 <div
-                    class="whitespace-pre-wrap break-words"
-                    style={`
+                    class="w-full h-full p-1 overflow-hidden pointer-events-none"
+                >
+                    <div
+                        class="whitespace-pre-wrap break-words"
+                        style={`
                         ${getTextStyle(shape.text_style)}
                         transform: scale(${textScaleFactor});
                         transform-origin: top left;
                         width: ${100 / textScaleFactor}%;
                         height: ${100 / textScaleFactor}%;
                     `}
-                >
-                    {shape.text}
+                    >
+                        {shape.text}
+                    </div>
                 </div>
-            </div>
-        {/if}
+            {/if}
 
-        <!-- Table -->
-        {#if shape.table}
-            <div
-                class="w-full h-full grid pointer-events-none"
-                style={`
+            <!-- Table -->
+            {#if shape.table}
+                <div
+                    class="w-full h-full grid pointer-events-none"
+                    style={`
                         grid-template-columns: ${getGridTemplateColumns(shape.table)};
                         grid-template-rows: ${getGridTemplateRows(shape.table)};
                     `}
-            >
-                {#each shape.table.cells as cell}
-                    <div
-                        class="overflow-hidden"
-                        style={`
+                >
+                    {#each shape.table.cells as cell}
+                        <div
+                            class="overflow-hidden"
+                            style={`
                                 ${getCellFillStyle(cell)}
                                 ${getCellBorderStyle(cell.borders)}
                             `}
-                    >
-                        <div
-                            class="whitespace-pre-wrap break-words"
-                            style={`
+                        >
+                            <div
+                                class="whitespace-pre-wrap break-words"
+                                style={`
                         ${getTextStyle(cell.text_style)}
                         transform: scale(${textScaleFactor});
                         transform-origin: top left;
                         width: ${100 / textScaleFactor}%;
                         height: ${100 / textScaleFactor}%;
                     `}
-                        >
-                            {cell.text}
+                            >
+                                {cell.text}
+                            </div>
                         </div>
-                    </div>
-                {/each}
-            </div>
-        {/if}
+                    {/each}
+                </div>
+            {/if}
 
-        <!-- Recursive Children (Groups) -->
-        {#if shape.children && shape.children.length > 0}
-            {#each shape.children as child}
-                <!-- 
+            <!-- Recursive Children (Groups) -->
+            {#if shape.children && shape.children.length > 0}
+                {#each shape.children as child}
+                    <!-- 
                         IMPORTANT: Children in JSON have absolute coordinates (slide-relative).
                         But here they are rendered inside the parent div, which is already positioned.
                         So we must adjust their coordinates to be relative to the parent.
                     -->
-                <svelte:self
-                    shape={{
-                        ...child,
-                        left: child.left - shape.left,
-                        top: child.top - shape.top,
-                    }}
-                    {projectId}
-                    {highlight}
-                />
-            {/each}
-        {/if}
+                    <svelte:self
+                        shape={{
+                            ...child,
+                            left: child.left - shape.left,
+                            top: child.top - shape.top,
+                        }}
+                        {projectId}
+                        {highlight}
+                    />
+                {/each}
+            {/if}
 
-        <div
-            class="absolute inset-0 border-2 border-blue-500 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-        ></div>
-    </div>
+            <div
+                class="absolute inset-0 border-2 border-blue-500 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+            ></div>
+        </div>
+    {/if}
 {/if}

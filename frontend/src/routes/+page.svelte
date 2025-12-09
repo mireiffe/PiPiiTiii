@@ -1,29 +1,46 @@
 <script>
   import { onMount } from "svelte";
   import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
+  import MultiSelectFilter from "$lib/components/filters/MultiSelectFilter.svelte";
+  import RangeFilter from "$lib/components/filters/RangeFilter.svelte";
+  import ToggleFilter from "$lib/components/filters/ToggleFilter.svelte";
+  import SortToggleFilter from "$lib/components/filters/SortToggleFilter.svelte";
   import { fetchProjects, fetchProject, fetchFilters } from "$lib/api/project";
 
+  /** @type {any[]} */
   let projects = [];
   let loading = true;
   let searchTerm = "";
-  let sortBy = "date";
+
+  // Sorting state
+  let sortBy = "date"; // 'date' | 'name' | 'author' | 'title' | attribute_key
+  let sortDirection = "desc"; // 'asc' | 'desc'
 
   // Dynamic filters
+  /** @type {any[]} */
   let filters = [];
+  /** @type {Record<string, any>} */
   let selectedFilters = {};
+  let showAttributeFilters = false;
 
   // Attribute display mapping
-  $: attributeDisplayMap = filters.reduce((acc, filter) => {
-    acc[filter.key] = filter.display_name;
-    return acc;
-  }, {});
+  $: attributeDisplayMap = filters.reduce(
+    (/** @type {Record<string, any>} */ acc, /** @type {any} */ filter) => {
+      acc[filter.key] = filter.display_name;
+      return acc;
+    },
+    {},
+  );
 
+  /** @param {any} filter */
   const getVariant = (filter) => filter?.attr_type?.variant || "multi_select";
+  /** @param {any} value */
   const normalizeBool = (value) =>
     value === true || value === "true" || value === 1 || value === "1";
 
   // Selection state
   let selectedProjectId = null;
+  /** @type {any} */
   let selectedProjectDetails = null;
   let loadingDetails = false;
 
@@ -93,14 +110,49 @@
       return true;
     })
     .sort((a, b) => {
-      if (sortBy === "date")
-        return new Date(b.created_at) - new Date(a.created_at);
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "author")
-        return (a.author || "").localeCompare(b.author || "");
-      if (sortBy === "title")
-        return (a.title || "").localeCompare(b.title || "");
-      return 0;
+      let valA, valB;
+
+      if (sortBy === "date") {
+        valA = new Date(a.created_at);
+        valB = new Date(b.created_at);
+      } else if (sortBy === "name") {
+        valA = a.name;
+        valB = b.name;
+      } else if (sortBy === "author") {
+        valA = a.author || "";
+        valB = b.author || "";
+      } else if (sortBy === "title") {
+        valA = a.title || "";
+        valB = b.title || "";
+      } else {
+        // Attribute sort
+        valA = a[sortBy];
+        valB = b[sortBy];
+
+        // Try to parse as number if possible for correct sorting
+        if (
+          !isNaN(Number(valA)) &&
+          !isNaN(Number(valB)) &&
+          valA !== "" &&
+          valB !== ""
+        ) {
+          valA = Number(valA);
+          valB = Number(valB);
+        }
+      }
+
+      if (valA === valB) return 0;
+      if (valA === undefined || valA === null) return 1; // push nulls to end
+      if (valB === undefined || valB === null) return -1;
+
+      let comparison = 0;
+      if (typeof valA === "string" && typeof valB === "string") {
+        comparison = valA.localeCompare(valB);
+      } else {
+        comparison = valA > valB ? 1 : -1;
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
     });
 
   onMount(async () => {
@@ -116,24 +168,27 @@
       if (filtersRes.ok) {
         const fetchedFilters = await filtersRes.json();
         filters = fetchedFilters;
-        selectedFilters = fetchedFilters.reduce((acc, f) => {
-          const variant = getVariant(f);
+        selectedFilters = fetchedFilters.reduce(
+          (/** @type {Record<string, any>} */ acc, /** @type {any} */ f) => {
+            const variant = getVariant(f);
 
-          if (variant === "multi_select") {
-            acc[f.key] = [];
-          } else if (variant === "range") {
-            acc[f.key] = {
-              min: f.range?.min ?? "",
-              max: f.range?.max ?? "",
-            };
-          } else if (variant === "toggle") {
-            acc[f.key] = "";
-          } else {
-            acc[f.key] = "";
-          }
+            if (variant === "multi_select") {
+              acc[f.key] = [];
+            } else if (variant === "range") {
+              acc[f.key] = {
+                min: f.range?.min ?? "",
+                max: f.range?.max ?? "",
+              };
+            } else if (variant === "toggle") {
+              acc[f.key] = "";
+            } else {
+              acc[f.key] = "";
+            }
 
-          return acc;
-        }, {});
+            return acc;
+          },
+          {},
+        );
       }
     } catch (e) {
       console.error(e);
@@ -142,6 +197,7 @@
     }
   });
 
+  /** @param {any} project */
   async function selectProject(project) {
     selectedProjectId = project.id;
     selectedProjectDetails = null; // Reset while loading
@@ -161,6 +217,7 @@
 
   $: console.log("selectedProjectDetails", selectedProjectDetails);
 
+  /** @param {any} value */
   const formatAttributeValue = (value) => {
     if (value === undefined || value === null) return "";
     if (Array.isArray(value)) return value.join(", ");
@@ -168,6 +225,7 @@
     return value === "" ? "" : String(value);
   };
 
+  /** @param {any} project */
   const projectAttributes = (project) => {
     if (!project || filters.length === 0) return [];
 
@@ -186,6 +244,15 @@
       })
       .filter(Boolean);
   };
+
+  function handleSortChange(key) {
+    if (sortBy === key) {
+      sortDirection = sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      sortBy = key;
+      sortDirection = "asc";
+    }
+  }
 </script>
 
 <div class="h-screen flex flex-col bg-gray-100 overflow-hidden">
@@ -215,73 +282,78 @@
           bind:value={searchTerm}
           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <div class="flex flex-wrap gap-2">
-          <select
-            bind:value={sortBy}
-            class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[180px]"
-          >
-            <option value="date">Date (Newest)</option>
-            <option value="name">Name (A-Z)</option>
-            <option value="author">Author (A-Z)</option>
-          </select>
+        <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <!-- Default Sort Filters -->
+          <SortToggleFilter
+            title="Date"
+            active={sortBy === "date"}
+            direction={sortBy === "date" ? sortDirection : "desc"}
+            onToggle={() => handleSortChange("date")}
+          />
+          <SortToggleFilter
+            title="Name"
+            active={sortBy === "name"}
+            direction={sortBy === "name" ? sortDirection : "asc"}
+            onToggle={() => handleSortChange("name")}
+          />
+          <SortToggleFilter
+            title="Author"
+            active={sortBy === "author"}
+            direction={sortBy === "author" ? sortDirection : "asc"}
+            onToggle={() => handleSortChange("author")}
+          />
         </div>
 
         {#if filters.length > 0}
-          <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 pt-2">
             {#each filters as filter (filter.key)}
-              <div class="flex flex-col gap-1">
-                <div class="flex items-center justify-between text-xs text-gray-500">
-                  <span class="font-semibold text-gray-600">{filter.display_name}</span>
-                  <span class="uppercase text-[10px] tracking-wide">{getVariant(filter).replace("_", " ")}</span>
-                </div>
-
-                {#if getVariant(filter) === "multi_select"}
-                  <select
-                    multiple
-                    bind:value={selectedFilters[filter.key]}
-                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white h-24"
+              {#if getVariant(filter) === "multi_select"}
+                <MultiSelectFilter
+                  title={filter.display_name}
+                  options={filter.options || []}
+                  selected={selectedFilters[filter.key] || []}
+                  onChange={(newSelected) =>
+                    (selectedFilters[filter.key] = newSelected)}
+                />
+              {:else if getVariant(filter) === "range"}
+                <RangeFilter
+                  title={filter.display_name}
+                  min={filter.range?.min ?? 0}
+                  max={filter.range?.max ?? 100}
+                  selectedMin={selectedFilters[filter.key]?.min}
+                  selectedMax={selectedFilters[filter.key]?.max}
+                  onChange={(range) => (selectedFilters[filter.key] = range)}
+                  isSorted={sortBy === filter.key}
+                  {sortDirection}
+                  onSortChange={() => handleSortChange(filter.key)}
+                />
+              {:else if getVariant(filter) === "toggle"}
+                <ToggleFilter
+                  title={filter.display_name}
+                  value={selectedFilters[filter.key] || ""}
+                  onChange={(val) => (selectedFilters[filter.key] = val)}
+                />
+              {:else if getVariant(filter) === "sort_only"}
+                <SortToggleFilter
+                  title={filter.display_name}
+                  active={sortBy === filter.key}
+                  direction={sortBy === filter.key ? sortDirection : "asc"}
+                  onToggle={() => handleSortChange(filter.key)}
+                />
+              {:else}
+                <!-- Fallback for other types -->
+                <div class="flex flex-col gap-1">
+                  <span class="font-semibold text-gray-600 text-xs"
+                    >{filter.display_name}</span
                   >
-                    {#if (filter.options || []).length === 0}
-                      <option disabled>(No options)</option>
-                    {:else}
-                      {#each filter.options || [] as option}
-                        <option value={option}>{option}</option>
-                      {/each}
-                    {/if}
-                  </select>
-                {:else if getVariant(filter) === "range"}
-                  <div class="flex gap-2">
-                    <input
-                      type="number"
-                      bind:value={selectedFilters[filter.key].min}
-                      placeholder={filter.range?.min ?? "Min"}
-                      class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <input
-                      type="number"
-                      bind:value={selectedFilters[filter.key].max}
-                      placeholder={filter.range?.max ?? "Max"}
-                      class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                {:else if getVariant(filter) === "toggle"}
-                  <select
-                    bind:value={selectedFilters[filter.key]}
-                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="">All</option>
-                    <option value="on">On</option>
-                    <option value="off">Off</option>
-                  </select>
-                {:else}
                   <input
                     type="text"
                     bind:value={selectedFilters[filter.key]}
-                    placeholder={`Filter by ${filter.display_name}`}
+                    placeholder={`Filter...`}
                     class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                {/if}
-              </div>
+                </div>
+              {/if}
             {/each}
           </div>
         {/if}
@@ -317,26 +389,41 @@
                 {#if project.title}
                   <p class="text-sm text-gray-600 truncate">{project.title}</p>
                 {/if}
-                <div class="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                  <span class="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
-                    {project.slide_count} slides
-                  </span>
-                  {#if project.author}
-                    <span>by {project.author}</span>
+                <div class="flex items-end justify-between mt-2 gap-2">
+                  <div
+                    class="flex items-center gap-2 text-xs text-gray-400 mb-0.5"
+                  >
+                    <span
+                      class="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600"
+                    >
+                      {project.slide_count} slides
+                    </span>
+                    {#if project.author}
+                      <span class="truncate">by {project.author}</span>
+                    {/if}
+                  </div>
+
+                  {#if projectAttrs.length}
+                    <div class="flex flex-wrap gap-1.5 justify-end">
+                      {#each projectAttrs as attr}
+                        <div
+                          class="inline-flex items-center text-[11px] leading-3 border border-blue-200 rounded overflow-hidden"
+                        >
+                          <span
+                            class="bg-blue-50 px-2 py-1 text-blue-600 font-medium border-r border-blue-200"
+                          >
+                            {attr.label}
+                          </span>
+                          <span
+                            class="bg-white px-2 py-1 text-blue-900 font-medium"
+                          >
+                            {attr.value}
+                          </span>
+                        </div>
+                      {/each}
+                    </div>
                   {/if}
                 </div>
-
-                {#if projectAttrs.length}
-                  <div class="flex flex-wrap gap-2 mt-2">
-                    {#each projectAttrs as attr}
-                      <span
-                        class="px-2 py-1 text-[11px] rounded-full bg-blue-50 text-blue-700 border border-blue-100 font-medium"
-                      >
-                        {attr.label}: {attr.value}
-                      </span>
-                    {/each}
-                  </div>
-                {/if}
               </button>
             {/each}
           </div>
@@ -385,13 +472,20 @@
             </p>
 
             {#if projectAttributes(selectedProjectDetails).length}
-              <div class="flex flex-wrap gap-2 mt-2">
+              <div class="flex flex-wrap gap-1.5 mt-2">
                 {#each projectAttributes(selectedProjectDetails) as attr}
-                  <span
-                    class="px-2 py-1 text-[11px] rounded-full bg-blue-50 text-blue-700 border border-blue-100 font-medium"
+                  <div
+                    class="inline-flex items-center text-[11px] leading-3 border border-blue-200 rounded overflow-hidden"
                   >
-                    {attr.label}: {attr.value}
-                  </span>
+                    <span
+                      class="bg-blue-50 px-2 py-1 text-blue-600 font-medium border-r border-blue-200"
+                    >
+                      {attr.label}
+                    </span>
+                    <span class="bg-white px-2 py-1 text-blue-900 font-medium">
+                      {attr.value}
+                    </span>
+                  </div>
                 {/each}
               </div>
             {/if}
