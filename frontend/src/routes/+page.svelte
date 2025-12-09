@@ -5,7 +5,12 @@
   import RangeFilter from "$lib/components/filters/RangeFilter.svelte";
   import ToggleFilter from "$lib/components/filters/ToggleFilter.svelte";
   import SortToggleFilter from "$lib/components/filters/SortToggleFilter.svelte";
-  import { fetchProjects, fetchProject, fetchFilters } from "$lib/api/project";
+  import {
+    fetchProjects,
+    fetchProject,
+    fetchFilters,
+    downloadProject,
+  } from "$lib/api/project";
 
   /** @type {any[]} */
   let projects = [];
@@ -509,6 +514,25 @@
               />
             </svg>
           </a>
+          <button
+            class="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition shadow-md font-medium flex items-center gap-2"
+            on:click={() => downloadProject(selectedProjectId)}
+          >
+            <span>Download PPT</span>
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+              />
+            </svg>
+          </button>
         </div>
 
         <!-- Slides Grid -->

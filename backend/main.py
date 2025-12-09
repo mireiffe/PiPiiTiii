@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from typing import List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -736,6 +737,64 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
     finally:
         # Uninitialize COM when done
         pythoncom.CoUninitialize()
+
+
+@app.get("/api/project/{project_id}/download")
+def download_project(project_id: str):
+    project_dir = os.path.join(RESULT_DIR, project_id)
+    json_path = os.path.join(project_dir, f"{project_id}.json")
+
+    if not os.path.exists(json_path):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Reconstruct PPT
+    # We'll save it to a temporary file or directly to the result dir with a specific name
+    output_filename = f"{data.get('original_filename', 'presentation.pptx')}"
+    output_path = os.path.join(project_dir, output_filename)
+
+    # Ensure we have the image directory if needed (usually uploads or recon)
+    # The reconstructor might need absolute paths for images.
+    # If images are local, we might need to handle that.
+    # For now, let's assume images are accessible via absolute paths in JSON or relative to project root?
+    # In ppt_reconstructor.py, it takes image_dir.
+    # Let's pass UPLOAD_DIR as image_dir fallback?
+
+    # Run reconstruction in a separate thread because it uses COM
+    # We need a wrapper for COM initialization
+    def reconstruct_task():
+        pythoncom.CoInitialize()
+        try:
+            import ppt_reconstructor
+
+            return ppt_reconstructor.reconstruct_presentation(
+                data, output_path, image_dir=UPLOAD_DIR
+            )
+        finally:
+            pythoncom.CoUninitialize()
+
+    # We should probably run this in a thread pool to avoid blocking
+    # But for simplicity and since we need to return the file, we might block or use run_in_executor
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    # Actually, we are in a sync route (def, not async def), so we can just run it.
+    # But to avoid blocking the main thread if we were async...
+    # Since this is `def`, FastAPI runs it in a threadpool automatically.
+
+    success = reconstruct_task()
+
+    if not success:
+        raise HTTPException(
+            status_code=500, detail="Failed to reconstruct presentation"
+        )
+
+    return FileResponse(
+        output_path,
+        filename=output_filename,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
 
 
 if __name__ == "__main__":

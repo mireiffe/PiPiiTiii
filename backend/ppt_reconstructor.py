@@ -1,6 +1,6 @@
 import os
 import win32com.client as win32
-from .ppt_parser.constants import SHAPE_PNG_SIZE
+from ppt_parser.constants import SHAPE_PNG_SIZE
 
 
 def rgb_to_com_int(rgb_list):

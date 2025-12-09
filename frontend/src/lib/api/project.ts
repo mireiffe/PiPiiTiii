@@ -48,6 +48,32 @@ export async function reparseSlide(id: string, slideIndex: number) {
         method: "POST",
     });
 }
+
+export async function downloadProject(id: string) {
+    const res = await apiFetch(`/api/project/${id}/download`);
+    if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        // Extract filename from Content-Disposition header if possible, or default
+        const contentDisposition = res.headers.get("Content-Disposition");
+        let filename = "presentation.pptx";
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename="?([^"]+)"?/);
+            if (match && match[1]) {
+                filename = match[1];
+            }
+        }
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    }
+    return res;
+}
+
 export async function fetchFilters() {
     return apiFetch("/api/filters");
 }

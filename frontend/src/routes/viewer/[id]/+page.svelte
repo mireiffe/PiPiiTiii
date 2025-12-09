@@ -8,6 +8,7 @@
         updateShapeDescription,
         reparseProject,
         reparseSlide,
+        downloadProject,
     } from "$lib/api/project";
 
     const projectId = $page.params.id;
@@ -543,6 +544,12 @@
                     on:click={handleReparseSlide}
                 >
                     Reparse Slide
+                </button>
+                <button
+                    class="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded text-sm transition whitespace-nowrap flex items-center gap-1"
+                    on:click={() => downloadProject(projectId)}
+                >
+                    <span>Download</span>
                 </button>
                 <div class="w-px h-4 bg-gray-300 mx-2"></div>
                 <button
