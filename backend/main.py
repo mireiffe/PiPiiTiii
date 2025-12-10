@@ -752,7 +752,9 @@ def download_project(project_id: str):
 
     # Reconstruct PPT
     # We'll save it to a temporary file or directly to the result dir with a specific name
-    output_filename = f"{data.get('original_filename', 'presentation.pptx')}"
+    output_filename = (
+        f"reconstructed_{data.get('original_filename', 'presentation.pptx')}"
+    )
     output_path = os.path.join(project_dir, output_filename)
 
     # Ensure we have the image directory if needed (usually uploads or recon)

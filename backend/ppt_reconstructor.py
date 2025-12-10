@@ -425,9 +425,13 @@ def reconstruct_presentation(json_data, output_path, image_dir=None):
 
     app = win32.gencache.EnsureDispatch("PowerPoint.Application")
     # app.Visible = True # Optional: make it visible during processing
+    # For server-side generation, we want it invisible.
+    # Note: app.Visible = False might throw error if no window is open,
+    # but Add(WithWindow=False) is the key.
 
     try:
-        pres = app.Presentations.Add()
+        # WithWindow=0 (False) to keep it invisible
+        pres = app.Presentations.Add(WithWindow=0)
 
         # Set slide size if available
         if "slide_width" in json_data and "slide_height" in json_data:

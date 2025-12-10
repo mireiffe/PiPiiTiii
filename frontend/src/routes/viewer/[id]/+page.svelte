@@ -16,6 +16,7 @@
     let currentSlideIndex = 0;
     let loading = true;
     let saving = false;
+    let downloading = false;
 
     // Scale factor to fit slide in view
     let scale = 1;
@@ -546,10 +547,46 @@
                     Reparse Slide
                 </button>
                 <button
-                    class="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded text-sm transition whitespace-nowrap flex items-center gap-1"
-                    on:click={() => downloadProject(projectId)}
+                    class="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded text-sm transition whitespace-nowrap flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    on:click={async () => {
+                        if (downloading) return;
+                        downloading = true;
+                        try {
+                            await downloadProject(projectId);
+                        } catch (e) {
+                            console.error(e);
+                            alert("Failed to download PPT");
+                        } finally {
+                            downloading = false;
+                        }
+                    }}
+                    disabled={downloading}
                 >
-                    <span>Download</span>
+                    {#if downloading}
+                        <svg
+                            class="animate-spin h-3 w-3 text-green-700"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                        >
+                            <circle
+                                class="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                stroke-width="4"
+                            ></circle>
+                            <path
+                                class="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            ></path>
+                        </svg>
+                        <span>Generating...</span>
+                    {:else}
+                        <span>Download</span>
+                    {/if}
                 </button>
                 <div class="w-px h-4 bg-gray-300 mx-2"></div>
                 <button
