@@ -12,6 +12,46 @@
     downloadProject,
   } from "$lib/api/project";
 
+  // ============================================
+  // CARD DISPLAY CONFIG
+  // ============================================
+  // Configure which fields appear where in the project list card.
+  // All project fields (both built-in and attributes) can be used.
+  // Built-in fields: name, title, author, subject, created_at, slide_count
+  // Attribute fields: dynamically loaded from filters API
+  //
+  // Structure:
+  //   header.title    - Main title (left side of header)
+  //   header.date     - Date field (right side of header, formatted as date)
+  //   subtitle        - Secondary text below title (null to hide)
+  //   footer.left     - Array of {key, prefix?, suffix?} for left side info
+  //   footer.right    - Array of keys for badge-style display on right
+  // ============================================
+  const CARD_CONFIG = {
+    header: {
+      title: "name",
+      date: "created_at",
+    },
+    subtitle: "title",
+    footer: {
+      left: [
+        { key: "slide_count", suffix: " slides" },
+        { key: "author", prefix: "by " },
+      ],
+      right: [], // attribute keys to show as badges (e.g., ["grade", "year"])
+    },
+  };
+
+  // Display names for built-in fields (attributes use filter.display_name)
+  const BUILT_IN_DISPLAY_NAMES = {
+    name: "Name",
+    title: "Title",
+    author: "Author",
+    subject: "Subject",
+    created_at: "Date",
+    slide_count: "Slides",
+  };
+
   /** @type {any[]} */
   let projects = [];
   let loading = true;
@@ -28,14 +68,20 @@
   let selectedFilters = {};
   let showAttributeFilters = false;
 
-  // Attribute display mapping
-  $: attributeDisplayMap = filters.reduce(
-    (/** @type {Record<string, any>} */ acc, /** @type {any} */ filter) => {
-      acc[filter.key] = filter.display_name;
-      return acc;
-    },
-    {},
-  );
+  // Unified display name mapping (built-in + attributes)
+  $: displayNameMap = {
+    ...BUILT_IN_DISPLAY_NAMES,
+    ...filters.reduce(
+      (/** @type {Record<string, any>} */ acc, /** @type {any} */ filter) => {
+        acc[filter.key] = filter.display_name;
+        return acc;
+      },
+      {},
+    ),
+  };
+
+  // Attribute keys from filters (for reference)
+  $: attributeKeys = filters.map((f) => f.key);
 
   /** @param {any} filter */
   const getVariant = (filter) => filter?.attr_type?.variant || "multi_select";
@@ -224,28 +270,41 @@
   $: console.log("selectedProjectDetails", selectedProjectDetails);
 
   /** @param {any} value */
-  const formatAttributeValue = (value) => {
+  const formatValue = (value) => {
     if (value === undefined || value === null) return "";
     if (Array.isArray(value)) return value.join(", ");
     if (typeof value === "boolean") return value ? "Yes" : "No";
     return value === "" ? "" : String(value);
   };
 
-  /** @param {any} project */
-  const projectAttributes = (project) => {
-    if (!project || filters.length === 0) return [];
+  /**
+   * Get a formatted field value from project with optional prefix/suffix
+   * @param {any} project
+   * @param {string | {key: string, prefix?: string, suffix?: string}} field
+   */
+  const getFieldValue = (project, field) => {
+    if (!project) return "";
+    const key = typeof field === "string" ? field : field.key;
+    const prefix = typeof field === "object" ? field.prefix || "" : "";
+    const suffix = typeof field === "object" ? field.suffix || "" : "";
+    const value = formatValue(project[key]);
+    return value ? `${prefix}${value}${suffix}` : "";
+  };
 
-    return filters
-      .map((filter) => {
-        const value = project[filter.key];
-        const formatted = formatAttributeValue(value);
-
-        if (!formatted) return null;
-
+  /**
+   * Get badge items for footer right section based on config
+   * @param {any} project
+   */
+  const getFooterBadges = (project) => {
+    if (!project) return [];
+    return CARD_CONFIG.footer.right
+      .map((key) => {
+        const value = formatValue(project[key]);
+        if (!value) return null;
         return {
-          key: filter.key,
-          label: attributeDisplayMap[filter.key] || filter.key,
-          value: formatted,
+          key,
+          label: displayNameMap[key] || key,
+          value,
         };
       })
       .filter(Boolean);
@@ -376,7 +435,7 @@
         {:else}
           <div class="divide-y divide-gray-100">
             {#each filteredProjects as project}
-              {@const projectAttrs = projectAttributes(project)}
+              {@const footerBadges = getFooterBadges(project)}
               <button
                 class="w-full text-left p-4 hover:bg-gray-50 transition flex flex-col gap-1 {selectedProjectId ===
                 project.id
@@ -384,46 +443,60 @@
                   : 'border-l-4 border-transparent'}"
                 on:click={() => selectProject(project)}
               >
+                <!-- Header: title + date -->
                 <div class="flex justify-between items-start w-full">
                   <h3 class="font-semibold text-gray-800 truncate pr-2">
-                    {project.name}
+                    {getFieldValue(project, CARD_CONFIG.header.title) || "Untitled"}
                   </h3>
-                  <span class="text-xs text-gray-400 whitespace-nowrap">
-                    {new Date(project.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-                {#if project.title}
-                  <p class="text-sm text-gray-600 truncate">{project.title}</p>
-                {/if}
-                <div class="flex items-end justify-between mt-2 gap-2">
-                  <div
-                    class="flex items-center gap-2 text-xs text-gray-400 mb-0.5"
-                  >
-                    <span
-                      class="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600"
-                    >
-                      {project.slide_count} slides
+                  {#if CARD_CONFIG.header.date && project[CARD_CONFIG.header.date]}
+                    <span class="text-xs text-gray-400 whitespace-nowrap">
+                      {new Date(project[CARD_CONFIG.header.date]).toLocaleDateString()}
                     </span>
-                    {#if project.author}
-                      <span class="truncate">by {project.author}</span>
-                    {/if}
+                  {/if}
+                </div>
+
+                <!-- Subtitle -->
+                {#if CARD_CONFIG.subtitle}
+                  {@const subtitleValue = getFieldValue(project, CARD_CONFIG.subtitle)}
+                  {#if subtitleValue}
+                    <p class="text-sm text-gray-600 truncate">{subtitleValue}</p>
+                  {/if}
+                {/if}
+
+                <!-- Footer: left info + right badges -->
+                <div class="flex items-end justify-between mt-2 gap-2">
+                  <!-- Footer Left -->
+                  <div class="flex items-center gap-2 text-xs text-gray-400 mb-0.5">
+                    {#each CARD_CONFIG.footer.left as field, i}
+                      {@const fieldValue = getFieldValue(project, field)}
+                      {#if fieldValue}
+                        {#if i === 0}
+                          <span class="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                            {fieldValue}
+                          </span>
+                        {:else}
+                          <span class="truncate">{fieldValue}</span>
+                        {/if}
+                      {/if}
+                    {/each}
                   </div>
 
-                  {#if projectAttrs.length}
+                  <!-- Footer Right (Badges) -->
+                  {#if footerBadges.length}
                     <div class="flex flex-wrap gap-1.5 justify-end">
-                      {#each projectAttrs as attr}
+                      {#each footerBadges as badge}
                         <div
                           class="inline-flex items-center text-[11px] leading-3 border border-blue-200 rounded overflow-hidden"
                         >
                           <span
                             class="bg-blue-50 px-2 py-1 text-blue-600 font-medium border-r border-blue-200"
                           >
-                            {attr.label}
+                            {badge.label}
                           </span>
                           <span
                             class="bg-white px-2 py-1 text-blue-900 font-medium"
                           >
-                            {attr.value}
+                            {badge.value}
                           </span>
                         </div>
                       {/each}
@@ -477,19 +550,19 @@
               ).toLocaleDateString()}
             </p>
 
-            {#if projectAttributes(selectedProjectDetails).length}
+            {#if getFooterBadges(selectedProjectDetails).length}
               <div class="flex flex-wrap gap-1.5 mt-2">
-                {#each projectAttributes(selectedProjectDetails) as attr}
+                {#each getFooterBadges(selectedProjectDetails) as badge}
                   <div
                     class="inline-flex items-center text-[11px] leading-3 border border-blue-200 rounded overflow-hidden"
                   >
                     <span
                       class="bg-blue-50 px-2 py-1 text-blue-600 font-medium border-r border-blue-200"
                     >
-                      {attr.label}
+                      {badge.label}
                     </span>
                     <span class="bg-white px-2 py-1 text-blue-900 font-medium">
-                      {attr.value}
+                      {badge.value}
                     </span>
                   </div>
                 {/each}
