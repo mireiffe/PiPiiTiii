@@ -278,7 +278,7 @@ def get_presentation_metadata(ppt_path):
                 pass
 
 
-def generate_slide_thumbnail(slide, slide_index, thumbnail_dir, max_dimension=1280):
+def generate_slide_thumbnail(slide, slide_index, thumbnail_dir, max_dimension=1920):
     """
     Generate a thumbnail image for a single slide.
     The thumbnail maintains the slide's aspect ratio with the longest side set to max_dimension.
