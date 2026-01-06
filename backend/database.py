@@ -22,7 +22,8 @@ class Database:
                 subject TEXT,
                 author TEXT,
                 last_modified_by TEXT,
-                revision_number TEXT
+                revision_number TEXT,
+                summary_data TEXT
             )
         """)
         conn.commit()
@@ -274,3 +275,25 @@ class Database:
             return None
         finally:
             conn.close()
+
+    def get_project_summary(self, project_id: str) -> Optional[Dict[str, Any]]:
+        """Get summary data for a project."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT summary_data FROM projects WHERE id = ?", (project_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row and row[0]:
+            return json.loads(row[0])
+        return {}
+
+    def update_project_summary(self, project_id: str, summary_data: Dict[str, Any]):
+        """Update summary data for a project."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET summary_data = ? WHERE id = ?",
+            (json.dumps(summary_data, ensure_ascii=False), project_id)
+        )
+        conn.commit()
+        conn.close()

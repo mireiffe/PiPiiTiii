@@ -77,3 +77,27 @@ export async function downloadProject(id: string) {
 export async function fetchFilters() {
     return apiFetch("/api/filters");
 }
+
+export async function fetchSettings() {
+    return apiFetch("/api/settings");
+}
+
+export async function updateSettings(settings: any) {
+    return apiFetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+    });
+}
+
+export async function fetchProjectSummary(id: string) {
+    return apiFetch(`/api/project/${id}/summary`);
+}
+
+export async function updateProjectSummary(id: string, data: Record<string, string>) {
+    return apiFetch(`/api/project/${id}/summary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data }),
+    });
+}
