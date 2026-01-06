@@ -313,18 +313,6 @@
 
         <div class="space-y-4">
           <div class="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-             <SortToggleFilter
-               title="Date"
-               active={sortBy === "date"}
-               direction={sortBy === "date" ? sortDirection : "desc"}
-               onToggle={() => handleSortChange("date")}
-             />
-             <SortToggleFilter
-               title="Name"
-               active={sortBy === "name"}
-               direction={sortBy === "name" ? sortDirection : "asc"}
-               onToggle={() => handleSortChange("name")}
-             />
 
              {#each visibleFilters as filter (filter.key)}
                 {#if getVariant(filter) === "multi_select"}
