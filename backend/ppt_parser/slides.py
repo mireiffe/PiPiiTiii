@@ -117,6 +117,8 @@ def parse_single_slide(ppt_path, slide_index, out_dir, preserved_data=None):
     os.makedirs(out_dir, exist_ok=True)
     image_dir = os.path.join(out_dir, "images")
     os.makedirs(image_dir, exist_ok=True)
+    thumbnail_dir = os.path.join(out_dir, "thumbnails")
+    os.makedirs(thumbnail_dir, exist_ok=True)
 
     print(f"=== Parsing Single Slide {slide_index}: {ppt_path} ===")
 
@@ -147,12 +149,18 @@ def parse_single_slide(ppt_path, slide_index, out_dir, preserved_data=None):
         except Exception:
             layout_name = None
 
+        # Generate thumbnail for this slide
+        thumbnail_filename = generate_slide_thumbnail(
+            slide, slide_index, thumbnail_dir
+        )
+
         slide_info = {
             "slide_index": slide_index,
             "slide_id": slide.SlideID,
             "shapes_count": shapes_count,
             "design_name": design_name,
             "layout_name": layout_name,
+            "thumbnail": thumbnail_filename,
             "metadata": extract_metadata(presentation),
             "shapes": [],
         }
@@ -270,6 +278,26 @@ def get_presentation_metadata(ppt_path):
                 pass
 
 
+def generate_slide_thumbnail(slide, slide_index, thumbnail_dir, width=320, height=240):
+    """
+    Generate a thumbnail image for a single slide.
+    Returns the relative path to the thumbnail file, or None if failed.
+    """
+    try:
+        os.makedirs(thumbnail_dir, exist_ok=True)
+        thumbnail_filename = f"slide_{slide_index:03d}_thumb.png"
+        thumbnail_path = os.path.join(thumbnail_dir, thumbnail_filename)
+
+        # Export slide as image
+        slide.Export(thumbnail_path, "PNG", ScaleWidth=width, ScaleHeight=height)
+
+        print(f"  [INFO] Generated thumbnail: {thumbnail_filename}")
+        return thumbnail_filename
+    except Exception as e:
+        print(f"  [WARN] Failed to generate thumbnail for slide {slide_index}: {e}")
+        return None
+
+
 def parse_presentation(
     ppt_path, out_dir, debug=False, progress_callback=None, preserved_data=None
 ):
@@ -280,6 +308,8 @@ def parse_presentation(
     os.makedirs(out_dir, exist_ok=True)
     image_dir = os.path.join(out_dir, "images")
     os.makedirs(image_dir, exist_ok=True)
+    thumbnail_dir = os.path.join(out_dir, "thumbnails")
+    os.makedirs(thumbnail_dir, exist_ok=True)
 
     print(f"=== Parsing PowerPoint: {ppt_path} ===")
 
@@ -352,12 +382,18 @@ def parse_presentation(
                 except Exception:
                     layout_name = None
 
+                # Generate thumbnail for this slide
+                thumbnail_filename = generate_slide_thumbnail(
+                    slide, slide_index, thumbnail_dir
+                )
+
                 slide_info = {
                     "slide_index": slide_index,
                     "slide_id": slide.SlideID,
                     "shapes_count": shapes_count,
                     "design_name": design_name,
                     "layout_name": layout_name,
+                    "thumbnail": thumbnail_filename,
                     "shapes": [],
                 }
 
