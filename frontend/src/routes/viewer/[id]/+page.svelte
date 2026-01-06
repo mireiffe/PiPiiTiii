@@ -41,7 +41,8 @@
 
     let otherShapesExpanded = false;
 
-    let allowEdit = false;
+    // Get allowEdit from query parameter, default to false
+    $: allowEdit = $page.url.searchParams.get('allowEdit') === 'true';
 
     // 이미지 shape 필터링 (image_path가 있거나 shape_type이 'picture'인 경우)
     $: imageShapes = allShapes.filter(
