@@ -59,6 +59,11 @@
   // UI State: 상세 필터 보기 여부
   let showDetailedFilters = false;
 
+  // Feature toggles
+  let enableUpload = false;
+  let enableDownload = true;
+  let allowEdit = true;
+
   $: displayNameMap = {
     ...BUILT_IN_DISPLAY_NAMES,
     ...filters.reduce(
@@ -291,12 +296,14 @@
 <div class="h-screen flex flex-col bg-gray-100 overflow-hidden">
   <div class="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shrink-0 z-10 shadow-sm">
     <h1 class="text-2xl font-bold text-gray-800">PiPiiTiii</h1>
-    <a
-      href="/upload"
-      class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm text-sm font-medium"
-    >
-      Upload New PPT
-    </a>
+    {#if enableUpload}
+      <a
+        href="/upload"
+        class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm text-sm font-medium"
+      >
+        Upload New PPT
+      </a>
+    {/if}
   </div>
 
   <div class="flex-1 flex overflow-hidden">
@@ -485,7 +492,7 @@
           </div>
           <div class="flex gap-2">
             <a
-              href={`/viewer/${selectedProjectId}`}
+              href={`/viewer/${selectedProjectId}?allowEdit=${allowEdit}`}
               class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm text-sm font-medium flex items-center gap-2"
             >
               <span>Open Viewer</span>
@@ -493,35 +500,37 @@
                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
               </svg>
             </a>
-            <button
-              class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm text-sm font-medium flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-              on:click={async () => {
-                if (downloading) return;
-                downloading = true;
-                try {
-                  await downloadProject(selectedProjectId);
-                } catch (e) {
-                  console.error(e);
-                  alert("Failed to download PPT");
-                } finally {
-                  downloading = false;
-                }
-              }}
-              disabled={downloading}
-            >
-              {#if downloading}
-                <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Generating...</span>
-              {:else}
-                <span>Download</span>
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                </svg>
-              {/if}
-            </button>
+            {#if enableDownload}
+              <button
+                class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm text-sm font-medium flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                on:click={async () => {
+                  if (downloading) return;
+                  downloading = true;
+                  try {
+                    await downloadProject(selectedProjectId);
+                  } catch (e) {
+                    console.error(e);
+                    alert("Failed to download PPT");
+                  } finally {
+                    downloading = false;
+                  }
+                }}
+                disabled={downloading}
+              >
+                {#if downloading}
+                  <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Generating...</span>
+                {:else}
+                  <span>Download</span>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                {/if}
+              </button>
+            {/if}
           </div>
         </div>
 
