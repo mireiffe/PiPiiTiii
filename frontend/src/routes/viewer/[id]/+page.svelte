@@ -9,6 +9,9 @@
         reparseProject,
         reparseSlide,
         downloadProject,
+        fetchSettings,
+        fetchProjectSummary,
+        updateProjectSummary,
     } from "$lib/api/project";
 
     const projectId = $page.params.id;
@@ -30,7 +33,6 @@
     let initialTop = 0;
 
     // Undo/Redo History
-    // History stores arrays of { shape_index, left, top } for the current slide
     let history = [];
     let historyIndex = -1;
     let isDirty = false;
@@ -44,13 +46,22 @@
     // Get allowEdit from query parameter, default to false
     $: allowEdit = $page.url.searchParams.get('allowEdit') === 'true';
 
-    // 이미지 shape 필터링 (image_path가 있거나 shape_type이 'picture'인 경우)
+    // Resizable pane
+    let rightPaneWidth = 400;
+    let isResizing = false;
+
+    // Settings and summary
+    let settings = { summary_fields: [] };
+    let summaryData = {};
+    let savingSummary = false;
+
+    // 이미지 shape 필터링
     $: imageShapes = allShapes.filter(
         (s) =>
             s.image_path ||
             s.type_code === "picture" ||
             s.type_code === "image" ||
-            s.type_code === 13, // MSO_SHAPE_TYPE.PICTURE
+            s.type_code === 13,
     );
 
     $: otherShapes = allShapes.filter(
@@ -63,6 +74,8 @@
 
     onMount(async () => {
         await loadProject();
+        await loadSettings();
+        await loadSummary();
         window.addEventListener("resize", updateScale);
         window.addEventListener("keydown", handleKeyDown);
         return () => {
@@ -77,7 +90,6 @@
             if (res.ok) {
                 project = await res.json();
 
-                // Check for slide query param
                 const slideParam = $page.url.searchParams.get("slide");
                 if (slideParam) {
                     const idx = parseInt(slideParam) - 1;
@@ -102,18 +114,55 @@
         }
     }
 
+    async function loadSettings() {
+        try {
+            const res = await fetchSettings();
+            if (res.ok) {
+                settings = await res.json();
+            }
+        } catch (e) {
+            console.error("Failed to load settings", e);
+        }
+    }
+
+    async function loadSummary() {
+        try {
+            const res = await fetchProjectSummary(projectId);
+            if (res.ok) {
+                summaryData = await res.json();
+            }
+        } catch (e) {
+            console.error("Failed to load summary", e);
+        }
+    }
+
+    async function saveSummary() {
+        savingSummary = true;
+        try {
+            const res = await updateProjectSummary(projectId, summaryData);
+            if (res.ok) {
+                // Success
+            } else {
+                alert("Failed to save summary");
+            }
+        } catch (e) {
+            console.error("Failed to save summary", e);
+            alert("Error saving summary");
+        } finally {
+            savingSummary = false;
+        }
+    }
+
     function updateScale() {
         if (!project || !containerWidth) return;
-        // Fit to width with some padding
         const slideW = project.slide_width || 960;
-        scale = (containerWidth - 64) / slideW; // 32px padding on each side
+        scale = (containerWidth - 64) / slideW;
     }
 
     $: currentSlide = project?.slides.find(
         (s) => s.slide_index === currentSlideIndex + 1,
     );
 
-    // Flatten shapes for the sidebar list (including children if needed)
     function getAllShapes(shapes) {
         let result = [];
         for (const s of shapes) {
@@ -134,21 +183,19 @@
 
     $: selectedShape = allShapes.find((s) => s.shape_index === selectedShapeId);
 
-    // Watch selection to update description input
     $: if (selectedShape) {
         editingDescription = selectedShape.description || "";
     } else {
         editingDescription = "";
     }
 
-    // --- History Management ---
-
+    // History Management
     function resetHistory() {
         history = [];
         historyIndex = -1;
         isDirty = false;
         if (currentSlide) {
-            pushToHistory(true); // Initial state
+            pushToHistory(true);
         }
     }
 
@@ -164,14 +211,12 @@
     function pushToHistory(initial = false) {
         const snapshot = getSnapshot();
 
-        // If not initial, check if different from current
         if (!initial && historyIndex >= 0) {
             const current = history[historyIndex];
             const isSame = JSON.stringify(current) === JSON.stringify(snapshot);
             if (isSame) return;
         }
 
-        // Truncate future if we are in middle
         if (historyIndex < history.length - 1) {
             history = history.slice(0, historyIndex + 1);
         }
@@ -184,11 +229,8 @@
     function restoreSnapshot(snapshot) {
         if (!currentSlide) return;
 
-        // Create a map for fast lookup
         const snapMap = new Map(snapshot.map((s) => [s.shape_index, s]));
 
-        // Update all shapes
-        // We need to update the actual objects in the project structure
         function updateShapesRecursive(shapes) {
             for (const shape of shapes) {
                 const snap = snapMap.get(shape.shape_index);
@@ -203,7 +245,7 @@
         }
 
         updateShapesRecursive(currentSlide.shapes);
-        currentSlide = currentSlide; // Trigger reactivity
+        currentSlide = currentSlide;
     }
 
     function undo() {
@@ -231,12 +273,11 @@
         }
     }
 
-    // --- Drag & Drop Logic ---
-
+    // Drag & Drop Logic
     function handleMouseDown(e, shape) {
-        if (e.button !== 0) return; // Only left click
+        if (e.button !== 0) return;
         e.preventDefault();
-        e.stopPropagation(); // Prevent selecting underlying shapes
+        e.stopPropagation();
 
         selectedShapeId = shape.shape_index;
         draggingId = shape.shape_index;
@@ -255,14 +296,12 @@
         const dx = (e.clientX - startX) / scale;
         const dy = (e.clientY - startY) / scale;
 
-        // Find shape recursively
-        // Optimization: we know the draggingId, we can find it in allShapes
         const shape = allShapes.find((s) => s.shape_index === draggingId);
 
         if (shape) {
             shape.left = initialLeft + dx;
             shape.top = initialTop + dy;
-            currentSlide = currentSlide; // Trigger reactivity
+            currentSlide = currentSlide;
         }
     }
 
@@ -275,8 +314,7 @@
         window.removeEventListener("mouseup", handleMouseUp);
     }
 
-    // --- Actions ---
-
+    // Actions
     async function handleSaveState() {
         if (!isDirty) return;
         saving = true;
@@ -330,7 +368,6 @@
     async function handleSaveDescription() {
         if (!selectedShape) return;
 
-        // Optimistic update
         selectedShape.description = editingDescription;
         currentSlide = currentSlide;
 
@@ -398,7 +435,7 @@
                     if (idx !== -1) {
                         project.slides[idx] = data.slide;
                         project = project;
-                        resetHistory(); // Reset history for this slide
+                        resetHistory();
                     }
                 }
                 alert("Slide reparsed!");
@@ -428,7 +465,6 @@
         }
     }
 
-    // Switch slide handler
     async function selectSlide(index) {
         if (isDirty) {
             if (!confirm("You have unsaved changes. Discard them?")) return;
@@ -437,6 +473,28 @@
         await tick();
         resetHistory();
         scrollToSlide(index);
+    }
+
+    // Resizable pane
+    function startResize(e) {
+        isResizing = true;
+        e.preventDefault();
+        window.addEventListener("mousemove", handleResize);
+        window.addEventListener("mouseup", stopResize);
+    }
+
+    function handleResize(e) {
+        if (!isResizing) return;
+        const newWidth = window.innerWidth - e.clientX;
+        if (newWidth >= 300 && newWidth <= 800) {
+            rightPaneWidth = newWidth;
+        }
+    }
+
+    function stopResize() {
+        isResizing = false;
+        window.removeEventListener("mousemove", handleResize);
+        window.removeEventListener("mouseup", stopResize);
     }
 </script>
 
@@ -632,9 +690,9 @@
                                 on:mousedown={(e) => handleMouseDown(e, shape)}
                                 class="absolute"
                                 style={`
-                                    left: 0; 
-                                    top: 0; 
-                                    width: 0; 
+                                    left: 0;
+                                    top: 0;
+                                    width: 0;
                                     height: 0;
                                     cursor: grab;
                                 `}
@@ -653,153 +711,197 @@
         </div>
     </div>
 
-    <!-- Right Sidebar (Object List) -->
-    <div class="w-72 bg-white border-l border-gray-200 flex flex-col shrink-0">
+    <!-- Resize Handle -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+        class="w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors shrink-0"
+        on:mousedown={startResize}
+    ></div>
+
+    <!-- Right Sidebar -->
+    <div
+        class="bg-white border-l border-gray-200 flex flex-col shrink-0"
+        style="width: {rightPaneWidth}px;"
+    >
         <div class="p-4 border-b border-gray-200">
-            <h2 class="font-bold text-gray-800">Object List</h2>
+            <h2 class="font-bold text-gray-800">프로젝트 정보</h2>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-2">
-            {#if allShapes.length === 0}
-                <div class="text-gray-400 text-sm text-center mt-10">
-                    No objects found
-                </div>
-            {:else}
-                <!-- 이미지 객체 섹션 (항상 펼쳐짐) -->
-                {#if imageShapes.length > 0}
-                    <div class="mb-4">
-                        <div class="flex items-center gap-2 px-2 py-1 mb-2">
-                            <span class="text-sm font-bold text-orange-600"
-                                >🖼️ 이미지</span
-                            >
-                            <span
-                                class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full"
-                            >
-                                설명을 달아주세요!!
-                            </span>
+        <div class="flex-1 overflow-y-auto">
+            <!-- Summary Fields -->
+            <div class="p-4 border-b border-gray-200 space-y-3">
+                <h3 class="text-sm font-bold text-gray-700 uppercase mb-3">
+                    요약 정보
+                </h3>
+                {#if settings.summary_fields && settings.summary_fields.length > 0}
+                    {#each settings.summary_fields.sort((a, b) => a.order - b.order) as field}
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                {field.name}
+                            </label>
+                            <textarea
+                                class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                                rows="3"
+                                placeholder="{field.name}을(를) 입력하세요..."
+                                bind:value={summaryData[field.id]}
+                                on:blur={saveSummary}
+                            ></textarea>
                         </div>
-                        <ul class="space-y-1">
-                            {#each imageShapes as shape}
-                                <li>
-                                    <button
-                                        class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group border-l-4 border-orange-400 {selectedShapeId ===
-                                        shape.shape_index
-                                            ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-300'
-                                            : 'hover:bg-orange-50 text-gray-700 bg-orange-50/50'}"
-                                        on:click={() =>
-                                            (selectedShapeId =
-                                                shape.shape_index)}
+                    {/each}
+                    {#if savingSummary}
+                        <div class="text-xs text-gray-500 italic">저장 중...</div>
+                    {/if}
+                {:else}
+                    <div class="text-sm text-gray-400 italic">
+                        설정에서 요약 필드를 추가하세요.
+                    </div>
+                {/if}
+            </div>
+
+            <!-- Object List (Collapsible) -->
+            <div class="p-4">
+                <button
+                    class="w-full flex items-center justify-between px-2 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded mb-2"
+                    on:click={() => otherShapesExpanded = !otherShapesExpanded}
+                >
+                    <span>객체 목록 ({allShapes.length})</span>
+                    <span
+                        class="text-gray-400 transition-transform duration-200"
+                        class:rotate-180={otherShapesExpanded}
+                    >
+                        ▼
+                    </span>
+                </button>
+
+                {#if otherShapesExpanded}
+                    {#if allShapes.length === 0}
+                        <div class="text-gray-400 text-sm text-center mt-4">
+                            No objects found
+                        </div>
+                    {:else}
+                        <!-- 이미지 객체 -->
+                        {#if imageShapes.length > 0}
+                            <div class="mb-4">
+                                <div class="flex items-center gap-2 px-2 py-1 mb-2">
+                                    <span class="text-sm font-bold text-orange-600"
+                                        >🖼️ 이미지</span
                                     >
-                                        <span
-                                            class="truncate"
-                                            title={shape.name}
-                                            >{shape.name}</span
-                                        >
-                                        {#if shape.description}
-                                            <span
-                                                class="text-xs text-green-500 ml-2"
-                                                >✅</span
+                                    <span
+                                        class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full"
+                                    >
+                                        설명을 달아주세요!!
+                                    </span>
+                                </div>
+                                <ul class="space-y-1">
+                                    {#each imageShapes as shape}
+                                        <li>
+                                            <button
+                                                class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group border-l-4 border-orange-400 {selectedShapeId ===
+                                                shape.shape_index
+                                                    ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-300'
+                                                    : 'hover:bg-orange-50 text-gray-700 bg-orange-50/50'}"
+                                                on:click={() =>
+                                                    (selectedShapeId =
+                                                        shape.shape_index)}
                                             >
-                                        {:else}
-                                            <span
-                                                class="text-xs text-orange-400 ml-2"
-                                                >⚠️</span
-                                            >
-                                        {/if}
-                                    </button>
-                                </li>
-                            {/each}
-                        </ul>
-                    </div>
-                {/if}
-
-                <!-- 기타 객체 섹션 (접을 수 있음) -->
-                {#if otherShapes.length > 0}
-                    <div class="border-t border-gray-200 pt-2">
-                        <button
-                            class="w-full flex items-center justify-between px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded"
-                            on:click={() =>
-                                (otherShapesExpanded = !otherShapesExpanded)}
-                        >
-                            <span>기타 객체 ({otherShapes.length})</span>
-                            <span
-                                class="text-gray-400 transition-transform duration-200"
-                                class:rotate-180={otherShapesExpanded}
-                            >
-                                ▼
-                            </span>
-                        </button>
-
-                        {#if otherShapesExpanded}
-                            <ul class="space-y-1 mt-1">
-                                {#each otherShapes as shape}
-                                    <li>
-                                        <button
-                                            class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group {selectedShapeId ===
-                                            shape.shape_index
-                                                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-300'
-                                                : 'hover:bg-gray-50 text-gray-700'}"
-                                            on:click={() =>
-                                                (selectedShapeId =
-                                                    shape.shape_index)}
-                                        >
-                                            <span
-                                                class="truncate"
-                                                title={shape.name}
-                                                >{shape.name}</span
-                                            >
-                                            {#if shape.description}
                                                 <span
-                                                    class="text-xs text-gray-400 ml-2"
-                                                    >📝</span
+                                                    class="truncate"
+                                                    title={shape.name}
+                                                    >{shape.name}</span
                                                 >
-                                            {/if}
-                                        </button>
-                                    </li>
-                                {/each}
-                            </ul>
+                                                {#if shape.description}
+                                                    <span
+                                                        class="text-xs text-green-500 ml-2"
+                                                        >✅</span
+                                                    >
+                                                {:else}
+                                                    <span
+                                                        class="text-xs text-orange-400 ml-2"
+                                                        >⚠️</span
+                                                    >
+                                                {/if}
+                                            </button>
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
                         {/if}
-                    </div>
-                {/if}
-            {/if}
-        </div>
 
-        <!-- Description Editor -->
-        <div class="p-4 border-t border-gray-200 bg-gray-50">
-            <h3 class="text-xs font-bold text-gray-500 uppercase mb-2">
-                Description
-            </h3>
-            {#if selectedShape}
-                <div class="space-y-2">
-                    <div
-                        class="text-sm font-medium text-gray-800 truncate mb-1"
-                    >
-                        {selectedShape.name}
-                    </div>
-                    <textarea
-                        class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                        rows="3"
-                        placeholder="Enter description..."
-                        bind:value={editingDescription}
-                        on:keydown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSaveDescription();
-                            }
-                        }}
-                    ></textarea>
-                    <button
-                        class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-1.5 rounded transition"
-                        on:click={handleSaveDescription}
-                    >
-                        Save Description
-                    </button>
-                </div>
-            {:else}
-                <div class="text-sm text-gray-400 italic text-center py-4">
-                    Select an object to edit description
-                </div>
-            {/if}
+                        <!-- 기타 객체 -->
+                        {#if otherShapes.length > 0}
+                            <div class="border-t border-gray-200 pt-2">
+                                <div class="px-2 py-1 mb-1">
+                                    <span class="text-sm font-medium text-gray-600"
+                                        >기타 객체 ({otherShapes.length})</span
+                                    >
+                                </div>
+
+                                <ul class="space-y-1">
+                                    {#each otherShapes as shape}
+                                        <li>
+                                            <button
+                                                class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group {selectedShapeId ===
+                                                shape.shape_index
+                                                    ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-300'
+                                                    : 'hover:bg-gray-50 text-gray-700'}"
+                                                on:click={() =>
+                                                    (selectedShapeId =
+                                                        shape.shape_index)}
+                                            >
+                                                <span
+                                                    class="truncate"
+                                                    title={shape.name}
+                                                    >{shape.name}</span
+                                                >
+                                                {#if shape.description}
+                                                    <span
+                                                        class="text-xs text-gray-400 ml-2"
+                                                        >📝</span
+                                                    >
+                                                {/if}
+                                            </button>
+                                        </li>
+                                    {/each}
+                                </ul>
+                            </div>
+                        {/if}
+                    {/if}
+
+                    <!-- Description Editor -->
+                    {#if selectedShape}
+                        <div class="mt-4 p-3 border-t border-gray-200 bg-gray-50 rounded">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">
+                                Description
+                            </h4>
+                            <div class="space-y-2">
+                                <div
+                                    class="text-sm font-medium text-gray-800 truncate mb-1"
+                                >
+                                    {selectedShape.name}
+                                </div>
+                                <textarea
+                                    class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                                    rows="3"
+                                    placeholder="Enter description..."
+                                    bind:value={editingDescription}
+                                    on:keydown={(e) => {
+                                        if (e.key === "Enter" && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleSaveDescription();
+                                        }
+                                    }}
+                                ></textarea>
+                                <button
+                                    class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-1.5 rounded transition"
+                                    on:click={handleSaveDescription}
+                                >
+                                    Save Description
+                                </button>
+                            </div>
+                        </div>
+                    {/if}
+                {/if}
+            </div>
         </div>
     </div>
 </div>

@@ -45,6 +45,7 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 RESULT_DIR = os.path.join(BASE_DIR, "results")
+SETTINGS_FILE = os.path.join(BASE_DIR, "backend", "data", "settings.json")
 
 attr_manager = AttributeManager(
     db, os.path.join(BASE_DIR, "backend", "attributes", "definitions")
@@ -206,6 +207,15 @@ class DescriptionUpdate(BaseModel):
     slide_index: int
     shape_index: str | int
     description: str
+
+
+class Settings(BaseModel):
+    llm: Dict[str, str]
+    summary_fields: List[Dict[str, Any]]
+
+
+class SummaryData(BaseModel):
+    data: Dict[str, str]
 
 
 @app.middleware("http")
@@ -737,6 +747,62 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
     finally:
         # Uninitialize COM when done
         pythoncom.CoUninitialize()
+
+
+@app.get("/api/settings")
+def get_settings():
+    """Get application settings."""
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+            return settings
+        else:
+            # Return default settings
+            default_settings = {
+                "llm": {
+                    "api_endpoint": "https://api.openai.com/v1",
+                    "model_name": "gpt-4"
+                },
+                "summary_fields": [
+                    {"id": "overall_summary", "name": "종합요약", "order": 0},
+                    {"id": "incident", "name": "발생현상", "order": 1}
+                ]
+            }
+            return default_settings
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load settings: {str(e)}")
+
+
+@app.post("/api/settings")
+def update_settings(settings: Settings):
+    """Update application settings."""
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
+        return {"status": "success", "message": "Settings updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save settings: {str(e)}")
+
+
+@app.get("/api/project/{project_id}/summary")
+def get_project_summary(project_id: str):
+    """Get summary data for a project."""
+    try:
+        summary = db.get_project_summary(project_id)
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load summary: {str(e)}")
+
+
+@app.post("/api/project/{project_id}/summary")
+def update_project_summary_endpoint(project_id: str, summary: SummaryData):
+    """Update summary data for a project."""
+    try:
+        db.update_project_summary(project_id, summary.data)
+        return {"status": "success", "message": "Summary updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save summary: {str(e)}")
 
 
 @app.get("/api/project/{project_id}/download")
