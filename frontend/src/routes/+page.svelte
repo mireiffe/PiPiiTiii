@@ -528,10 +528,10 @@
         <div class="flex-1 overflow-y-auto p-8 bg-gray-50">
           <div class="grid grid-cols-1 gap-8 max-w-4xl mx-auto">
             {#each selectedProjectDetails.slides as slide}
-              <div class="group flex flex-col items-center">
-                <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden group-hover:shadow-lg transition-shadow duration-300 relative">
+              <div class="group flex flex-col items-center w-full">
+                <div class="w-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden group-hover:shadow-lg transition-shadow duration-300 relative">
                   <div
-                    class="relative"
+                    class="relative w-full"
                     bind:clientWidth={thumbnailWidth}
                     style={`height: ${thumbnailHeight}px;`}
                   >
