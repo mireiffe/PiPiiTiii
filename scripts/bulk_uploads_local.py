@@ -8,15 +8,16 @@ import uuid
 
 import pythoncom
 
-from backend import ppt_parser as parsing
-from backend.attributes.manager import AttributeManager
-from backend.database import Database
 
 # Ensure backend modules are importable
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BACKEND_DIR = os.path.join(BASE_DIR, "backend")
 sys.path.append(BASE_DIR)
 sys.path.append(BACKEND_DIR)
+
+from backend import ppt_parser as parsing
+from backend.attributes.manager import AttributeManager
+from backend.database import Database
 
 DB_PATH = os.path.join(BASE_DIR, "backend", "data", "projects.db")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
