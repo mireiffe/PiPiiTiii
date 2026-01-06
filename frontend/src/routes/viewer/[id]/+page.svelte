@@ -10,6 +10,7 @@
         reparseSlide,
         downloadProject,
         fetchSettings,
+        updateSettings,
         fetchProjectSummary,
         updateProjectSummary,
     } from "$lib/api/project";
@@ -20,6 +21,10 @@
     let loading = true;
     let saving = false;
     let downloading = false;
+
+    // Thumbnail toggle
+    let useThumbnails = false;
+    let loadingSettings = false;
 
     // Scale factor to fit slide in view
     let scale = 1;
@@ -119,9 +124,34 @@
             const res = await fetchSettings();
             if (res.ok) {
                 settings = await res.json();
+                useThumbnails = settings.use_thumbnails || false;
             }
         } catch (e) {
             console.error("Failed to load settings", e);
+        }
+    }
+
+    async function toggleThumbnailView() {
+        loadingSettings = true;
+        try {
+            // Get current settings first
+            const settingsRes = await fetchSettings();
+            if (settingsRes.ok) {
+                const currentSettings = await settingsRes.json();
+                // Toggle the value
+                currentSettings.use_thumbnails = !useThumbnails;
+                // Save updated settings
+                const updateRes = await updateSettings(currentSettings);
+                if (updateRes.ok) {
+                    useThumbnails = currentSettings.use_thumbnails;
+                } else {
+                    console.error("Failed to update settings");
+                }
+            }
+        } catch (e) {
+            console.error("Failed to toggle thumbnail view", e);
+        } finally {
+            loadingSettings = false;
         }
     }
 
@@ -524,18 +554,30 @@
                         <div
                             class="aspect-video bg-white border border-gray-200 mb-1 relative overflow-hidden"
                         >
-                            <div
-                                class="absolute top-0 left-0 origin-top-left pointer-events-none"
-                                style="transform: scale({200 /
-                                    (project.slide_width ||
-                                        960)}); width: {project.slide_width}px; height: {project.slide_height}px;"
-                            >
-                                {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
-                                    <div class="absolute top-0 left-0">
-                                        <ShapeRenderer {shape} {projectId} />
-                                    </div>
-                                {/each}
-                            </div>
+                            {#if useThumbnails}
+                                <img
+                                    src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, '0')}_thumb.png`}
+                                    alt={`Slide ${slide.slide_index} thumbnail`}
+                                    class="w-full h-full object-contain"
+                                    on:error={(e) => {
+                                        console.warn(`Thumbnail not found for slide ${slide.slide_index}`);
+                                        e.target.style.display = 'none';
+                                    }}
+                                />
+                            {:else}
+                                <div
+                                    class="absolute top-0 left-0 origin-top-left pointer-events-none"
+                                    style="transform: scale({200 /
+                                        (project.slide_width ||
+                                            960)}); width: {project.slide_width}px; height: {project.slide_height}px;"
+                                >
+                                    {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
+                                        <div class="absolute top-0 left-0">
+                                            <ShapeRenderer {shape} {projectId} />
+                                        </div>
+                                    {/each}
+                                </div>
+                            {/if}
                         </div>
                         <span class="text-sm text-gray-600 font-medium"
                             >Slide {slide.slide_index}</span
@@ -593,6 +635,25 @@
             {/if}
 
             <div class="flex items-center space-x-2 shrink-0">
+                <button
+                    on:click={toggleThumbnailView}
+                    disabled={loadingSettings}
+                    class="bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1 rounded text-sm transition whitespace-nowrap flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={useThumbnails ? "렌더링 보기로 전환" : "썸네일 보기로 전환"}
+                >
+                    {#if useThumbnails}
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"/>
+                        </svg>
+                        <span>썸네일</span>
+                    {:else}
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        </svg>
+                        <span>렌더링</span>
+                    {/if}
+                </button>
                 <button
                     class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded text-sm transition whitespace-nowrap"
                     on:click={handleReparseAll}
@@ -684,27 +745,39 @@
                             transform: scale(${scale});
                         `}
                     >
-                        {#each sortedShapes as shape (shape.shape_index)}
-                            <!-- svelte-ignore a11y-no-static-element-interactions -->
-                            <div
-                                on:mousedown={(e) => handleMouseDown(e, shape)}
-                                class="absolute"
-                                style={`
-                                    left: 0;
-                                    top: 0;
-                                    width: 0;
-                                    height: 0;
-                                    cursor: grab;
-                                `}
-                            >
-                                <ShapeRenderer
-                                    {shape}
-                                    {projectId}
-                                    highlight={selectedShapeId ===
-                                        shape.shape_index}
-                                />
-                            </div>
-                        {/each}
+                        {#if useThumbnails}
+                            <img
+                                src={`/api/results/${projectId}/thumbnails/slide_${currentSlide.slide_index.toString().padStart(3, '0')}_thumb.png`}
+                                alt={`Slide ${currentSlide.slide_index} thumbnail`}
+                                class="w-full h-full object-contain"
+                                on:error={(e) => {
+                                    console.warn(`Thumbnail not found for slide ${currentSlide.slide_index}, falling back to rendering`);
+                                    e.target.style.display = 'none';
+                                }}
+                            />
+                        {:else}
+                            {#each sortedShapes as shape (shape.shape_index)}
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                <div
+                                    on:mousedown={(e) => handleMouseDown(e, shape)}
+                                    class="absolute"
+                                    style={`
+                                        left: 0;
+                                        top: 0;
+                                        width: 0;
+                                        height: 0;
+                                        cursor: grab;
+                                    `}
+                                >
+                                    <ShapeRenderer
+                                        {shape}
+                                        {projectId}
+                                        highlight={selectedShapeId ===
+                                            shape.shape_index}
+                                    />
+                                </div>
+                            {/each}
+                        {/if}
                     </div>
                 </div>
             {/if}
