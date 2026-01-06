@@ -278,9 +278,10 @@ def get_presentation_metadata(ppt_path):
                 pass
 
 
-def generate_slide_thumbnail(slide, slide_index, thumbnail_dir, width=320, height=240):
+def generate_slide_thumbnail(slide, slide_index, thumbnail_dir, max_dimension=1280):
     """
     Generate a thumbnail image for a single slide.
+    The thumbnail maintains the slide's aspect ratio with the longest side set to max_dimension.
     Returns the relative path to the thumbnail file, or None if failed.
     """
     try:
@@ -288,10 +289,26 @@ def generate_slide_thumbnail(slide, slide_index, thumbnail_dir, width=320, heigh
         thumbnail_filename = f"slide_{slide_index:03d}_thumb.png"
         thumbnail_path = os.path.join(thumbnail_dir, thumbnail_filename)
 
-        # Export slide as image
-        slide.Export(thumbnail_path, "PNG", ScaleWidth=width, ScaleHeight=height)
+        # Get slide dimensions from presentation
+        presentation = slide.Parent
+        slide_width = float(presentation.PageSetup.SlideWidth)
+        slide_height = float(presentation.PageSetup.SlideHeight)
 
-        print(f"  [INFO] Generated thumbnail: {thumbnail_filename}")
+        # Calculate thumbnail dimensions maintaining aspect ratio
+        # Set the longer side to max_dimension
+        if slide_width >= slide_height:
+            # Landscape or square
+            thumb_width = max_dimension
+            thumb_height = int(max_dimension * slide_height / slide_width)
+        else:
+            # Portrait
+            thumb_height = max_dimension
+            thumb_width = int(max_dimension * slide_width / slide_height)
+
+        # Export slide as image
+        slide.Export(thumbnail_path, "PNG", ScaleWidth=thumb_width, ScaleHeight=thumb_height)
+
+        print(f"  [INFO] Generated thumbnail: {thumbnail_filename} ({thumb_width}x{thumb_height})")
         return thumbnail_filename
     except Exception as e:
         print(f"  [WARN] Failed to generate thumbnail for slide {slide_index}: {e}")
