@@ -65,7 +65,7 @@
     let savingSummary = false;
 
     // LLM auto-generation state
-    let generatingFieldId = null;
+    let generatingFieldIds = new Set(); // Track multiple fields being generated in parallel
     let generatingAll = false;
     let selectedSlideIndices = [];
     let showSlideSelector = false;
@@ -207,10 +207,11 @@
     }
 
     // LLM Auto-generation functions
-    async function generateSummaryForField(fieldId) {
-        if (generatingFieldId || generatingAll) return;
+    async function generateSummaryForField(fieldId, skipSaveOnComplete = false) {
+        if (generatingFieldIds.has(fieldId)) return;
 
-        generatingFieldId = fieldId;
+        generatingFieldIds.add(fieldId);
+        generatingFieldIds = generatingFieldIds; // Trigger reactivity
         let generatedContent = "";
 
         try {
@@ -242,65 +243,34 @@
             summaryDataLLM[fieldId] = generatedContent;
             summaryDataLLM = summaryDataLLM;
 
-            // Save user version to DB (same as LLM initially)
-            await saveSummary();
+            // Save user version to DB (same as LLM initially) - skip if called from generateAll
+            if (!skipSaveOnComplete) {
+                await saveSummary();
+            }
         } catch (e) {
             console.error("Failed to generate summary", e);
-            alert(`요약 생성 실패: ${e.message}`);
+            if (!skipSaveOnComplete) {
+                alert(`요약 생성 실패: ${e.message}`);
+            }
         } finally {
-            generatingFieldId = null;
+            generatingFieldIds.delete(fieldId);
+            generatingFieldIds = generatingFieldIds; // Trigger reactivity
         }
     }
 
     async function generateAllSummaries() {
-        if (generatingFieldId || generatingAll) return;
+        if (generatingFieldIds.size > 0 || generatingAll) return;
 
         generatingAll = true;
         const sortedFields = [...settings.summary_fields].sort(
             (a, b) => a.order - b.order,
         );
 
-        for (const field of sortedFields) {
-            generatingFieldId = field.id;
-            let generatedContent = "";
+        // Generate all fields in parallel
+        await Promise.all(
+            sortedFields.map((field) => generateSummaryForField(field.id, true))
+        );
 
-            try {
-                const stream = await generateSummaryStream(
-                    projectId,
-                    field.id,
-                    selectedSlideIndices,
-                );
-                if (!stream) continue;
-
-                const reader = stream.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value, { stream: true });
-                    generatedContent += chunk;
-                    summaryData[field.id] = generatedContent;
-                    summaryData = summaryData;
-                }
-
-                // Save LLM version
-                await updateProjectSummaryLLM(
-                    projectId,
-                    field.id,
-                    generatedContent,
-                );
-                summaryDataLLM[field.id] = generatedContent;
-            } catch (e) {
-                console.error(
-                    `Failed to generate summary for ${field.name}`,
-                    e,
-                );
-            }
-        }
-
-        generatingFieldId = null;
         generatingAll = false;
         summaryDataLLM = summaryDataLLM;
         await saveSummary();
@@ -1028,7 +998,7 @@
                     {#if settings.summary_fields && settings.summary_fields.length > 0}
                         <button
                             on:click={generateAllSummaries}
-                            disabled={generatingFieldId || generatingAll}
+                            disabled={generatingFieldIds.size > 0 || generatingAll}
                             title="모든 요약 필드를 LLM으로 자동 생성"
                             class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
                                    bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700
@@ -1226,32 +1196,52 @@
                                         {/if}
                                     </div>
                                     <button
-                                        class="text-[10px] text-gray-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1"
+                                        class="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md
+                                               bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700
+                                               text-white shadow-sm hover:shadow transition-all duration-200
+                                               disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                                         on:click={() =>
                                             generateSummaryForField(field.id)}
-                                        disabled={generatingFieldId ||
+                                        disabled={generatingFieldIds.has(field.id) ||
                                             generatingAll}
-                                        title="이 항목만 재생성"
+                                        title="이 항목을 LLM으로 자동 생성"
                                     >
-                                        {#if generatingFieldId === field.id}
-                                            <span class="text-indigo-500"
-                                                >생성 중...</span
+                                        {#if generatingFieldIds.has(field.id)}
+                                            <svg
+                                                class="animate-spin w-3 h-3"
+                                                viewBox="0 0 24 24"
                                             >
+                                                <circle
+                                                    class="opacity-25"
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    stroke="currentColor"
+                                                    stroke-width="4"
+                                                    fill="none"
+                                                ></circle>
+                                                <path
+                                                    class="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                ></path>
+                                            </svg>
                                         {:else}
                                             <svg
                                                 class="w-3 h-3"
                                                 fill="none"
                                                 stroke="currentColor"
                                                 viewBox="0 0 24 24"
-                                                ><path
+                                            >
+                                                <path
                                                     stroke-linecap="round"
                                                     stroke-linejoin="round"
                                                     stroke-width="2"
-                                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                                /></svg
-                                            >
-                                            <span>재생성</span>
+                                                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                                                />
+                                            </svg>
                                         {/if}
+                                        <span>자동 생성</span>
                                     </button>
                                 </div>
 
@@ -1299,8 +1289,7 @@
 
                                 <div class="relative">
                                     <textarea
-                                        class="w-full text-base leading-relaxed p-4 border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder-gray-300 resize-y min-h-[320px] hover:border-gray-300 {generatingFieldId ===
-                                        field.id
+                                        class="w-full text-base leading-relaxed p-4 border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder-gray-300 resize-y min-h-[320px] hover:border-gray-300 {generatingFieldIds.has(field.id)
                                             ? 'bg-indigo-50/30'
                                             : 'bg-white'}"
                                         style="font-size: 15px;"
@@ -1308,10 +1297,9 @@
                                         placeholder="{field.name}에 대한 내용을 입력하세요... (자동 저장됨)"
                                         bind:value={summaryData[field.id]}
                                         on:blur={saveSummary}
-                                        disabled={generatingFieldId ===
-                                            field.id}
+                                        disabled={generatingFieldIds.has(field.id)}
                                     ></textarea>
-                                    {#if generatingFieldId === field.id}
+                                    {#if generatingFieldIds.has(field.id)}
                                         <div
                                             class="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] rounded-lg"
                                         >
