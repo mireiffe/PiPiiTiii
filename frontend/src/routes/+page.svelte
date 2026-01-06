@@ -10,6 +10,8 @@
     fetchProject,
     fetchFilters,
     downloadProject,
+    fetchSettings,
+    updateSettings,
   } from "$lib/api/project";
 
   // ============================================
@@ -63,6 +65,10 @@
   let enableUpload = false;
   let enableDownload = true;
   let allowEdit = true;
+
+  // Thumbnail toggle
+  let useThumbnails = false;
+  let loadingSettings = false;
 
   $: displayNameMap = {
     ...BUILT_IN_DISPLAY_NAMES,
@@ -195,9 +201,10 @@
 
   onMount(async () => {
     try {
-      const [projectsRes, filtersRes] = await Promise.all([
+      const [projectsRes, filtersRes, settingsRes] = await Promise.all([
         fetchProjects(),
         fetchFilters(),
+        fetchSettings(),
       ]);
 
       if (projectsRes.ok) {
@@ -226,6 +233,10 @@
           {},
         );
       }
+      if (settingsRes.ok) {
+        const settings = await settingsRes.json();
+        useThumbnails = settings.use_thumbnails || false;
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -246,6 +257,30 @@
       console.error("Failed to load project details", e);
     } finally {
       loadingDetails = false;
+    }
+  }
+
+  async function toggleThumbnailView() {
+    loadingSettings = true;
+    try {
+      // Get current settings first
+      const settingsRes = await fetchSettings();
+      if (settingsRes.ok) {
+        const settings = await settingsRes.json();
+        // Toggle the value
+        settings.use_thumbnails = !useThumbnails;
+        // Save updated settings
+        const updateRes = await updateSettings(settings);
+        if (updateRes.ok) {
+          useThumbnails = settings.use_thumbnails;
+        } else {
+          console.error("Failed to update settings");
+        }
+      }
+    } catch (e) {
+      console.error("Failed to toggle thumbnail view", e);
+    } finally {
+      loadingSettings = false;
     }
   }
 
@@ -296,7 +331,26 @@
 <div class="h-screen flex flex-col bg-gray-100 overflow-hidden">
   <div class="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shrink-0 z-10 shadow-sm">
     <h1 class="text-2xl font-bold text-gray-800">PiPiiTiii</h1>
-    <div class="flex gap-2">
+    <div class="flex gap-2 items-center">
+      <button
+        on:click={toggleThumbnailView}
+        disabled={loadingSettings}
+        class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition shadow-sm text-sm font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        title={useThumbnails ? "렌더링 보기로 전환" : "썸네일 보기로 전환"}
+      >
+        {#if useThumbnails}
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"/>
+          </svg>
+          썸네일 보기
+        {:else}
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+          </svg>
+          렌더링 보기
+        {/if}
+      </button>
       <a
         href="/settings"
         class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition shadow-sm text-sm font-medium flex items-center gap-2"
@@ -556,16 +610,28 @@
                     bind:clientWidth={thumbnailWidth}
                     style={`height: ${thumbnailHeight}px;`}
                   >
-                    <div
-                      class="absolute top-0 left-0 origin-top-left pointer-events-none"
-                      style={`width: ${baseSlideWidth}px; height: ${baseSlideHeight}px; transform: scale(${thumbnailScale});`}
-                    >
-                      {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
-                        <div class="absolute top-0 left-0">
-                          <ShapeRenderer {shape} projectId={selectedProjectId} />
-                        </div>
-                      {/each}
-                    </div>
+                    {#if useThumbnails}
+                      <img
+                        src={`/api/results/${selectedProjectId}/thumbnails/slide_${slide.slide_index}.png`}
+                        alt={`Slide ${slide.slide_index} thumbnail`}
+                        class="w-full h-full object-contain"
+                        on:error={(e) => {
+                          console.warn(`Thumbnail not found for slide ${slide.slide_index}, falling back to rendering`);
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    {:else}
+                      <div
+                        class="absolute top-0 left-0 origin-top-left pointer-events-none"
+                        style={`width: ${baseSlideWidth}px; height: ${baseSlideHeight}px; transform: scale(${thumbnailScale});`}
+                      >
+                        {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
+                          <div class="absolute top-0 left-0">
+                            <ShapeRenderer {shape} projectId={selectedProjectId} />
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
                     <a
                       href={`/viewer/${selectedProjectId}?slide=${slide.slide_index}`}
                       class="absolute inset-0 bg-blue-900 bg-opacity-0 group-hover:bg-opacity-5 transition-all flex items-center justify-center"

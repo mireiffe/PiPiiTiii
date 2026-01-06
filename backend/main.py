@@ -212,6 +212,7 @@ class DescriptionUpdate(BaseModel):
 class Settings(BaseModel):
     llm: Dict[str, str]
     summary_fields: List[Dict[str, Any]]
+    use_thumbnails: bool = False
 
 
 class SummaryData(BaseModel):
@@ -767,7 +768,8 @@ def get_settings():
                 "summary_fields": [
                     {"id": "overall_summary", "name": "종합요약", "order": 0},
                     {"id": "incident", "name": "발생현상", "order": 1}
-                ]
+                ],
+                "use_thumbnails": False
             }
             return default_settings
     except Exception as e:
