@@ -612,7 +612,7 @@
                   >
                     {#if useThumbnails}
                       <img
-                        src={`/api/results/${selectedProjectId}/thumbnails/slide_${slide.slide_index}.png`}
+                        src={`/api/results/${selectedProjectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, '0')}_thumb.png`}
                         alt={`Slide ${slide.slide_index} thumbnail`}
                         class="w-full h-full object-contain"
                         on:error={(e) => {
