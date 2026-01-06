@@ -101,3 +101,21 @@ export async function updateProjectSummary(id: string, data: Record<string, stri
         body: JSON.stringify({ data }),
     });
 }
+
+export async function generateSummaryStream(
+    projectId: string,
+    fieldId: string,
+    slideIndices: number[]
+): Promise<ReadableStream<Uint8Array> | null> {
+    const response = await apiFetch(`/api/project/${projectId}/generate_summary/${fieldId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slide_indices: slideIndices }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to generate summary: ${response.statusText}`);
+    }
+
+    return response.body;
+}

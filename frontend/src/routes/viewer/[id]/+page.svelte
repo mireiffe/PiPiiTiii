@@ -13,6 +13,7 @@
         updateSettings,
         fetchProjectSummary,
         updateProjectSummary,
+        generateSummaryStream,
     } from "$lib/api/project";
 
     const projectId = $page.params.id;
@@ -59,6 +60,17 @@
     let settings = { summary_fields: [] };
     let summaryData = {};
     let savingSummary = false;
+
+    // LLM auto-generation state
+    let generatingFieldId = null;
+    let generatingAll = false;
+    let selectedSlideIndices = [];
+    let showSlideSelector = false;
+
+    // Initialize selected slides (first 3 by default)
+    $: if (project && selectedSlideIndices.length === 0) {
+        selectedSlideIndices = project.slides.slice(0, 3).map(s => s.slide_index);
+    }
 
     // 이미지 shape 필터링
     $: imageShapes = allShapes.filter(
@@ -180,6 +192,84 @@
             alert("Error saving summary");
         } finally {
             savingSummary = false;
+        }
+    }
+
+    // LLM Auto-generation functions
+    async function generateSummaryForField(fieldId) {
+        if (generatingFieldId || generatingAll) return;
+
+        generatingFieldId = fieldId;
+        summaryData[fieldId] = '';  // Clear existing content
+
+        try {
+            const stream = await generateSummaryStream(projectId, fieldId, selectedSlideIndices);
+            if (!stream) {
+                throw new Error("No stream returned");
+            }
+
+            const reader = stream.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                summaryData[fieldId] = (summaryData[fieldId] || '') + chunk;
+                summaryData = summaryData;  // Trigger reactivity
+            }
+
+            // Save to DB after generation completes
+            await saveSummary();
+        } catch (e) {
+            console.error("Failed to generate summary", e);
+            alert(`요약 생성 실패: ${e.message}`);
+        } finally {
+            generatingFieldId = null;
+        }
+    }
+
+    async function generateAllSummaries() {
+        if (generatingFieldId || generatingAll) return;
+
+        generatingAll = true;
+        const sortedFields = [...settings.summary_fields].sort((a, b) => a.order - b.order);
+
+        for (const field of sortedFields) {
+            generatingFieldId = field.id;
+            summaryData[field.id] = '';
+
+            try {
+                const stream = await generateSummaryStream(projectId, field.id, selectedSlideIndices);
+                if (!stream) continue;
+
+                const reader = stream.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    summaryData[field.id] = (summaryData[field.id] || '') + chunk;
+                    summaryData = summaryData;
+                }
+            } catch (e) {
+                console.error(`Failed to generate summary for ${field.name}`, e);
+            }
+        }
+
+        generatingFieldId = null;
+        generatingAll = false;
+        await saveSummary();
+    }
+
+    function toggleSlideSelection(slideIndex) {
+        if (selectedSlideIndices.includes(slideIndex)) {
+            selectedSlideIndices = selectedSlideIndices.filter(i => i !== slideIndex);
+        } else if (selectedSlideIndices.length < 3) {
+            selectedSlideIndices = [...selectedSlideIndices, slideIndex];
         }
     }
 
@@ -803,22 +893,111 @@
         <div class="flex-1 overflow-y-auto">
             <!-- Summary Fields -->
             <div class="p-4 border-b border-gray-200 space-y-3">
-                <h3 class="text-sm font-bold text-gray-700 uppercase mb-3">
-                    요약 정보
-                </h3>
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-gray-700 uppercase">
+                        요약 정보
+                    </h3>
+                    {#if settings.summary_fields && settings.summary_fields.length > 0}
+                        <button
+                            class="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded transition flex items-center gap-1 disabled:opacity-50"
+                            on:click={generateAllSummaries}
+                            disabled={generatingFieldId || generatingAll}
+                            title="모든 요약 필드를 LLM으로 자동 생성"
+                        >
+                            {#if generatingAll}
+                                <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>생성 중...</span>
+                            {:else}
+                                <span>전체 자동 생성</span>
+                            {/if}
+                        </button>
+                    {/if}
+                </div>
+
+                <!-- Slide Selection for Summary -->
+                {#if settings.summary_fields && settings.summary_fields.length > 0}
+                    <div class="bg-gray-50 rounded p-2 mb-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs text-gray-600">요약용 슬라이드:</span>
+                            <button
+                                class="text-xs text-blue-600 hover:text-blue-800 underline"
+                                on:click={() => showSlideSelector = !showSlideSelector}
+                            >
+                                {showSlideSelector ? '닫기' : '변경'}
+                            </button>
+                        </div>
+                        <div class="flex gap-1 flex-wrap">
+                            {#each selectedSlideIndices.sort((a, b) => a - b) as idx}
+                                <span class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded">
+                                    슬라이드 {idx}
+                                </span>
+                            {/each}
+                            {#if selectedSlideIndices.length === 0}
+                                <span class="text-xs text-gray-400 italic">선택된 슬라이드 없음</span>
+                            {/if}
+                        </div>
+
+                        {#if showSlideSelector}
+                            <div class="mt-2 pt-2 border-t border-gray-200">
+                                <p class="text-xs text-gray-500 mb-2">최대 3개 선택 가능</p>
+                                <div class="grid grid-cols-4 gap-1 max-h-32 overflow-y-auto">
+                                    {#if project}
+                                        {#each project.slides as slide}
+                                            <button
+                                                class="text-xs p-1 rounded border transition {selectedSlideIndices.includes(slide.slide_index)
+                                                    ? 'bg-blue-500 text-white border-blue-500'
+                                                    : 'bg-white text-gray-700 border-gray-300 hover:border-blue-300'}
+                                                    {selectedSlideIndices.length >= 3 && !selectedSlideIndices.includes(slide.slide_index) ? 'opacity-50 cursor-not-allowed' : ''}"
+                                                on:click={() => toggleSlideSelection(slide.slide_index)}
+                                                disabled={selectedSlideIndices.length >= 3 && !selectedSlideIndices.includes(slide.slide_index)}
+                                            >
+                                                {slide.slide_index}
+                                            </button>
+                                        {/each}
+                                    {/if}
+                                </div>
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
+
                 {#if settings.summary_fields && settings.summary_fields.length > 0}
                     {#each settings.summary_fields.sort((a, b) => a.order - b.order) as field}
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">
-                                {field.name}
-                            </label>
-                            <textarea
-                                class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                                rows="3"
-                                placeholder="{field.name}을(를) 입력하세요..."
-                                bind:value={summaryData[field.id]}
-                                on:blur={saveSummary}
-                            ></textarea>
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="text-sm font-medium text-gray-700">
+                                    {field.name}
+                                </span>
+                                <button
+                                    class="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50"
+                                    on:click={() => generateSummaryForField(field.id)}
+                                    disabled={generatingFieldId || generatingAll}
+                                    title="LLM으로 자동 생성"
+                                >
+                                    {#if generatingFieldId === field.id}
+                                        <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span>생성 중</span>
+                                    {:else}
+                                        <span>자동생성</span>
+                                    {/if}
+                                </button>
+                            </div>
+                            <div class="relative">
+                                <textarea
+                                    class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none {generatingFieldId === field.id ? 'bg-purple-50 animate-pulse' : ''}"
+                                    rows="3"
+                                    placeholder="{field.name}을(를) 입력하세요..."
+                                    bind:value={summaryData[field.id]}
+                                    on:blur={saveSummary}
+                                    disabled={generatingFieldId === field.id}
+                                ></textarea>
+                            </div>
                         </div>
                     {/each}
                     {#if savingSummary}

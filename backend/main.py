@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from typing import List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -18,6 +18,8 @@ import ppt_parser as parsing
 from database import Database
 import asyncio
 from attributes.manager import AttributeManager
+from llm_service import LLMService
+from typing import Optional
 
 
 app = FastAPI()
@@ -209,14 +211,32 @@ class DescriptionUpdate(BaseModel):
     description: str
 
 
+class LLMConfig(BaseModel):
+    api_type: str = "openai"  # "openai" | "gemini" | "openai_compatible"
+    api_endpoint: str = "https://api.openai.com/v1"
+    model_name: str = "gpt-4o"
+
+
+class SummaryField(BaseModel):
+    id: str
+    name: str
+    order: int
+    system_prompt: str = ""
+    user_prompt: str = ""
+
+
 class Settings(BaseModel):
-    llm: Dict[str, str]
-    summary_fields: List[Dict[str, Any]]
+    llm: LLMConfig
+    summary_fields: List[SummaryField]
     use_thumbnails: bool = False
 
 
 class SummaryData(BaseModel):
     data: Dict[str, str]
+
+
+class GenerateSummaryRequest(BaseModel):
+    slide_indices: List[int]
 
 
 @app.middleware("http")
@@ -750,28 +770,43 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
         pythoncom.CoUninitialize()
 
 
+def load_settings() -> dict:
+    """Load settings from file or return defaults."""
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    else:
+        return {
+            "llm": {
+                "api_type": "openai",
+                "api_endpoint": "https://api.openai.com/v1",
+                "model_name": "gpt-4o"
+            },
+            "summary_fields": [
+                {
+                    "id": "overall_summary",
+                    "name": "종합요약",
+                    "order": 0,
+                    "system_prompt": "당신은 PPT 프레젠테이션을 분석하는 전문가입니다. 슬라이드 이미지를 보고 핵심 내용을 정확하게 파악해주세요.",
+                    "user_prompt": "이 PPT 슬라이드들의 핵심 내용을 3줄로 간결하게 요약해주세요."
+                },
+                {
+                    "id": "incident",
+                    "name": "발생현상",
+                    "order": 1,
+                    "system_prompt": "당신은 기술 문서를 분석하는 전문가입니다.",
+                    "user_prompt": "이 슬라이드에서 언급된 발생 현상이나 문제점을 요약해주세요."
+                }
+            ],
+            "use_thumbnails": True
+        }
+
+
 @app.get("/api/settings")
 def get_settings():
     """Get application settings."""
     try:
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                settings = json.load(f)
-            return settings
-        else:
-            # Return default settings
-            default_settings = {
-                "llm": {
-                    "api_endpoint": "https://api.openai.com/v1",
-                    "model_name": "gpt-4"
-                },
-                "summary_fields": [
-                    {"id": "overall_summary", "name": "종합요약", "order": 0},
-                    {"id": "incident", "name": "발생현상", "order": 1}
-                ],
-                "use_thumbnails": False
-            }
-            return default_settings
+        return load_settings()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load settings: {str(e)}")
 
@@ -805,6 +840,69 @@ def update_project_summary_endpoint(project_id: str, summary: SummaryData):
         return {"status": "success", "message": "Summary updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save summary: {str(e)}")
+
+
+@app.post("/api/project/{project_id}/generate_summary/{field_id}")
+async def generate_summary(project_id: str, field_id: str, request: GenerateSummaryRequest):
+    """
+    Generate summary using LLM with slide thumbnails.
+    Returns streaming response.
+    """
+    # Load settings
+    settings = load_settings()
+
+    # Find the field by ID
+    field = None
+    for f in settings.get("summary_fields", []):
+        if f.get("id") == field_id:
+            field = f
+            break
+
+    if not field:
+        raise HTTPException(status_code=404, detail=f"Summary field '{field_id}' not found")
+
+    # Verify project exists
+    project_dir = os.path.join(RESULT_DIR, project_id)
+    if not os.path.exists(project_dir):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Build thumbnail paths (max 3)
+    slide_indices = request.slide_indices[:3]
+    thumbnail_paths = []
+    for idx in slide_indices:
+        thumb_path = os.path.join(project_dir, "thumbnails", f"slide_{idx:03d}_thumb.png")
+        if os.path.exists(thumb_path):
+            thumbnail_paths.append(thumb_path)
+
+    if not thumbnail_paths:
+        raise HTTPException(status_code=404, detail="No thumbnails found for specified slides")
+
+    # Get prompts with defaults
+    system_prompt = field.get("system_prompt", "")
+    user_prompt = field.get("user_prompt", "")
+
+    if not system_prompt:
+        system_prompt = "당신은 PPT 프레젠테이션을 분석하는 전문가입니다."
+    if not user_prompt:
+        user_prompt = "이 슬라이드들의 내용을 요약해주세요."
+
+    # Create LLM service
+    llm_config = settings.get("llm", {})
+    llm_service = LLMService(llm_config)
+
+    # Return streaming response
+    async def stream_generator():
+        async for chunk in llm_service.generate_stream(system_prompt, user_prompt, thumbnail_paths):
+            yield chunk
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @app.get("/api/project/{project_id}/download")
