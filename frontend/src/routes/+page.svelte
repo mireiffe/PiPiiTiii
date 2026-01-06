@@ -21,11 +21,12 @@
   // Attribute fields: dynamically loaded from filters API
   //
   // Structure:
-  //   header.title    - Main title (left side of header)
-  //   header.date     - Date field (right side of header, formatted as date)
-  //   subtitle        - Secondary text below title (null to hide)
-  //   footer.left     - Array of {key, prefix?, suffix?} for left side info
-  //   footer.right    - Array of keys for badge-style display on right
+  //   header.title      - Main title (left side of header)
+  //   header.date       - Date field (right side of header, formatted as date)
+  //   subtitle          - Secondary text below title (null to hide)
+  //   footer.left       - Array of {key, prefix?, suffix?} for left side info
+  //   footer.primary    - Top row badges (key info, e.g., ["grade", "year"])
+  //   footer.secondary  - Bottom row badges (extra info, e.g., ["subject"])
   // ============================================
   const CARD_CONFIG = {
     header: {
@@ -38,7 +39,8 @@
         { key: "slide_count", suffix: " slides" },
         { key: "author", prefix: "by " },
       ],
-      right: [], // attribute keys to show as badges (e.g., ["grade", "year"])
+      primary: [], // top row: key attributes (e.g., ["grade", "year"])
+      secondary: [], // bottom row: additional info (e.g., ["subject"])
     },
   };
 
@@ -292,12 +294,13 @@
   };
 
   /**
-   * Get badge items for footer right section based on config
+   * Get badge items for a given keys array
    * @param {any} project
+   * @param {string[]} keys
    */
-  const getFooterBadges = (project) => {
-    if (!project) return [];
-    return CARD_CONFIG.footer.right
+  const getBadges = (project, keys) => {
+    if (!project || !keys) return [];
+    return keys
       .map((key) => {
         const value = formatValue(project[key]);
         if (!value) return null;
@@ -309,6 +312,11 @@
       })
       .filter(Boolean);
   };
+
+  /** @param {any} project */
+  const getPrimaryBadges = (project) => getBadges(project, CARD_CONFIG.footer.primary);
+  /** @param {any} project */
+  const getSecondaryBadges = (project) => getBadges(project, CARD_CONFIG.footer.secondary);
 
   function handleSortChange(key) {
     if (sortBy === key) {
@@ -435,7 +443,8 @@
         {:else}
           <div class="divide-y divide-gray-100">
             {#each filteredProjects as project}
-              {@const footerBadges = getFooterBadges(project)}
+              {@const primaryBadges = getPrimaryBadges(project)}
+              {@const secondaryBadges = getSecondaryBadges(project)}
               <button
                 class="w-full text-left p-4 hover:bg-gray-50 transition flex flex-col gap-1 {selectedProjectId ===
                 project.id
@@ -463,10 +472,10 @@
                   {/if}
                 {/if}
 
-                <!-- Footer: left info + right badges -->
-                <div class="flex items-end justify-between mt-2 gap-2">
+                <!-- Footer -->
+                <div class="flex items-end justify-between mt-2 gap-3">
                   <!-- Footer Left -->
-                  <div class="flex items-center gap-2 text-xs text-gray-400 mb-0.5">
+                  <div class="flex items-center gap-2 text-xs text-gray-400 shrink-0">
                     {#each CARD_CONFIG.footer.left as field, i}
                       {@const fieldValue = getFieldValue(project, field)}
                       {#if fieldValue}
@@ -481,25 +490,31 @@
                     {/each}
                   </div>
 
-                  <!-- Footer Right (Badges) -->
-                  {#if footerBadges.length}
-                    <div class="flex flex-wrap gap-1.5 justify-end">
-                      {#each footerBadges as badge}
-                        <div
-                          class="inline-flex items-center text-[11px] leading-3 border border-blue-200 rounded overflow-hidden"
-                        >
-                          <span
-                            class="bg-blue-50 px-2 py-1 text-blue-600 font-medium border-r border-blue-200"
-                          >
-                            {badge.label}
-                          </span>
-                          <span
-                            class="bg-white px-2 py-1 text-blue-900 font-medium"
-                          >
-                            {badge.value}
-                          </span>
+                  <!-- Footer Right (Two-row badges) -->
+                  {#if primaryBadges.length || secondaryBadges.length}
+                    <div class="flex flex-col items-end gap-1 min-w-0">
+                      <!-- Primary row (key info) -->
+                      {#if primaryBadges.length}
+                        <div class="flex flex-wrap gap-1 justify-end">
+                          {#each primaryBadges as badge}
+                            <span class="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                              <span class="opacity-70">{badge.label}</span>
+                              <span>{badge.value}</span>
+                            </span>
+                          {/each}
                         </div>
-                      {/each}
+                      {/if}
+                      <!-- Secondary row (extra info) -->
+                      {#if secondaryBadges.length}
+                        <div class="flex flex-wrap gap-1 justify-end">
+                          {#each secondaryBadges as badge}
+                            <span class="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                              <span class="opacity-60">{badge.label}</span>
+                              <span>{badge.value}</span>
+                            </span>
+                          {/each}
+                        </div>
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -550,22 +565,28 @@
               ).toLocaleDateString()}
             </p>
 
-            {#if getFooterBadges(selectedProjectDetails).length}
-              <div class="flex flex-wrap gap-1.5 mt-2">
-                {#each getFooterBadges(selectedProjectDetails) as badge}
-                  <div
-                    class="inline-flex items-center text-[11px] leading-3 border border-blue-200 rounded overflow-hidden"
-                  >
-                    <span
-                      class="bg-blue-50 px-2 py-1 text-blue-600 font-medium border-r border-blue-200"
-                    >
-                      {badge.label}
-                    </span>
-                    <span class="bg-white px-2 py-1 text-blue-900 font-medium">
-                      {badge.value}
-                    </span>
+            {#if getPrimaryBadges(selectedProjectDetails).length || getSecondaryBadges(selectedProjectDetails).length}
+              <div class="flex flex-col gap-1 mt-2">
+                {#if getPrimaryBadges(selectedProjectDetails).length}
+                  <div class="flex flex-wrap gap-1">
+                    {#each getPrimaryBadges(selectedProjectDetails) as badge}
+                      <span class="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                        <span class="opacity-70">{badge.label}</span>
+                        <span>{badge.value}</span>
+                      </span>
+                    {/each}
                   </div>
-                {/each}
+                {/if}
+                {#if getSecondaryBadges(selectedProjectDetails).length}
+                  <div class="flex flex-wrap gap-1">
+                    {#each getSecondaryBadges(selectedProjectDetails) as badge}
+                      <span class="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                        <span class="opacity-60">{badge.label}</span>
+                        <span>{badge.value}</span>
+                      </span>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {/if}
           </div>
