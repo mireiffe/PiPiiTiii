@@ -497,9 +497,11 @@
                       {#if primaryBadges.length}
                         <div class="flex flex-wrap gap-1 justify-end">
                           {#each primaryBadges as badge}
-                            <span class="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
-                              <span class="opacity-70">{badge.label}</span>
-                              <span>{badge.value}</span>
+                            <span
+                              class="text-[10px] leading-none px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium cursor-default"
+                              title={badge.label}
+                            >
+                              {badge.value}
                             </span>
                           {/each}
                         </div>
@@ -508,9 +510,11 @@
                       {#if secondaryBadges.length}
                         <div class="flex flex-wrap gap-1 justify-end">
                           {#each secondaryBadges as badge}
-                            <span class="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                              <span class="opacity-60">{badge.label}</span>
-                              <span>{badge.value}</span>
+                            <span
+                              class="text-[10px] leading-none px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 cursor-default"
+                              title={badge.label}
+                            >
+                              {badge.value}
                             </span>
                           {/each}
                         </div>
@@ -570,9 +574,11 @@
                 {#if getPrimaryBadges(selectedProjectDetails).length}
                   <div class="flex flex-wrap gap-1">
                     {#each getPrimaryBadges(selectedProjectDetails) as badge}
-                      <span class="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
-                        <span class="opacity-70">{badge.label}</span>
-                        <span>{badge.value}</span>
+                      <span
+                        class="text-[10px] leading-none px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium cursor-default"
+                        title={badge.label}
+                      >
+                        {badge.value}
                       </span>
                     {/each}
                   </div>
@@ -580,9 +586,11 @@
                 {#if getSecondaryBadges(selectedProjectDetails).length}
                   <div class="flex flex-wrap gap-1">
                     {#each getSecondaryBadges(selectedProjectDetails) as badge}
-                      <span class="inline-flex items-center gap-1 text-[10px] leading-none px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
-                        <span class="opacity-60">{badge.label}</span>
-                        <span>{badge.value}</span>
+                      <span
+                        class="text-[10px] leading-none px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 cursor-default"
+                        title={badge.label}
+                      >
+                        {badge.value}
                       </span>
                     {/each}
                   </div>
