@@ -26,6 +26,14 @@ class Database:
                 summary_data TEXT
             )
         """)
+
+        # Migration: Add summary_data column if it doesn't exist
+        cursor.execute("PRAGMA table_info(projects)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "summary_data" not in columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN summary_data TEXT")
+            print("Added summary_data column to projects table")
+
         conn.commit()
         conn.close()
 

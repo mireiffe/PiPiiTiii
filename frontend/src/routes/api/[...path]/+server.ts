@@ -14,10 +14,16 @@ const proxy: RequestHandler = async ({ request, params, url }) => {
     headers.delete("host");
     headers.delete("origin");
 
+    // Read body once and pass it to fetch
+    let body: any = undefined;
+    if (request.method !== "GET" && request.method !== "HEAD") {
+        body = await request.text();
+    }
+
     const res = await fetch(targetUrl, {
         method: request.method,
         headers,
-        body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+        body,
     });
 
     const responseHeaders = new Headers(res.headers);
