@@ -20,7 +20,7 @@ RESULT_DIR = os.path.join(BASE_DIR, "results")
 db = Database(DB_PATH)
 
 
-def generate_slide_thumbnail(slide, slide_index, thumbnail_dir, max_dimension=1280):
+def generate_slide_thumbnail(slide, slide_index, thumbnail_dir, max_dimension=1920):
     """
     Generate a thumbnail image for a single slide.
     The thumbnail maintains the slide's aspect ratio with the longest side set to max_dimension.
