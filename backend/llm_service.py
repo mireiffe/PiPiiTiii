@@ -127,15 +127,11 @@ class LLMService:
     ) -> AsyncGenerator[str, None]:
         """Generate stream using Google Gemini SDK"""
         try:
-            import google.generativeai as genai
+            from google import genai
+            from google.genai import types
             from PIL import Image
 
-            genai.configure(api_key=self.api_key)
-
-            model = genai.GenerativeModel(
-                model_name=self.model_name,
-                system_instruction=system_prompt
-            )
+            client = genai.Client(api_key=self.api_key)
 
             # Build content with images
             content = []
@@ -147,9 +143,12 @@ class LLMService:
 
             content.append(user_prompt)
 
-            response = await model.generate_content_async(
-                content,
-                stream=True
+            response = await client.aio.models.generate_content_stream(
+                model=self.model_name,
+                contents=content,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt
+                )
             )
 
             async for chunk in response:
@@ -157,7 +156,7 @@ class LLMService:
                     yield chunk.text
 
         except ImportError:
-            yield "Error: google-generativeai package not installed. Run: pip install google-generativeai pillow"
+            yield "Error: google-genai package not installed. Run: pip install google-genai pillow"
         except Exception as e:
             yield f"Error: {str(e)}"
 
