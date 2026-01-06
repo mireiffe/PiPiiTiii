@@ -119,3 +119,11 @@ export async function generateSummaryStream(
 
     return response.body;
 }
+
+export async function updateProjectSummaryLLM(id: string, fieldId: string, content: string) {
+    return apiFetch(`/api/project/${id}/summary_llm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field_id: fieldId, content }),
+    });
+}

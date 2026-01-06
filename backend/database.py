@@ -34,6 +34,11 @@ class Database:
             cursor.execute("ALTER TABLE projects ADD COLUMN summary_data TEXT")
             print("Added summary_data column to projects table")
 
+        # Migration: Add summary_data_llm column for LLM-generated content
+        if "summary_data_llm" not in columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN summary_data_llm TEXT")
+            print("Added summary_data_llm column to projects table")
+
         conn.commit()
         conn.close()
 
@@ -285,23 +290,51 @@ class Database:
             conn.close()
 
     def get_project_summary(self, project_id: str) -> Optional[Dict[str, Any]]:
-        """Get summary data for a project."""
+        """Get summary data for a project (both user and LLM versions)."""
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT summary_data FROM projects WHERE id = ?", (project_id,))
+        cursor.execute(
+            "SELECT summary_data, summary_data_llm FROM projects WHERE id = ?",
+            (project_id,),
+        )
         row = cursor.fetchone()
         conn.close()
-        if row and row[0]:
-            return json.loads(row[0])
-        return {}
+        result = {"user": {}, "llm": {}}
+        if row:
+            if row[0]:
+                result["user"] = json.loads(row[0])
+            if row[1]:
+                result["llm"] = json.loads(row[1])
+        return result
 
     def update_project_summary(self, project_id: str, summary_data: Dict[str, Any]):
-        """Update summary data for a project."""
+        """Update user summary data for a project."""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE projects SET summary_data = ? WHERE id = ?",
-            (json.dumps(summary_data, ensure_ascii=False), project_id)
+            (json.dumps(summary_data, ensure_ascii=False), project_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_project_summary_llm(self, project_id: str, field_id: str, content: str):
+        """Update LLM-generated summary for a specific field."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        # Get existing LLM data
+        cursor.execute(
+            "SELECT summary_data_llm FROM projects WHERE id = ?", (project_id,)
+        )
+        row = cursor.fetchone()
+        llm_data = {}
+        if row and row[0]:
+            llm_data = json.loads(row[0])
+        # Update specific field
+        llm_data[field_id] = content
+        cursor.execute(
+            "UPDATE projects SET summary_data_llm = ? WHERE id = ?",
+            (json.dumps(llm_data, ensure_ascii=False), project_id),
         )
         conn.commit()
         conn.close()

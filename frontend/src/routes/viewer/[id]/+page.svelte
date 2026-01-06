@@ -14,6 +14,7 @@
         fetchProjectSummary,
         updateProjectSummary,
         generateSummaryStream,
+        updateProjectSummaryLLM,
     } from "$lib/api/project";
 
     const projectId = $page.params.id;
@@ -50,7 +51,7 @@
     let otherShapesExpanded = false;
 
     // Get allowEdit from query parameter, default to false
-    $: allowEdit = $page.url.searchParams.get('allowEdit') === 'true';
+    $: allowEdit = $page.url.searchParams.get("allowEdit") === "true";
 
     // Resizable pane
     let rightPaneWidth = 400;
@@ -58,7 +59,8 @@
 
     // Settings and summary
     let settings = { summary_fields: [] };
-    let summaryData = {};
+    let summaryData = {};  // User version (displayed/edited)
+    let summaryDataLLM = {};  // LLM-generated version (original)
     let savingSummary = false;
 
     // LLM auto-generation state
@@ -67,9 +69,14 @@
     let selectedSlideIndices = [];
     let showSlideSelector = false;
 
+    // Version comparison state
+    let comparingFieldId = null;  // Which field is being compared
+
     // Initialize selected slides (first 3 by default)
     $: if (project && selectedSlideIndices.length === 0) {
-        selectedSlideIndices = project.slides.slice(0, 3).map(s => s.slide_index);
+        selectedSlideIndices = project.slides
+            .slice(0, 3)
+            .map((s) => s.slide_index);
     }
 
     // 이미지 shape 필터링
@@ -171,7 +178,10 @@
         try {
             const res = await fetchProjectSummary(projectId);
             if (res.ok) {
-                summaryData = await res.json();
+                const data = await res.json();
+                // New format: { user: {...}, llm: {...} }
+                summaryData = data.user || {};
+                summaryDataLLM = data.llm || {};
             }
         } catch (e) {
             console.error("Failed to load summary", e);
@@ -200,10 +210,14 @@
         if (generatingFieldId || generatingAll) return;
 
         generatingFieldId = fieldId;
-        summaryData[fieldId] = '';  // Clear existing content
+        let generatedContent = "";
 
         try {
-            const stream = await generateSummaryStream(projectId, fieldId, selectedSlideIndices);
+            const stream = await generateSummaryStream(
+                projectId,
+                fieldId,
+                selectedSlideIndices,
+            );
             if (!stream) {
                 throw new Error("No stream returned");
             }
@@ -216,11 +230,18 @@
                 if (done) break;
 
                 const chunk = decoder.decode(value, { stream: true });
-                summaryData[fieldId] = (summaryData[fieldId] || '') + chunk;
-                summaryData = summaryData;  // Trigger reactivity
+                generatedContent += chunk;
+                // Update user data for live display
+                summaryData[fieldId] = generatedContent;
+                summaryData = summaryData; // Trigger reactivity
             }
 
-            // Save to DB after generation completes
+            // Save LLM version to DB
+            await updateProjectSummaryLLM(projectId, fieldId, generatedContent);
+            summaryDataLLM[fieldId] = generatedContent;
+            summaryDataLLM = summaryDataLLM;
+
+            // Save user version to DB (same as LLM initially)
             await saveSummary();
         } catch (e) {
             console.error("Failed to generate summary", e);
@@ -234,14 +255,20 @@
         if (generatingFieldId || generatingAll) return;
 
         generatingAll = true;
-        const sortedFields = [...settings.summary_fields].sort((a, b) => a.order - b.order);
+        const sortedFields = [...settings.summary_fields].sort(
+            (a, b) => a.order - b.order,
+        );
 
         for (const field of sortedFields) {
             generatingFieldId = field.id;
-            summaryData[field.id] = '';
+            let generatedContent = "";
 
             try {
-                const stream = await generateSummaryStream(projectId, field.id, selectedSlideIndices);
+                const stream = await generateSummaryStream(
+                    projectId,
+                    field.id,
+                    selectedSlideIndices,
+                );
                 if (!stream) continue;
 
                 const reader = stream.getReader();
@@ -252,22 +279,49 @@
                     if (done) break;
 
                     const chunk = decoder.decode(value, { stream: true });
-                    summaryData[field.id] = (summaryData[field.id] || '') + chunk;
+                    generatedContent += chunk;
+                    summaryData[field.id] = generatedContent;
                     summaryData = summaryData;
                 }
+
+                // Save LLM version
+                await updateProjectSummaryLLM(projectId, field.id, generatedContent);
+                summaryDataLLM[field.id] = generatedContent;
             } catch (e) {
-                console.error(`Failed to generate summary for ${field.name}`, e);
+                console.error(
+                    `Failed to generate summary for ${field.name}`,
+                    e,
+                );
             }
         }
 
         generatingFieldId = null;
         generatingAll = false;
+        summaryDataLLM = summaryDataLLM;
         await saveSummary();
+    }
+
+    function toggleCompare(fieldId) {
+        if (comparingFieldId === fieldId) {
+            comparingFieldId = null;
+        } else {
+            comparingFieldId = fieldId;
+        }
+    }
+
+    function restoreLLMVersion(fieldId) {
+        if (summaryDataLLM[fieldId]) {
+            summaryData[fieldId] = summaryDataLLM[fieldId];
+            summaryData = summaryData;
+            saveSummary();
+        }
     }
 
     function toggleSlideSelection(slideIndex) {
         if (selectedSlideIndices.includes(slideIndex)) {
-            selectedSlideIndices = selectedSlideIndices.filter(i => i !== slideIndex);
+            selectedSlideIndices = selectedSlideIndices.filter(
+                (i) => i !== slideIndex,
+            );
         } else if (selectedSlideIndices.length < 3) {
             selectedSlideIndices = [...selectedSlideIndices, slideIndex];
         }
@@ -646,12 +700,14 @@
                         >
                             {#if useThumbnails}
                                 <img
-                                    src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, '0')}_thumb.png`}
+                                    src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, "0")}_thumb.png`}
                                     alt={`Slide ${slide.slide_index} thumbnail`}
                                     class="w-full h-full object-contain"
                                     on:error={(e) => {
-                                        console.warn(`Thumbnail not found for slide ${slide.slide_index}`);
-                                        e.target.style.display = 'none';
+                                        console.warn(
+                                            `Thumbnail not found for slide ${slide.slide_index}`,
+                                        );
+                                        e.target.style.display = "none";
                                     }}
                                 />
                             {:else}
@@ -663,7 +719,10 @@
                                 >
                                     {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
                                         <div class="absolute top-0 left-0">
-                                            <ShapeRenderer {shape} {projectId} />
+                                            <ShapeRenderer
+                                                {shape}
+                                                {projectId}
+                                            />
                                         </div>
                                     {/each}
                                 </div>
@@ -729,17 +788,44 @@
                     on:click={toggleThumbnailView}
                     disabled={loadingSettings}
                     class="bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1 rounded text-sm transition whitespace-nowrap flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={useThumbnails ? "렌더링 보기로 전환" : "썸네일 보기로 전환"}
+                    title={useThumbnails
+                        ? "렌더링 보기로 전환"
+                        : "썸네일 보기로 전환"}
                 >
                     {#if useThumbnails}
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"/>
+                        <svg
+                            class="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"
+                            />
                         </svg>
                         <span>썸네일</span>
                     {:else}
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        <svg
+                            class="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                            />
                         </svg>
                         <span>렌더링</span>
                     {/if}
@@ -837,19 +923,22 @@
                     >
                         {#if useThumbnails}
                             <img
-                                src={`/api/results/${projectId}/thumbnails/slide_${currentSlide.slide_index.toString().padStart(3, '0')}_thumb.png`}
+                                src={`/api/results/${projectId}/thumbnails/slide_${currentSlide.slide_index.toString().padStart(3, "0")}_thumb.png`}
                                 alt={`Slide ${currentSlide.slide_index} thumbnail`}
                                 class="w-full h-full object-contain"
                                 on:error={(e) => {
-                                    console.warn(`Thumbnail not found for slide ${currentSlide.slide_index}, falling back to rendering`);
-                                    e.target.style.display = 'none';
+                                    console.warn(
+                                        `Thumbnail not found for slide ${currentSlide.slide_index}, falling back to rendering`,
+                                    );
+                                    e.target.style.display = "none";
                                 }}
                             />
                         {:else}
                             {#each sortedShapes as shape (shape.shape_index)}
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
-                                    on:mousedown={(e) => handleMouseDown(e, shape)}
+                                    on:mousedown={(e) =>
+                                        handleMouseDown(e, shape)}
                                     class="absolute"
                                     style={`
                                         left: 0;
@@ -876,10 +965,29 @@
 
     <!-- Resize Handle -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <!-- Resize Handle -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
-        class="w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors shrink-0"
+        class="w-4 -ml-2 z-20 flex items-center justify-center cursor-col-resize group shrink-0 relative"
         on:mousedown={startResize}
-    ></div>
+    >
+        <div
+            class="absolute inset-y-0 left-1/2 w-0.5 bg-gray-200 group-hover:bg-blue-400 transition-colors"
+        ></div>
+        <div
+            class="w-4 h-8 bg-white border border-gray-300 rounded shadow-sm flex flex-col items-center justify-center gap-0.5 z-10 group-hover:border-blue-400 group-hover:text-blue-500"
+        >
+            <div
+                class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
+            ></div>
+            <div
+                class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
+            ></div>
+            <div
+                class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
+            ></div>
+        </div>
+    </div>
 
     <!-- Right Sidebar -->
     <div
@@ -890,27 +998,62 @@
             <h2 class="font-bold text-gray-800">프로젝트 정보</h2>
         </div>
 
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 overflow-y-auto min-h-0">
             <!-- Summary Fields -->
-            <div class="p-4 border-b border-gray-200 space-y-3">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-bold text-gray-700 uppercase">
-                        요약 정보
+            <div class="p-4 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3
+                        class="text-sm font-bold text-gray-800 flex items-center gap-2"
+                    >
+                        <span>📄 요약 정보</span>
+                        {#if savingSummary}
+                            <span
+                                class="text-xs font-normal text-gray-400 animate-pulse"
+                                >저장 중...</span
+                            >
+                        {/if}
                     </h3>
                     {#if settings.summary_fields && settings.summary_fields.length > 0}
                         <button
-                            class="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded transition flex items-center gap-1 disabled:opacity-50"
+                            class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-3 py-1.5 rounded-full transition flex items-center gap-1.5 font-medium disabled:opacity-50"
                             on:click={generateAllSummaries}
                             disabled={generatingFieldId || generatingAll}
                             title="모든 요약 필드를 LLM으로 자동 생성"
                         >
                             {#if generatingAll}
-                                <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                <svg
+                                    class="animate-spin h-3 w-3"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <circle
+                                        class="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        stroke-width="4"
+                                        fill="none"
+                                    ></circle>
+                                    <path
+                                        class="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    ></path>
                                 </svg>
                                 <span>생성 중...</span>
                             {:else}
+                                <svg
+                                    class="w-3 h-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    ><path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                                    /></svg
+                                >
                                 <span>전체 자동 생성</span>
                             {/if}
                         </button>
@@ -919,42 +1062,96 @@
 
                 <!-- Slide Selection for Summary -->
                 {#if settings.summary_fields && settings.summary_fields.length > 0}
-                    <div class="bg-gray-50 rounded p-2 mb-3">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs text-gray-600">요약용 슬라이드:</span>
-                            <button
-                                class="text-xs text-blue-600 hover:text-blue-800 underline"
-                                on:click={() => showSlideSelector = !showSlideSelector}
+                    <div
+                        class="bg-gray-50 rounded-lg border border-gray-100 overflow-hidden"
+                    >
+                        <button
+                            class="w-full flex items-center justify-between p-3 text-left hover:bg-gray-100 transition-colors"
+                            on:click={() =>
+                                (showSlideSelector = !showSlideSelector)}
+                        >
+                            <div
+                                class="flex items-center gap-2 overflow-hidden"
                             >
-                                {showSlideSelector ? '닫기' : '변경'}
-                            </button>
-                        </div>
-                        <div class="flex gap-1 flex-wrap">
-                            {#each selectedSlideIndices.sort((a, b) => a - b) as idx}
-                                <span class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded">
-                                    슬라이드 {idx}
-                                </span>
-                            {/each}
-                            {#if selectedSlideIndices.length === 0}
-                                <span class="text-xs text-gray-400 italic">선택된 슬라이드 없음</span>
-                            {/if}
-                        </div>
+                                <span
+                                    class="text-xs font-semibold text-gray-500 whitespace-nowrap"
+                                    >참조 슬라이드:</span
+                                >
+                                <div class="flex gap-1 overflow-hidden">
+                                    {#if selectedSlideIndices.length === 0}
+                                        <span
+                                            class="text-xs text-gray-400 italic"
+                                            >선택 없음</span
+                                        >
+                                    {:else}
+                                        {#each selectedSlideIndices.sort((a, b) => a - b) as idx}
+                                            <span
+                                                class="bg-white border border-gray-200 text-gray-600 text-[10px] px-1.5 py-0.5 rounded shadow-sm"
+                                            >
+                                                #{idx}
+                                            </span>
+                                        {/each}
+                                    {/if}
+                                </div>
+                            </div>
+                            <svg
+                                class="w-4 h-4 text-gray-400 transform transition-transform {showSlideSelector
+                                    ? 'rotate-180'
+                                    : ''}"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                ><path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M19 9l-7 7-7-7"
+                                /></svg
+                            >
+                        </button>
 
                         {#if showSlideSelector}
-                            <div class="mt-2 pt-2 border-t border-gray-200">
-                                <p class="text-xs text-gray-500 mb-2">최대 3개 선택 가능</p>
-                                <div class="grid grid-cols-4 gap-1 max-h-32 overflow-y-auto">
+                            <div
+                                class="p-3 bg-white border-t border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200"
+                            >
+                                <div
+                                    class="flex items-center justify-between mb-2"
+                                >
+                                    <p class="text-[10px] text-gray-400">
+                                        최대 3개까지 선택하여 요약에 참조합니다.
+                                    </p>
+                                </div>
+                                <div
+                                    class="grid grid-cols-5 gap-1 max-h-32 overflow-y-auto p-1"
+                                >
                                     {#if project}
                                         {#each project.slides as slide}
                                             <button
-                                                class="text-xs p-1 rounded border transition {selectedSlideIndices.includes(slide.slide_index)
-                                                    ? 'bg-blue-500 text-white border-blue-500'
-                                                    : 'bg-white text-gray-700 border-gray-300 hover:border-blue-300'}
-                                                    {selectedSlideIndices.length >= 3 && !selectedSlideIndices.includes(slide.slide_index) ? 'opacity-50 cursor-not-allowed' : ''}"
-                                                on:click={() => toggleSlideSelection(slide.slide_index)}
-                                                disabled={selectedSlideIndices.length >= 3 && !selectedSlideIndices.includes(slide.slide_index)}
+                                                class="text-xs p-1.5 rounded border transition flex flex-col items-center justify-center gap-1 {selectedSlideIndices.includes(
+                                                    slide.slide_index,
+                                                )
+                                                    ? 'bg-blue-50 text-blue-600 border-blue-200 ring-1 ring-blue-100'
+                                                    : 'bg-white text-gray-500 border-gray-100 hover:border-gray-300 hover:bg-gray-50'}
+                                                        {selectedSlideIndices.length >=
+                                                    3 &&
+                                                !selectedSlideIndices.includes(
+                                                    slide.slide_index,
+                                                )
+                                                    ? 'opacity-40 cursor-not-allowed'
+                                                    : ''}"
+                                                on:click={() =>
+                                                    toggleSlideSelection(
+                                                        slide.slide_index,
+                                                    )}
+                                                disabled={selectedSlideIndices.length >=
+                                                    3 &&
+                                                    !selectedSlideIndices.includes(
+                                                        slide.slide_index,
+                                                    )}
                                             >
-                                                {slide.slide_index}
+                                                <span class="font-medium"
+                                                    >{slide.slide_index}</span
+                                                >
                                             </button>
                                         {/each}
                                     {/if}
@@ -965,195 +1162,368 @@
                 {/if}
 
                 {#if settings.summary_fields && settings.summary_fields.length > 0}
-                    {#each settings.summary_fields.sort((a, b) => a.order - b.order) as field}
-                        <div>
-                            <div class="flex items-center justify-between mb-1">
-                                <span class="text-sm font-medium text-gray-700">
-                                    {field.name}
-                                </span>
-                                <button
-                                    class="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 disabled:opacity-50"
-                                    on:click={() => generateSummaryForField(field.id)}
-                                    disabled={generatingFieldId || generatingAll}
-                                    title="LLM으로 자동 생성"
+                    <div class="space-y-4">
+                        {#each settings.summary_fields.sort((a, b) => a.order - b.order) as field}
+                            <div class="group">
+                                <div
+                                    class="flex items-center justify-between mb-1.5 px-0.5"
                                 >
+                                    <div class="flex items-center gap-2">
+                                        <label
+                                            class="text-xs font-semibold text-gray-600 uppercase tracking-wider"
+                                        >
+                                            {field.name}
+                                        </label>
+                                        <!-- Compare button - shows when LLM version exists and differs from user version -->
+                                        {#if summaryDataLLM[field.id] && summaryDataLLM[field.id] !== summaryData[field.id]}
+                                            <button
+                                                class="text-[9px] px-1.5 py-0.5 rounded-full transition-all flex items-center gap-0.5 {comparingFieldId === field.id
+                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                                    : 'bg-gray-100 text-gray-500 hover:bg-amber-50 hover:text-amber-600 border border-transparent hover:border-amber-200'}"
+                                                on:click={() => toggleCompare(field.id)}
+                                                title={comparingFieldId === field.id ? "비교 닫기" : "LLM 버전과 비교"}
+                                            >
+                                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                                </svg>
+                                                <span>{comparingFieldId === field.id ? "닫기" : "비교"}</span>
+                                            </button>
+                                        {/if}
+                                    </div>
+                                    <button
+                                        class="text-[10px] text-gray-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1"
+                                        on:click={() =>
+                                            generateSummaryForField(field.id)}
+                                        disabled={generatingFieldId ||
+                                            generatingAll}
+                                        title="이 항목만 재생성"
+                                    >
+                                        {#if generatingFieldId === field.id}
+                                            <span class="text-indigo-500"
+                                                >생성 중...</span
+                                            >
+                                        {:else}
+                                            <svg
+                                                class="w-3 h-3"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                                ><path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                                /></svg
+                                            >
+                                            <span>재생성</span>
+                                        {/if}
+                                    </button>
+                                </div>
+
+                                <!-- Comparison View -->
+                                {#if comparingFieldId === field.id && summaryDataLLM[field.id]}
+                                    <div class="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <span class="text-[10px] font-medium text-amber-700">LLM 생성 버전</span>
+                                            <button
+                                                class="text-[9px] px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded transition-colors flex items-center gap-1"
+                                                on:click={() => restoreLLMVersion(field.id)}
+                                                title="LLM 버전으로 되돌리기"
+                                            >
+                                                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                                <span>이 버전으로 복원</span>
+                                            </button>
+                                        </div>
+                                        <div class="text-xs text-amber-900/80 whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+                                            {summaryDataLLM[field.id]}
+                                        </div>
+                                    </div>
+                                {/if}
+
+                                <div class="relative">
+                                    <textarea
+                                        class="w-full text-sm leading-relaxed p-3 border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder-gray-300 resize-y min-h-[80px] hover:border-gray-300 {generatingFieldId ===
+                                        field.id
+                                            ? 'bg-indigo-50/30'
+                                            : 'bg-white'}"
+                                        rows="3"
+                                        placeholder="{field.name}에 대한 내용을 입력하세요..."
+                                        bind:value={summaryData[field.id]}
+                                        on:blur={saveSummary}
+                                        disabled={generatingFieldId ===
+                                            field.id}
+                                    ></textarea>
                                     {#if generatingFieldId === field.id}
-                                        <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        <span>생성 중</span>
-                                    {:else}
-                                        <span>자동생성</span>
+                                        <div
+                                            class="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] rounded-lg"
+                                        >
+                                            <div
+                                                class="flex items-center gap-2 text-indigo-600 text-sm font-medium"
+                                            >
+                                                <svg
+                                                    class="animate-spin h-4 w-4"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <circle
+                                                        class="opacity-25"
+                                                        cx="12"
+                                                        cy="12"
+                                                        r="10"
+                                                        stroke="currentColor"
+                                                        stroke-width="4"
+                                                        fill="none"
+                                                    ></circle>
+                                                    <path
+                                                        class="opacity-75"
+                                                        fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                    ></path>
+                                                </svg>
+                                                작성 중...
+                                            </div>
+                                        </div>
                                     {/if}
-                                </button>
+                                </div>
                             </div>
-                            <div class="relative">
-                                <textarea
-                                    class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none {generatingFieldId === field.id ? 'bg-purple-50 animate-pulse' : ''}"
-                                    rows="3"
-                                    placeholder="{field.name}을(를) 입력하세요..."
-                                    bind:value={summaryData[field.id]}
-                                    on:blur={saveSummary}
-                                    disabled={generatingFieldId === field.id}
-                                ></textarea>
-                            </div>
-                        </div>
-                    {/each}
-                    {#if savingSummary}
-                        <div class="text-xs text-gray-500 italic">저장 중...</div>
-                    {/if}
+                        {/each}
+                    </div>
                 {:else}
-                    <div class="text-sm text-gray-400 italic">
-                        설정에서 요약 필드를 추가하세요.
+                    <div
+                        class="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200"
+                    >
+                        <p class="text-sm text-gray-500 mb-1">
+                            정보 필드가 없습니다.
+                        </p>
+                        <p class="text-xs text-gray-400">
+                            설정에서 요약 필드를 추가해주세요.
+                        </p>
                     </div>
                 {/if}
             </div>
+        </div>
 
-            <!-- Object List (Collapsible) -->
-            <div class="p-4">
-                <button
-                    class="w-full flex items-center justify-between px-2 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded mb-2"
-                    on:click={() => otherShapesExpanded = !otherShapesExpanded}
-                >
-                    <span>객체 목록 ({allShapes.length})</span>
+        <!-- Object List (Bottom Sticky) -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+            class="shrink-0 border-t border-gray-200 bg-white transition-all duration-300 ease-in-out flex flex-col"
+            style="max-height: {otherShapesExpanded ? '50%' : 'auto'};"
+        >
+            <div
+                class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-100 {otherShapesExpanded
+                    ? 'bg-gray-50'
+                    : ''}"
+                on:click={() => (otherShapesExpanded = !otherShapesExpanded)}
+            >
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-700">📦 객체 목록</span>
                     <span
-                        class="text-gray-400 transition-transform duration-200"
-                        class:rotate-180={otherShapesExpanded}
+                        class="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded-full font-mono"
+                        >{allShapes.length}</span
                     >
-                        ▼
-                    </span>
-                </button>
+                </div>
+                <span
+                    class="text-gray-400 transition-transform duration-300"
+                    class:rotate-180={otherShapesExpanded}
+                >
+                    ▲
+                </span>
+            </div>
 
-                {#if otherShapesExpanded}
+            {#if otherShapesExpanded}
+                <div class="overflow-y-auto flex-1 p-0 min-h-0 bg-gray-50/50">
                     {#if allShapes.length === 0}
-                        <div class="text-gray-400 text-sm text-center mt-4">
-                            No objects found
+                        <div
+                            class="p-8 text-gray-400 text-sm text-center flex flex-col items-center gap-2"
+                        >
+                            <span class="text-2xl">📭</span>
+                            <span>발견된 객체가 없습니다</span>
                         </div>
                     {:else}
-                        <!-- 이미지 객체 -->
-                        {#if imageShapes.length > 0}
-                            <div class="mb-4">
-                                <div class="flex items-center gap-2 px-2 py-1 mb-2">
-                                    <span class="text-sm font-bold text-orange-600"
-                                        >🖼️ 이미지</span
+                        <div class="p-2 space-y-4">
+                            <!-- 이미지 객체 -->
+                            {#if imageShapes.length > 0}
+                                <div>
+                                    <div
+                                        class="flex items-center gap-2 px-2 py-1 mb-1"
                                     >
-                                    <span
-                                        class="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full"
-                                    >
-                                        설명을 달아주세요!!
-                                    </span>
-                                </div>
-                                <ul class="space-y-1">
-                                    {#each imageShapes as shape}
-                                        <li>
-                                            <button
-                                                class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group border-l-4 border-orange-400 {selectedShapeId ===
-                                                shape.shape_index
-                                                    ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-300'
-                                                    : 'hover:bg-orange-50 text-gray-700 bg-orange-50/50'}"
-                                                on:click={() =>
-                                                    (selectedShapeId =
-                                                        shape.shape_index)}
-                                            >
-                                                <span
-                                                    class="truncate"
-                                                    title={shape.name}
-                                                    >{shape.name}</span
+                                        <span
+                                            class="text-xs font-bold text-orange-600 uppercase tracking-wide"
+                                            >이미지 assets</span
+                                        >
+                                        <span class="h-px flex-1 bg-orange-200"
+                                        ></span>
+                                    </div>
+                                    <ul class="space-y-1">
+                                        {#each imageShapes as shape}
+                                            <li>
+                                                <button
+                                                    class="w-full text-left p-2 rounded-lg text-sm flex items-start gap-3 transition-all border {selectedShapeId ===
+                                                    shape.shape_index
+                                                        ? 'bg-orange-50 border-orange-200 shadow-sm ring-1 ring-orange-200'
+                                                        : 'bg-white border-transparent hover:border-orange-200 hover:shadow-sm'}"
+                                                    on:click={() =>
+                                                        (selectedShapeId =
+                                                            shape.shape_index)}
                                                 >
-                                                {#if shape.description}
-                                                    <span
-                                                        class="text-xs text-green-500 ml-2"
-                                                        >✅</span
-                                                    >
-                                                {:else}
-                                                    <span
-                                                        class="text-xs text-orange-400 ml-2"
-                                                        >⚠️</span
-                                                    >
-                                                {/if}
-                                            </button>
-                                        </li>
-                                    {/each}
-                                </ul>
-                            </div>
-                        {/if}
+                                                    {#if shape.description}
+                                                        <div
+                                                            class="mt-0.5 text-green-500"
+                                                            title="설명 완료"
+                                                        >
+                                                            ✅
+                                                        </div>
+                                                    {:else}
+                                                        <div
+                                                            class="mt-0.5 text-orange-400 animate-pulse"
+                                                            title="설명 필요"
+                                                        >
+                                                            ⚠️
+                                                        </div>
+                                                    {/if}
+                                                    <div class="flex-1 min-w-0">
+                                                        <div
+                                                            class="font-medium text-gray-700 truncate"
+                                                            title={shape.name}
+                                                        >
+                                                            {shape.name}
+                                                        </div>
+                                                        {#if shape.description}
+                                                            <div
+                                                                class="text-xs text-gray-400 truncate mt-0.5"
+                                                            >
+                                                                {shape.description}
+                                                            </div>
+                                                        {:else}
+                                                            <div
+                                                                class="text-xs text-orange-400 mt-0.5"
+                                                            >
+                                                                설명을
+                                                                입력해주세요
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+                                                </button>
+                                            </li>
+                                        {/each}
+                                    </ul>
+                                </div>
+                            {/if}
 
-                        <!-- 기타 객체 -->
-                        {#if otherShapes.length > 0}
-                            <div class="border-t border-gray-200 pt-2">
-                                <div class="px-2 py-1 mb-1">
-                                    <span class="text-sm font-medium text-gray-600"
-                                        >기타 객체 ({otherShapes.length})</span
+                            <!-- 기타 객체 -->
+                            {#if otherShapes.length > 0}
+                                <div>
+                                    <div
+                                        class="flex items-center gap-2 px-2 py-1 mb-1"
                                     >
-                                </div>
-
-                                <ul class="space-y-1">
-                                    {#each otherShapes as shape}
-                                        <li>
-                                            <button
-                                                class="w-full text-left px-3 py-2 rounded text-sm flex items-center justify-between group {selectedShapeId ===
-                                                shape.shape_index
-                                                    ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-300'
-                                                    : 'hover:bg-gray-50 text-gray-700'}"
-                                                on:click={() =>
-                                                    (selectedShapeId =
-                                                        shape.shape_index)}
-                                            >
-                                                <span
-                                                    class="truncate"
-                                                    title={shape.name}
-                                                    >{shape.name}</span
+                                        <span
+                                            class="text-xs font-bold text-gray-500 uppercase tracking-wide"
+                                            >기타 객체</span
+                                        >
+                                        <span class="h-px flex-1 bg-gray-200"
+                                        ></span>
+                                    </div>
+                                    <ul class="space-y-1">
+                                        {#each otherShapes as shape}
+                                            <li>
+                                                <button
+                                                    class="w-full text-left p-2 rounded-lg text-sm flex items-start gap-3 transition-all border {selectedShapeId ===
+                                                    shape.shape_index
+                                                        ? 'bg-blue-50 border-blue-200 shadow-sm ring-1 ring-blue-200'
+                                                        : 'bg-white border-transparent hover:border-gray-200 hover:shadow-sm'}"
+                                                    on:click={() =>
+                                                        (selectedShapeId =
+                                                            shape.shape_index)}
                                                 >
-                                                {#if shape.description}
-                                                    <span
-                                                        class="text-xs text-gray-400 ml-2"
-                                                        >📝</span
+                                                    <div
+                                                        class="mt-0.5 text-gray-400"
                                                     >
-                                                {/if}
-                                            </button>
-                                        </li>
-                                    {/each}
-                                </ul>
-                            </div>
-                        {/if}
-                    {/if}
-
-                    <!-- Description Editor -->
-                    {#if selectedShape}
-                        <div class="mt-4 p-3 border-t border-gray-200 bg-gray-50 rounded">
-                            <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">
-                                Description
-                            </h4>
-                            <div class="space-y-2">
-                                <div
-                                    class="text-sm font-medium text-gray-800 truncate mb-1"
-                                >
-                                    {selectedShape.name}
+                                                        🔹
+                                                    </div>
+                                                    <div class="flex-1 min-w-0">
+                                                        <div
+                                                            class="font-medium text-gray-700 truncate"
+                                                            title={shape.name}
+                                                        >
+                                                            {shape.name}
+                                                        </div>
+                                                        {#if shape.description}
+                                                            <div
+                                                                class="text-xs text-gray-400 truncate mt-0.5"
+                                                            >
+                                                                {shape.description}
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+                                                    {#if shape.description}
+                                                        <div
+                                                            class="mt-0.5 text-gray-300"
+                                                            title="설명 있음"
+                                                        >
+                                                            📝
+                                                        </div>
+                                                    {/if}
+                                                </button>
+                                            </li>
+                                        {/each}
+                                    </ul>
                                 </div>
-                                <textarea
-                                    class="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                                    rows="3"
-                                    placeholder="Enter description..."
-                                    bind:value={editingDescription}
-                                    on:keydown={(e) => {
-                                        if (e.key === "Enter" && !e.shiftKey) {
-                                            e.preventDefault();
-                                            handleSaveDescription();
-                                        }
-                                    }}
-                                ></textarea>
-                                <button
-                                    class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-1.5 rounded transition"
-                                    on:click={handleSaveDescription}
-                                >
-                                    Save Description
-                                </button>
-                            </div>
+                            {/if}
                         </div>
                     {/if}
+                </div>
+
+                <!-- Description Editor (Sticky at bottom of Object List) -->
+                {#if selectedShape}
+                    <div
+                        class="p-3 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10"
+                    >
+                        <div class="flex items-center justify-between mb-2">
+                            <span
+                                class="text-xs font-bold text-gray-500 uppercase"
+                                >Description</span
+                            >
+                            <span
+                                class="text-xs text-gray-400 max-w-[150px] truncate"
+                                >{selectedShape.name}</span
+                            >
+                        </div>
+                        <div class="relative">
+                            <textarea
+                                class="w-full text-sm p-2 pr-10 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition-shadow"
+                                rows="2"
+                                placeholder="객체에 대한 설명을 입력하세요..."
+                                bind:value={editingDescription}
+                                on:keydown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleSaveDescription();
+                                    }
+                                }}
+                            ></textarea>
+                            <button
+                                class="absolute right-2 bottom-2 p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-transform active:scale-95"
+                                on:click={handleSaveDescription}
+                                title="저장 (Enter)"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    ><path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M5 13l4 4L19 7"
+                                    /></svg
+                                >
+                            </button>
+                        </div>
+                    </div>
                 {/if}
-            </div>
+            {/if}
         </div>
     </div>
 </div>

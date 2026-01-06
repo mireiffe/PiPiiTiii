@@ -780,7 +780,7 @@ def load_settings() -> dict:
             "llm": {
                 "api_type": "openai",
                 "api_endpoint": "https://api.openai.com/v1",
-                "model_name": "gpt-4o"
+                "model_name": "gpt-4o",
             },
             "summary_fields": [
                 {
@@ -788,17 +788,17 @@ def load_settings() -> dict:
                     "name": "종합요약",
                     "order": 0,
                     "system_prompt": "당신은 PPT 프레젠테이션을 분석하는 전문가입니다. 슬라이드 이미지를 보고 핵심 내용을 정확하게 파악해주세요.",
-                    "user_prompt": "이 PPT 슬라이드들의 핵심 내용을 3줄로 간결하게 요약해주세요."
+                    "user_prompt": "이 PPT 슬라이드들의 핵심 내용을 3줄로 간결하게 요약해주세요.",
                 },
                 {
                     "id": "incident",
                     "name": "발생현상",
                     "order": 1,
                     "system_prompt": "당신은 기술 문서를 분석하는 전문가입니다.",
-                    "user_prompt": "이 슬라이드에서 언급된 발생 현상이나 문제점을 요약해주세요."
-                }
+                    "user_prompt": "이 슬라이드에서 언급된 발생 현상이나 문제점을 요약해주세요.",
+                },
             ],
-            "use_thumbnails": True
+            "use_thumbnails": True,
         }
 
 
@@ -808,7 +808,9 @@ def get_settings():
     try:
         return load_settings()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load settings: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load settings: {str(e)}"
+        )
 
 
 @app.post("/api/settings")
@@ -819,7 +821,9 @@ def update_settings(settings: Settings):
             json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
         return {"status": "success", "message": "Settings updated successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save settings: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save settings: {str(e)}"
+        )
 
 
 @app.get("/api/project/{project_id}/summary")
@@ -834,7 +838,7 @@ def get_project_summary(project_id: str):
 
 @app.post("/api/project/{project_id}/summary")
 def update_project_summary_endpoint(project_id: str, summary: SummaryData):
-    """Update summary data for a project."""
+    """Update user summary data for a project."""
     try:
         db.update_project_summary(project_id, summary.data)
         return {"status": "success", "message": "Summary updated successfully"}
@@ -842,8 +846,27 @@ def update_project_summary_endpoint(project_id: str, summary: SummaryData):
         raise HTTPException(status_code=500, detail=f"Failed to save summary: {str(e)}")
 
 
+class LLMSummaryUpdate(BaseModel):
+    field_id: str
+    content: str
+
+
+@app.post("/api/project/{project_id}/summary_llm")
+def update_project_summary_llm_endpoint(project_id: str, update: LLMSummaryUpdate):
+    """Update LLM-generated summary for a specific field."""
+    try:
+        db.update_project_summary_llm(project_id, update.field_id, update.content)
+        return {"status": "success", "message": "LLM summary updated successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save LLM summary: {str(e)}"
+        )
+
+
 @app.post("/api/project/{project_id}/generate_summary/{field_id}")
-async def generate_summary(project_id: str, field_id: str, request: GenerateSummaryRequest):
+async def generate_summary(
+    project_id: str, field_id: str, request: GenerateSummaryRequest
+):
     """
     Generate summary using LLM with slide thumbnails.
     Returns streaming response.
@@ -859,7 +882,9 @@ async def generate_summary(project_id: str, field_id: str, request: GenerateSumm
             break
 
     if not field:
-        raise HTTPException(status_code=404, detail=f"Summary field '{field_id}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Summary field '{field_id}' not found"
+        )
 
     # Verify project exists
     project_dir = os.path.join(RESULT_DIR, project_id)
@@ -870,12 +895,16 @@ async def generate_summary(project_id: str, field_id: str, request: GenerateSumm
     slide_indices = request.slide_indices[:3]
     thumbnail_paths = []
     for idx in slide_indices:
-        thumb_path = os.path.join(project_dir, "thumbnails", f"slide_{idx:03d}_thumb.png")
+        thumb_path = os.path.join(
+            project_dir, "thumbnails", f"slide_{idx:03d}_thumb.png"
+        )
         if os.path.exists(thumb_path):
             thumbnail_paths.append(thumb_path)
 
     if not thumbnail_paths:
-        raise HTTPException(status_code=404, detail="No thumbnails found for specified slides")
+        raise HTTPException(
+            status_code=404, detail="No thumbnails found for specified slides"
+        )
 
     # Get prompts with defaults
     system_prompt = field.get("system_prompt", "")
@@ -892,7 +921,9 @@ async def generate_summary(project_id: str, field_id: str, request: GenerateSumm
 
     # Return streaming response
     async def stream_generator():
-        async for chunk in llm_service.generate_stream(system_prompt, user_prompt, thumbnail_paths):
+        async for chunk in llm_service.generate_stream(
+            system_prompt, user_prompt, thumbnail_paths
+        ):
             yield chunk
 
     return StreamingResponse(
@@ -901,7 +932,7 @@ async def generate_summary(project_id: str, field_id: str, request: GenerateSumm
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
