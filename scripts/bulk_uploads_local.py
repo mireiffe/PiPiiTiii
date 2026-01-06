@@ -8,7 +8,9 @@ import uuid
 
 # Ensure backend modules are importable
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BACKEND_DIR = os.path.join(BASE_DIR, "backend")
 sys.path.append(BASE_DIR)
+sys.path.append(BACKEND_DIR)
 
 import pythoncom
 
