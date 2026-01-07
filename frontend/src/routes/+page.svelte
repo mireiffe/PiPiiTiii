@@ -327,11 +327,18 @@
   async function startBatchGeneration() {
     if (selectedProjectIds.size === 0) return;
 
+    // Save selected IDs before clearing
+    const projectIdsToGenerate = Array.from(selectedProjectIds);
+
     batchGenerating = true;
-    batchProgress = { current: 0, total: selectedProjectIds.size, currentProjectId: "" };
+    batchProgress = { current: 0, total: projectIdsToGenerate.length, currentProjectId: "" };
+
+    // Exit selection mode immediately - let it run in background
+    selectionMode = false;
+    selectedProjectIds = new Set();
 
     try {
-      const stream = await batchGenerateSummary(Array.from(selectedProjectIds));
+      const stream = await batchGenerateSummary(projectIdsToGenerate);
       if (!stream) {
         throw new Error("No stream returned");
       }
@@ -383,8 +390,6 @@
       alert("일괄 생성 중 오류가 발생했습니다.");
     } finally {
       batchGenerating = false;
-      selectionMode = false;
-      selectedProjectIds = new Set();
     }
   }
 

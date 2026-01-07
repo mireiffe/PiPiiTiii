@@ -1059,6 +1059,7 @@ async def batch_generate_summary(request: BatchGenerateSummaryRequest):
     """
     Generate summaries for multiple projects.
     Returns streaming response with progress updates.
+    Processes projects sequentially, but summary fields in parallel for each project.
     """
     settings = load_settings()
     current_version = calculate_prompt_version(settings)
@@ -1104,12 +1105,12 @@ async def batch_generate_summary(request: BatchGenerateSummaryRequest):
                     yield f"data: {json.dumps({'type': 'error', 'project_id': project_id, 'message': 'No thumbnails found'})}\n\n"
                     continue
 
-                # Generate summary for each field
+                # Generate summary for each field IN PARALLEL
                 llm_config = settings.get("llm", {})
                 llm_service = LLMService(llm_config)
 
-                summary_data = {}
-                for field in settings.get("summary_fields", []):
+                async def generate_field_summary(field):
+                    """Generate summary for a single field"""
                     field_id = field.get("id")
                     system_prompt = field.get("system_prompt", "당신은 PPT 프레젠테이션을 분석하는 전문가입니다.")
                     user_prompt = field.get("user_prompt", "이 슬라이드들의 내용을 요약해주세요.")
@@ -1120,6 +1121,16 @@ async def batch_generate_summary(request: BatchGenerateSummaryRequest):
                     ):
                         content += chunk
 
+                    return (field_id, content)
+
+                # Run all field generations in parallel
+                summary_fields = settings.get("summary_fields", [])
+                tasks = [generate_field_summary(field) for field in summary_fields]
+                results = await asyncio.gather(*tasks)
+
+                # Save results to database
+                summary_data = {}
+                for field_id, content in results:
                     summary_data[field_id] = content
                     db.update_project_summary_llm(project_id, field_id, content)
 
