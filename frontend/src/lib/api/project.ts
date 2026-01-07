@@ -127,3 +127,34 @@ export async function updateProjectSummaryLLM(id: string, fieldId: string, conte
         body: JSON.stringify({ field_id: fieldId, content }),
     });
 }
+
+export async function fetchPromptVersion() {
+    return apiFetch("/api/settings/prompt_version");
+}
+
+export async function fetchProjectsSummaryStatus() {
+    return apiFetch("/api/projects/summary_status");
+}
+
+export async function batchGenerateSummary(
+    projectIds: string[],
+    slideIndices?: number[]
+): Promise<ReadableStream<Uint8Array> | null> {
+    const response = await apiFetch("/api/projects/batch_generate_summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_ids: projectIds, slide_indices: slideIndices }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to batch generate summary: ${response.statusText}`);
+    }
+
+    return response.body;
+}
+
+export async function updateProjectPromptVersion(id: string) {
+    return apiFetch(`/api/project/${id}/update_prompt_version`, {
+        method: "POST",
+    });
+}
