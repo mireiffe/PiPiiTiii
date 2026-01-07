@@ -1331,6 +1331,14 @@
                                             placeholder="{field.name}에 대한 내용을 입력하세요... (자동 저장됨)"
                                             bind:value={summaryData[field.id]}
                                             on:blur={saveSummary}
+                                            on:keydown={(e) => {
+                                                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                                                    e.preventDefault();
+                                                    saveSummary();
+                                                    editingFieldId = null;
+                                                    e.target.blur();
+                                                }
+                                            }}
                                             disabled={generatingFieldIds.has(field.id)}
                                         ></textarea>
                                     {:else}
