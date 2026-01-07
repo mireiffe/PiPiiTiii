@@ -63,7 +63,7 @@
     $: allowEdit = $page.url.searchParams.get("allowEdit") === "true";
 
     // Resizable pane
-    let rightPaneWidth = 400;
+    let rightPaneWidth = 500;
     let isResizing = false;
 
     // Settings and summary
@@ -327,6 +327,11 @@
         if (!project || !containerWidth) return;
         const slideW = project.slide_width || 960;
         scale = (containerWidth - 64) / slideW;
+    }
+
+    // Reactively update scale when container width changes (e.g., when resizing right pane)
+    $: if (containerWidth && project) {
+        updateScale();
     }
 
     $: currentSlide = project?.slides.find(
