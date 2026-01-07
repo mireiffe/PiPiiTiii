@@ -1,6 +1,7 @@
 <script>
     import { page } from "$app/stores";
     import { onMount, tick } from "svelte";
+    import { marked } from "marked";
     import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
     import Button from "$lib/components/ui/Button.svelte";
     import {
@@ -17,6 +18,12 @@
         generateSummaryStream,
         updateProjectSummaryLLM,
     } from "$lib/api/project";
+
+    // Configure marked options
+    marked.setOptions({
+        breaks: true,  // Convert \n to <br>
+        gfm: true,     // GitHub Flavored Markdown
+    });
 
     const projectId = $page.params.id;
     let project = null;
@@ -72,6 +79,9 @@
 
     // Version comparison state
     let comparingFieldId = null; // Which field is being compared
+
+    // Edit/Preview mode for summary fields
+    let editingFieldId = null; // Which field is being edited (null = preview mode)
 
     // Initialize selected slides (first 3 by default)
     $: if (project && selectedSlideIndices.length === 0) {
@@ -1280,25 +1290,68 @@
                                             </button>
                                         </div>
                                         <div
-                                            class="text-xs text-amber-900/80 whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto"
+                                            class="text-xs text-amber-900/80 leading-relaxed max-h-32 overflow-y-auto prose prose-xs prose-amber"
                                         >
-                                            {summaryDataLLM[field.id]}
+                                            {@html marked(summaryDataLLM[field.id] || '')}
                                         </div>
                                     </div>
                                 {/if}
 
                                 <div class="relative">
-                                    <textarea
-                                        class="w-full text-base leading-relaxed p-4 border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder-gray-300 resize-y min-h-[320px] hover:border-gray-300 {generatingFieldIds.has(field.id)
-                                            ? 'bg-indigo-50/30'
-                                            : 'bg-white'}"
-                                        style="font-size: 15px;"
-                                        rows="12"
-                                        placeholder="{field.name}에 대한 내용을 입력하세요... (자동 저장됨)"
-                                        bind:value={summaryData[field.id]}
-                                        on:blur={saveSummary}
-                                        disabled={generatingFieldIds.has(field.id)}
-                                    ></textarea>
+                                    <!-- Edit/Preview Toggle -->
+                                    <div class="flex justify-end mb-2">
+                                        <div class="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+                                            <button
+                                                class="px-3 py-1 text-xs font-medium rounded-md transition-all {editingFieldId === field.id
+                                                    ? 'bg-white text-gray-700 shadow-sm'
+                                                    : 'text-gray-500 hover:text-gray-700'}"
+                                                on:click={() => editingFieldId = field.id}
+                                            >
+                                                편집
+                                            </button>
+                                            <button
+                                                class="px-3 py-1 text-xs font-medium rounded-md transition-all {editingFieldId !== field.id
+                                                    ? 'bg-white text-gray-700 shadow-sm'
+                                                    : 'text-gray-500 hover:text-gray-700'}"
+                                                on:click={() => { editingFieldId = null; saveSummary(); }}
+                                            >
+                                                미리보기
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {#if editingFieldId === field.id}
+                                        <!-- Edit Mode -->
+                                        <textarea
+                                            class="w-full text-base leading-relaxed p-4 border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder-gray-300 resize-y min-h-[320px] hover:border-gray-300 {generatingFieldIds.has(field.id)
+                                                ? 'bg-indigo-50/30'
+                                                : 'bg-white'}"
+                                            style="font-size: 15px;"
+                                            rows="12"
+                                            placeholder="{field.name}에 대한 내용을 입력하세요... (자동 저장됨)"
+                                            bind:value={summaryData[field.id]}
+                                            on:blur={saveSummary}
+                                            disabled={generatingFieldIds.has(field.id)}
+                                        ></textarea>
+                                    {:else}
+                                        <!-- Preview Mode (Markdown Rendered) -->
+                                        <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                        <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                        <div
+                                            class="w-full min-h-[320px] p-4 border border-gray-200 rounded-lg shadow-sm bg-white cursor-pointer hover:border-gray-300 transition-all overflow-auto"
+                                            on:click={() => editingFieldId = field.id}
+                                            title="클릭하여 편집"
+                                        >
+                                            {#if summaryData[field.id]}
+                                                <div class="prose prose-sm max-w-none prose-headings:text-gray-800 prose-p:text-gray-600 prose-strong:text-gray-700 prose-ul:text-gray-600 prose-ol:text-gray-600">
+                                                    {@html marked(summaryData[field.id] || '')}
+                                                </div>
+                                            {:else}
+                                                <p class="text-gray-300 italic">{field.name}에 대한 내용을 입력하세요...</p>
+                                            {/if}
+                                        </div>
+                                    {/if}
+
                                     {#if generatingFieldIds.has(field.id)}
                                         <div
                                             class="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] rounded-lg"
