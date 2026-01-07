@@ -39,6 +39,11 @@ class Database:
             cursor.execute("ALTER TABLE projects ADD COLUMN summary_data_llm TEXT")
             print("Added summary_data_llm column to projects table")
 
+        # Migration: Add summary_prompt_version column for tracking prompt version
+        if "summary_prompt_version" not in columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN summary_prompt_version TEXT")
+            print("Added summary_prompt_version column to projects table")
+
         conn.commit()
         conn.close()
 
@@ -338,3 +343,33 @@ class Database:
         )
         conn.commit()
         conn.close()
+
+    def update_project_summary_prompt_version(self, project_id: str, prompt_version: str):
+        """Update the prompt version used for summary generation."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET summary_prompt_version = ? WHERE id = ?",
+            (prompt_version, project_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_projects_summary_status(self) -> List[Dict[str, Any]]:
+        """Get summary status for all projects (id, has_summary, prompt_version)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, summary_data_llm, summary_prompt_version FROM projects"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            has_summary = bool(row[1] and row[1] != '{}')
+            result.append({
+                "id": row[0],
+                "has_summary": has_summary,
+                "prompt_version": row[2] or None
+            })
+        return result

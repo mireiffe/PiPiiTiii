@@ -13,6 +13,8 @@
     downloadProject,
     fetchSettings,
     updateSettings,
+    fetchProjectsSummaryStatus,
+    batchGenerateSummary,
   } from "$lib/api/project";
 
   // ============================================
@@ -73,6 +75,18 @@
   // Thumbnail toggle
   let useThumbnails = false;
   let loadingSettings = false;
+
+  // Batch summary generation mode
+  let selectionMode = false;
+  /** @type {Set<string>} */
+  let selectedProjectIds = new Set();
+  let batchGenerating = false;
+  let batchProgress = { current: 0, total: 0, currentProjectId: "" };
+
+  // Summary status tracking
+  /** @type {Record<string, { has_summary: boolean, is_outdated: boolean }>} */
+  let summaryStatusMap = {};
+  let currentPromptVersion = "";
 
   $: displayNameMap = {
     ...BUILT_IN_DISPLAY_NAMES,
@@ -246,12 +260,133 @@
         const settings = await settingsRes.json();
         useThumbnails = settings.use_thumbnails || false;
       }
+
+      // Load summary status
+      await loadSummaryStatus();
     } catch (e) {
       console.error(e);
     } finally {
       loading = false;
     }
   });
+
+  async function loadSummaryStatus() {
+    try {
+      const res = await fetchProjectsSummaryStatus();
+      if (res.ok) {
+        const data = await res.json();
+        currentPromptVersion = data.current_version;
+        summaryStatusMap = {};
+        for (const project of data.projects) {
+          summaryStatusMap[project.id] = {
+            has_summary: project.has_summary,
+            is_outdated: project.is_outdated,
+          };
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load summary status", e);
+    }
+  }
+
+  function toggleSelectionMode() {
+    selectionMode = !selectionMode;
+    if (!selectionMode) {
+      selectedProjectIds = new Set();
+    }
+  }
+
+  function toggleProjectSelection(projectId) {
+    if (selectedProjectIds.has(projectId)) {
+      selectedProjectIds.delete(projectId);
+    } else {
+      selectedProjectIds.add(projectId);
+    }
+    selectedProjectIds = selectedProjectIds; // Trigger reactivity
+  }
+
+  function selectAll() {
+    selectedProjectIds = new Set(filteredProjects.map(p => p.id));
+  }
+
+  function deselectAll() {
+    selectedProjectIds = new Set();
+  }
+
+  function selectOutdatedOnly() {
+    selectedProjectIds = new Set(
+      filteredProjects
+        .filter(p => {
+          const status = summaryStatusMap[p.id];
+          return !status?.has_summary || status?.is_outdated;
+        })
+        .map(p => p.id)
+    );
+  }
+
+  async function startBatchGeneration() {
+    if (selectedProjectIds.size === 0) return;
+
+    batchGenerating = true;
+    batchProgress = { current: 0, total: selectedProjectIds.size, currentProjectId: "" };
+
+    try {
+      const stream = await batchGenerateSummary(Array.from(selectedProjectIds));
+      if (!stream) {
+        throw new Error("No stream returned");
+      }
+
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const text = decoder.decode(value, { stream: true });
+        const lines = text.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === "progress") {
+                batchProgress = {
+                  current: data.current,
+                  total: data.total,
+                  currentProjectId: data.project_id,
+                };
+              } else if (data.type === "complete") {
+                // Update local status
+                summaryStatusMap[data.project_id] = {
+                  has_summary: true,
+                  is_outdated: false,
+                };
+                summaryStatusMap = summaryStatusMap;
+              } else if (data.type === "error") {
+                console.error(`Error for ${data.project_id}: ${data.message}`);
+              } else if (data.type === "done") {
+                // All done
+              }
+            } catch (e) {
+              // Ignore parse errors for incomplete JSON
+            }
+          }
+        }
+      }
+
+      // Reload summary status after completion
+      await loadSummaryStatus();
+    } catch (e) {
+      console.error("Batch generation failed", e);
+      alert("일괄 생성 중 오류가 발생했습니다.");
+    } finally {
+      batchGenerating = false;
+      selectionMode = false;
+      selectedProjectIds = new Set();
+    }
+  }
 
   async function selectProject(project) {
     selectedProjectId = project.id;
@@ -345,6 +480,20 @@
   >
     <h1 class="text-2xl font-bold text-gray-800">PiPiiTiii</h1>
     <div class="flex gap-2 items-center">
+      <button
+        class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200
+               {selectionMode
+                   ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 ring-1 ring-purple-300'
+                   : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-sm hover:shadow-md'}"
+        on:click={toggleSelectionMode}
+        disabled={batchGenerating}
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        {selectionMode ? '선택 모드 해제' : '선택 PPT 요약 자동생성'}
+      </button>
+      <div class="w-px h-6 bg-gray-300"></div>
       <Button
         variant="secondary"
         on:click={toggleThumbnailView}
@@ -510,6 +659,58 @@
       </div>
 
       <div class="flex-1 overflow-y-auto bg-gray-50/50">
+        <!-- Selection Mode Toolbar -->
+        {#if selectionMode}
+          <div class="sticky top-0 z-20 bg-purple-50 border-b border-purple-200 px-4 py-3 flex items-center justify-between shadow-sm">
+            <div class="flex items-center gap-3">
+              <span class="text-sm font-medium text-purple-700">
+                {selectedProjectIds.size}개 선택됨
+              </span>
+              <div class="flex items-center gap-1">
+                <button
+                  class="px-3 py-1.5 text-xs font-medium rounded-md bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors"
+                  on:click={selectAll}
+                >
+                  전체 선택
+                </button>
+                <button
+                  class="px-3 py-1.5 text-xs font-medium rounded-md bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors"
+                  on:click={deselectAll}
+                >
+                  전체 해제
+                </button>
+                <button
+                  class="px-3 py-1.5 text-xs font-medium rounded-md bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-200 transition-colors"
+                  on:click={selectOutdatedOnly}
+                  title="요약이 없거나 이전 버전인 프로젝트만 선택"
+                >
+                  업데이트 필요만 선택
+                </button>
+              </div>
+            </div>
+            <button
+              class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg
+                     bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700
+                     text-white shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              on:click={startBatchGeneration}
+              disabled={selectedProjectIds.size === 0 || batchGenerating}
+            >
+              {#if batchGenerating}
+                <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>생성 중... ({batchProgress.current}/{batchProgress.total})</span>
+              {:else}
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>선택 항목 요약 생성</span>
+              {/if}
+            </button>
+          </div>
+        {/if}
+
         {#if loading}
           <div class="p-8 text-center text-gray-500 text-sm">
             Loading projects...
@@ -524,24 +725,63 @@
               {@const primaryBadges = getPrimaryBadges(project)}
               {@const secondaryBadges = getSecondaryBadges(project)}
               {@const isSelected = selectedProjectId === project.id}
+              {@const isChecked = selectedProjectIds.has(project.id)}
+              {@const summaryStatus = summaryStatusMap[project.id]}
 
               <button
-                class="w-full text-left p-4 rounded-xl transition-all duration-200 border bg-white flex flex-col gap-2 group
-                  {isSelected
+                class="w-full text-left p-4 rounded-xl transition-all duration-200 border bg-white flex flex-col gap-2 group relative
+                  {selectionMode && isChecked
+                  ? 'border-purple-400 ring-1 ring-purple-300 bg-purple-50/50'
+                  : isSelected
                   ? 'border-blue-500 ring-1 ring-blue-500 shadow-md z-10'
-                  : 'border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300'}"
-                on:click={() => selectProject(project)}
+                  : 'border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300'}
+                  {batchGenerating && batchProgress.currentProjectId === project.id ? 'animate-pulse' : ''}"
+                on:click={() => selectionMode ? toggleProjectSelection(project.id) : selectProject(project)}
               >
+                <!-- Selection Checkbox (shown in selection mode) -->
+                {#if selectionMode}
+                  <div class="absolute -left-1 -top-1 z-10">
+                    <div class="w-6 h-6 rounded-full flex items-center justify-center transition-all
+                                {isChecked ? 'bg-purple-500' : 'bg-white border-2 border-gray-300'}">
+                      {#if isChecked}
+                        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                        </svg>
+                      {/if}
+                    </div>
+                  </div>
+                {/if}
+
                 <div class="flex justify-between items-start w-full">
-                  <h3
-                    class="font-bold text-gray-800 text-lg truncate pr-2 group-hover:text-blue-700 transition-colors"
-                  >
-                    {getFieldValue(project, CARD_CONFIG.header.title) ||
-                      "Untitled"}
-                  </h3>
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <h3
+                      class="font-bold text-gray-800 text-lg truncate pr-2 group-hover:text-blue-700 transition-colors"
+                    >
+                      {getFieldValue(project, CARD_CONFIG.header.title) ||
+                        "Untitled"}
+                    </h3>
+                    <!-- Summary Status Indicator -->
+                    {#if summaryStatus?.has_summary}
+                      {#if summaryStatus.is_outdated}
+                        <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200" title="프롬프트가 변경되어 재생성이 필요합니다">
+                          <svg class="w-3 h-3 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                          </svg>
+                          <span class="text-[10px] font-medium text-amber-600">업데이트 필요</span>
+                        </div>
+                      {:else}
+                        <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200" title="요약이 최신 상태입니다">
+                          <svg class="w-3 h-3 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                          </svg>
+                          <span class="text-[10px] font-medium text-emerald-600">요약 완료</span>
+                        </div>
+                      {/if}
+                    {/if}
+                  </div>
                   {#if CARD_CONFIG.header.date && project[CARD_CONFIG.header.date]}
                     <span
-                      class="text-xs font-medium text-gray-400 whitespace-nowrap bg-gray-50 px-2 py-1 rounded"
+                      class="text-xs font-medium text-gray-400 whitespace-nowrap bg-gray-50 px-2 py-1 rounded shrink-0"
                     >
                       {new Date(
                         project[CARD_CONFIG.header.date],

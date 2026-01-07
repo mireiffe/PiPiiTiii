@@ -4,6 +4,7 @@ import sys
 import shutil
 
 import json
+import hashlib
 from datetime import datetime
 from typing import List, Dict, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
@@ -20,6 +21,21 @@ import asyncio
 from attributes.manager import AttributeManager
 from llm_service import LLMService
 from typing import Optional
+
+
+def calculate_prompt_version(settings: dict) -> str:
+    """Calculate a hash of all prompt configurations for version tracking."""
+    summary_fields = settings.get("summary_fields", [])
+    # Create a deterministic string from prompts
+    prompt_data = []
+    for field in sorted(summary_fields, key=lambda x: x.get("id", "")):
+        prompt_data.append({
+            "id": field.get("id", ""),
+            "system_prompt": field.get("system_prompt", ""),
+            "user_prompt": field.get("user_prompt", "")
+        })
+    prompt_str = json.dumps(prompt_data, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(prompt_str.encode()).hexdigest()[:12]
 
 
 app = FastAPI()
@@ -993,6 +1009,139 @@ def download_project(project_id: str):
         output_path,
         filename=output_filename,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+
+
+@app.get("/api/settings/prompt_version")
+def get_prompt_version():
+    """Get the current prompt version hash."""
+    settings = load_settings()
+    version = calculate_prompt_version(settings)
+    return {"version": version}
+
+
+@app.post("/api/project/{project_id}/update_prompt_version")
+def update_project_prompt_version_endpoint(project_id: str):
+    """Update the prompt version for a project to the current version."""
+    settings = load_settings()
+    current_version = calculate_prompt_version(settings)
+    db.update_project_summary_prompt_version(project_id, current_version)
+    return {"status": "success", "version": current_version}
+
+
+@app.get("/api/projects/summary_status")
+def get_projects_summary_status():
+    """Get summary status for all projects including version info."""
+    settings = load_settings()
+    current_version = calculate_prompt_version(settings)
+    statuses = db.get_projects_summary_status()
+
+    # Add outdated flag based on version comparison
+    for status in statuses:
+        if status["has_summary"] and status["prompt_version"]:
+            status["is_outdated"] = status["prompt_version"] != current_version
+        else:
+            status["is_outdated"] = False
+
+    return {
+        "current_version": current_version,
+        "projects": statuses
+    }
+
+
+class BatchGenerateSummaryRequest(BaseModel):
+    project_ids: List[str]
+    slide_indices: Optional[List[int]] = None  # If None, use first 3 slides
+
+
+@app.post("/api/projects/batch_generate_summary")
+async def batch_generate_summary(request: BatchGenerateSummaryRequest):
+    """
+    Generate summaries for multiple projects.
+    Returns streaming response with progress updates.
+    """
+    settings = load_settings()
+    current_version = calculate_prompt_version(settings)
+
+    async def stream_generator():
+        total = len(request.project_ids)
+        for idx, project_id in enumerate(request.project_ids):
+            try:
+                # Send progress update
+                yield f"data: {json.dumps({'type': 'progress', 'project_id': project_id, 'current': idx + 1, 'total': total, 'status': 'generating'})}\n\n"
+
+                project_dir = os.path.join(RESULT_DIR, project_id)
+                if not os.path.exists(project_dir):
+                    yield f"data: {json.dumps({'type': 'error', 'project_id': project_id, 'message': 'Project not found'})}\n\n"
+                    continue
+
+                # Get project data to determine slide indices
+                json_path = os.path.join(project_dir, f"{project_id}.json")
+                if not os.path.exists(json_path):
+                    yield f"data: {json.dumps({'type': 'error', 'project_id': project_id, 'message': 'Project data not found'})}\n\n"
+                    continue
+
+                with open(json_path, "r", encoding="utf-8") as f:
+                    project_data = json.load(f)
+
+                # Use provided slide indices or first 3 slides
+                if request.slide_indices:
+                    slide_indices = request.slide_indices[:3]
+                else:
+                    slides = project_data.get("slides", [])
+                    slide_indices = [s.get("slide_index") for s in slides[:3]]
+
+                # Build thumbnail paths
+                thumbnail_paths = []
+                for si in slide_indices:
+                    thumb_path = os.path.join(
+                        project_dir, "thumbnails", f"slide_{si:03d}_thumb.png"
+                    )
+                    if os.path.exists(thumb_path):
+                        thumbnail_paths.append(thumb_path)
+
+                if not thumbnail_paths:
+                    yield f"data: {json.dumps({'type': 'error', 'project_id': project_id, 'message': 'No thumbnails found'})}\n\n"
+                    continue
+
+                # Generate summary for each field
+                llm_config = settings.get("llm", {})
+                llm_service = LLMService(llm_config)
+
+                summary_data = {}
+                for field in settings.get("summary_fields", []):
+                    field_id = field.get("id")
+                    system_prompt = field.get("system_prompt", "당신은 PPT 프레젠테이션을 분석하는 전문가입니다.")
+                    user_prompt = field.get("user_prompt", "이 슬라이드들의 내용을 요약해주세요.")
+
+                    content = ""
+                    async for chunk in llm_service.generate_stream(
+                        system_prompt, user_prompt, thumbnail_paths
+                    ):
+                        content += chunk
+
+                    summary_data[field_id] = content
+                    db.update_project_summary_llm(project_id, field_id, content)
+
+                # Save user version same as LLM version
+                db.update_project_summary(project_id, summary_data)
+                # Update prompt version
+                db.update_project_summary_prompt_version(project_id, current_version)
+
+                yield f"data: {json.dumps({'type': 'complete', 'project_id': project_id})}\n\n"
+
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'project_id': project_id, 'message': str(e)})}\n\n"
+
+        yield f"data: {json.dumps({'type': 'done', 'total': total})}\n\n"
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
