@@ -1071,9 +1071,9 @@
         <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
             <!-- ====== ACCORDION SECTION 1: Workflow ====== -->
             <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div class="border-b border-gray-200">
+            <div class="border-b border-gray-200 {expandedSection === 'workflow' ? 'flex-1 flex flex-col min-h-0' : ''}">
                 <div
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors {expandedSection === 'workflow' ? 'bg-gray-50' : ''}"
+                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors {expandedSection === 'workflow' ? 'bg-gray-50' : ''} shrink-0"
                     on:click={() => expandedSection = expandedSection === 'workflow' ? null : 'workflow'}
                 >
                     <div class="flex items-center gap-2">
@@ -1087,7 +1087,7 @@
                     </span>
                 </div>
                 {#if expandedSection === 'workflow'}
-                    <div class="flex-1 min-h-[300px] max-h-[500px] overflow-auto bg-gray-50/50">
+                    <div class="flex-1 min-h-0 overflow-auto bg-gray-50/50">
                         <WorkflowTree
                             workflow={workflowData}
                             workflowActions={settings.workflow_actions || []}
@@ -1100,9 +1100,9 @@
 
             <!-- ====== ACCORDION SECTION 2: Summary ====== -->
             <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div class="border-b border-gray-200">
+            <div class="border-b border-gray-200 {expandedSection === 'summary' ? 'flex-1 flex flex-col min-h-0' : ''}">
                 <div
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors {expandedSection === 'summary' ? 'bg-gray-50' : ''}"
+                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors {expandedSection === 'summary' ? 'bg-gray-50' : ''} shrink-0"
                     on:click={() => expandedSection = expandedSection === 'summary' ? null : 'summary'}
                 >
                     <div class="flex items-center gap-2">
@@ -1116,7 +1116,7 @@
                     </span>
                 </div>
                 {#if expandedSection === 'summary'}
-                    <div class="p-4 space-y-4 max-h-[600px] overflow-y-auto">
+                    <div class="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
                         <div class="flex items-center justify-end">
                             {#if settings.summary_fields && settings.summary_fields.length > 0}
                                 <button
@@ -1500,7 +1500,7 @@
 
             <!-- ====== ACCORDION SECTION 3: Object List ====== -->
             <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div class="border-b border-gray-200 flex-1 flex flex-col min-h-0">
+            <div class="border-b border-gray-200 {expandedSection === 'objects' ? 'flex-1 flex flex-col min-h-0' : ''}">
                 <div
                     class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shrink-0 {expandedSection === 'objects' ? 'bg-gray-50' : ''}"
                     on:click={() => expandedSection = expandedSection === 'objects' ? null : 'objects'}
