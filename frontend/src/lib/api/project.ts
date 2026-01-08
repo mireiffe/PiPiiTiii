@@ -158,3 +158,47 @@ export async function updateProjectPromptVersion(id: string) {
         method: "POST",
     });
 }
+
+// ========== Workflow API ==========
+
+export interface WorkflowNode {
+    type: "Selector" | "Sequence" | "Condition" | "Action";
+    name?: string;
+    children?: string[];
+    actionId?: string;
+    params?: Record<string, string>;
+}
+
+export interface WorkflowData {
+    rootId: string;
+    nodes: Record<string, WorkflowNode>;
+    meta?: Record<string, any>;
+}
+
+export interface WorkflowActionParam {
+    id: string;
+    name: string;
+    required: boolean;
+}
+
+export interface WorkflowAction {
+    id: string;
+    name: string;
+    params: WorkflowActionParam[];
+}
+
+export async function fetchProjectWorkflow(id: string) {
+    return apiFetch(`/api/project/${id}/workflow`);
+}
+
+export async function updateProjectWorkflow(id: string, workflow: WorkflowData) {
+    return apiFetch(`/api/project/${id}/workflow`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(workflow),
+    });
+}
+
+export async function validateWorkflows() {
+    return apiFetch("/api/workflow/validate");
+}

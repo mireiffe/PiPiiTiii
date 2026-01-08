@@ -16,10 +16,23 @@
     model_name: string;
   }
 
+  interface WorkflowActionParam {
+    id: string;
+    name: string;
+    required: boolean;
+  }
+
+  interface WorkflowAction {
+    id: string;
+    name: string;
+    params: WorkflowActionParam[];
+  }
+
   interface Settings {
     llm: LLMConfig;
     summary_fields: SummaryField[];
     use_thumbnails: boolean;
+    workflow_actions: WorkflowAction[];
   }
 
   let loading = true;
@@ -31,11 +44,14 @@
       model_name: ""
     },
     summary_fields: [],
-    use_thumbnails: true
+    use_thumbnails: true,
+    workflow_actions: []
   };
 
   // Expanded field for editing prompts
   let expandedFieldId: string | null = null;
+  // Expanded action for editing params
+  let expandedActionId: string | null = null;
 
   onMount(async () => {
     try {
@@ -56,7 +72,16 @@
             system_prompt: f.system_prompt || "",
             user_prompt: f.user_prompt || ""
           })),
-          use_thumbnails: data.use_thumbnails ?? true
+          use_thumbnails: data.use_thumbnails ?? true,
+          workflow_actions: (data.workflow_actions || []).map(a => ({
+            id: a.id,
+            name: a.name,
+            params: (a.params || []).map(p => ({
+              id: p.id,
+              name: p.name,
+              required: p.required || false
+            }))
+          }))
         };
       }
     } catch (e) {
@@ -136,6 +161,47 @@
     } else {
       expandedFieldId = fieldId;
     }
+  }
+
+  // ========== Workflow Actions Management ==========
+
+  function addWorkflowAction() {
+    const newId = `action_${Date.now()}`;
+    settings.workflow_actions = [...settings.workflow_actions, {
+      id: newId,
+      name: "새 액션",
+      params: []
+    }];
+    expandedActionId = newId;
+  }
+
+  function removeWorkflowAction(index: number) {
+    if (confirm("이 액션을 삭제하시겠습니까? 이미 사용 중인 워크플로우에서 오류가 발생할 수 있습니다.")) {
+      settings.workflow_actions = settings.workflow_actions.filter((_, i) => i !== index);
+    }
+  }
+
+  function toggleActionExpand(actionId: string) {
+    if (expandedActionId === actionId) {
+      expandedActionId = null;
+    } else {
+      expandedActionId = actionId;
+    }
+  }
+
+  function addActionParam(actionIndex: number) {
+    const newId = `param_${Date.now()}`;
+    settings.workflow_actions[actionIndex].params = [
+      ...settings.workflow_actions[actionIndex].params,
+      { id: newId, name: "새 파라미터", required: false }
+    ];
+    settings.workflow_actions = [...settings.workflow_actions];
+  }
+
+  function removeActionParam(actionIndex: number, paramIndex: number) {
+    settings.workflow_actions[actionIndex].params =
+      settings.workflow_actions[actionIndex].params.filter((_, i) => i !== paramIndex);
+    settings.workflow_actions = [...settings.workflow_actions];
   }
 </script>
 
@@ -325,6 +391,128 @@
                           placeholder="실제 요청 내용입니다. 예: 이 슬라이드들의 핵심 내용을 3줄로 요약해주세요."
                         ></textarea>
                       </div>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+
+        <!-- Workflow Actions 설정 -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div class="flex justify-between items-center mb-4">
+            <div>
+              <h2 class="text-xl font-bold text-gray-800">워크플로우 액션</h2>
+              <p class="text-sm text-gray-500 mt-1">
+                워크플로우에서 사용할 수 있는 액션들을 정의합니다. 각 액션에 필요한 파라미터도 설정할 수 있습니다.
+              </p>
+            </div>
+            <button
+              class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm font-medium"
+              on:click={addWorkflowAction}
+            >
+              + 액션 추가
+            </button>
+          </div>
+
+          <div class="space-y-3">
+            {#if settings.workflow_actions.length === 0}
+              <div class="text-center text-gray-400 py-8">
+                정의된 액션이 없습니다. 액션을 추가해주세요.
+              </div>
+            {:else}
+              {#each settings.workflow_actions as action, index (action.id)}
+                <div class="border border-gray-200 rounded-lg bg-gray-50 overflow-hidden">
+                  <!-- Action Header -->
+                  <div class="flex items-center gap-3 p-4">
+                    <div class="flex-1 flex items-center gap-3">
+                      <div class="flex-1">
+                        <label class="block text-xs text-gray-500 mb-1">액션명</label>
+                        <input
+                          type="text"
+                          bind:value={action.name}
+                          class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="액션 이름"
+                        />
+                      </div>
+                      <div class="w-48">
+                        <label class="block text-xs text-gray-500 mb-1">ID (읽기전용)</label>
+                        <input
+                          type="text"
+                          value={action.id}
+                          readonly
+                          class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      class="text-gray-500 hover:text-blue-600 px-3 py-2 rounded transition text-sm"
+                      on:click={() => toggleActionExpand(action.id)}
+                      title="파라미터 설정"
+                    >
+                      {expandedActionId === action.id ? "▼ 접기" : "▶ 파라미터"} ({action.params.length})
+                    </button>
+
+                    <button
+                      class="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 transition text-sm font-medium"
+                      on:click={() => removeWorkflowAction(index)}
+                    >
+                      삭제
+                    </button>
+                  </div>
+
+                  <!-- Expanded Params Section -->
+                  {#if expandedActionId === action.id}
+                    <div class="border-t border-gray-200 p-4 bg-white space-y-4">
+                      <div class="flex justify-between items-center">
+                        <label class="text-sm font-medium text-gray-700">파라미터 목록</label>
+                        <button
+                          class="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                          on:click={() => addActionParam(index)}
+                        >
+                          + 파라미터 추가
+                        </button>
+                      </div>
+
+                      {#if action.params.length === 0}
+                        <div class="text-center text-gray-400 py-4 text-sm">
+                          파라미터가 없습니다.
+                        </div>
+                      {:else}
+                        <div class="space-y-2">
+                          {#each action.params as param, paramIndex (param.id)}
+                            <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                              <div class="flex-1">
+                                <input
+                                  type="text"
+                                  bind:value={param.name}
+                                  class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="파라미터 이름"
+                                />
+                              </div>
+                              <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  bind:checked={param.required}
+                                  class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                />
+                                필수
+                              </label>
+                              <button
+                                class="text-red-500 hover:text-red-600 p-1"
+                                on:click={() => removeActionParam(index, paramIndex)}
+                                title="파라미터 삭제"
+                              >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
                     </div>
                   {/if}
                 </div>

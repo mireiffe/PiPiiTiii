@@ -15,6 +15,7 @@
     updateSettings,
     fetchProjectsSummaryStatus,
     batchGenerateSummary,
+    validateWorkflows,
   } from "$lib/api/project";
 
   // ============================================
@@ -87,6 +88,10 @@
   /** @type {Record<string, { has_summary: boolean, is_outdated: boolean }>} */
   let summaryStatusMap = {};
   let currentPromptVersion = "";
+
+  // Workflow validation status (projects with invalid actions/params)
+  /** @type {Set<string>} */
+  let workflowWarningProjects = new Set();
 
   $: displayNameMap = {
     ...BUILT_IN_DISPLAY_NAMES,
@@ -263,6 +268,8 @@
 
       // Load summary status
       await loadSummaryStatus();
+      // Load workflow validation status
+      await loadWorkflowValidation();
     } catch (e) {
       console.error(e);
     } finally {
@@ -286,6 +293,20 @@
       }
     } catch (e) {
       console.error("Failed to load summary status", e);
+    }
+  }
+
+  async function loadWorkflowValidation() {
+    try {
+      const res = await validateWorkflows();
+      if (res.ok) {
+        const data = await res.json();
+        workflowWarningProjects = new Set(
+          data.invalid_projects.map(p => p.project_id)
+        );
+      }
+    } catch (e) {
+      console.error("Failed to load workflow validation", e);
     }
   }
 
@@ -732,6 +753,7 @@
               {@const isSelected = selectedProjectId === project.id}
               {@const isChecked = selectedProjectIds.has(project.id)}
               {@const summaryStatus = summaryStatusMap[project.id]}
+              {@const hasWorkflowWarning = workflowWarningProjects.has(project.id)}
 
               <button
                 class="w-full text-left p-4 rounded-xl transition-all duration-200 border bg-white flex flex-col gap-2 group relative
@@ -782,6 +804,15 @@
                           <span class="text-[10px] font-medium text-emerald-600">요약 완료</span>
                         </div>
                       {/if}
+                    {/if}
+                    <!-- Workflow Warning -->
+                    {#if hasWorkflowWarning}
+                      <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-200" title="워크플로우에 삭제된 액션 또는 파라미터가 사용되고 있습니다">
+                        <svg class="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                        <span class="text-[10px] font-medium text-red-600">워크플로우 오류</span>
+                      </div>
                     {/if}
                   </div>
                   {#if CARD_CONFIG.header.date && project[CARD_CONFIG.header.date]}

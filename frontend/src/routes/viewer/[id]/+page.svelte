@@ -3,6 +3,7 @@
     import { onMount, tick } from "svelte";
     import { marked } from "marked";
     import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
+    import WorkflowTree from "$lib/components/WorkflowTree.svelte";
     import Button from "$lib/components/ui/Button.svelte";
     import {
         fetchProject,
@@ -18,6 +19,8 @@
         generateSummaryStream,
         updateProjectSummaryLLM,
         updateProjectPromptVersion,
+        fetchProjectWorkflow,
+        updateProjectWorkflow,
     } from "$lib/api/project";
 
     // Configure marked options
@@ -67,10 +70,17 @@
     let isResizing = false;
 
     // Settings and summary
-    let settings = { summary_fields: [] };
+    let settings = { summary_fields: [], workflow_actions: [] };
     let summaryData = {}; // User version (displayed/edited)
     let summaryDataLLM = {}; // LLM-generated version (original)
     let savingSummary = false;
+
+    // Workflow state
+    let workflowData = null;
+    let savingWorkflow = false;
+
+    // Accordion state for right pane sections
+    let expandedSection = 'workflow'; // 'workflow' | 'summary' | 'objects' - default is workflow
 
     // LLM auto-generation state
     let generatingFieldIds = new Set(); // Track multiple fields being generated in parallel
@@ -115,6 +125,7 @@
         await loadProject();
         await loadSettings();
         await loadSummary();
+        await loadWorkflow();
         window.addEventListener("resize", updateScale);
         window.addEventListener("keydown", handleKeyDown);
         return () => {
@@ -201,6 +212,35 @@
         } catch (e) {
             console.error("Failed to load summary", e);
         }
+    }
+
+    async function loadWorkflow() {
+        try {
+            const res = await fetchProjectWorkflow(projectId);
+            if (res.ok) {
+                const data = await res.json();
+                workflowData = data.workflow || null;
+            }
+        } catch (e) {
+            console.error("Failed to load workflow", e);
+        }
+    }
+
+    async function saveWorkflow(newWorkflow) {
+        savingWorkflow = true;
+        try {
+            workflowData = newWorkflow;
+            await updateProjectWorkflow(projectId, newWorkflow);
+        } catch (e) {
+            console.error("Failed to save workflow", e);
+        } finally {
+            savingWorkflow = false;
+        }
+    }
+
+    function handleWorkflowChange(event) {
+        const newWorkflow = event.detail;
+        saveWorkflow(newWorkflow);
     }
 
     async function saveSummary() {
@@ -1028,75 +1068,85 @@
             </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto min-h-0">
-            <!-- Summary Fields -->
-            <div class="p-4 space-y-4">
-                <div class="flex items-center justify-between">
-                    <h3
-                        class="text-sm font-bold text-gray-800 flex items-center gap-2"
-                    >
-                        <span>📄 요약 정보</span>
-                        {#if savingSummary}
-                            <span
-                                class="text-xs font-normal text-gray-400 animate-pulse"
-                                >저장 중...</span
-                            >
+        <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
+            <!-- ====== ACCORDION SECTION 1: Workflow ====== -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <div class="border-b border-gray-200">
+                <div
+                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors {expandedSection === 'workflow' ? 'bg-gray-50' : ''}"
+                    on:click={() => expandedSection = expandedSection === 'workflow' ? null : 'workflow'}
+                >
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-gray-700">🔄 워크플로우</span>
+                        {#if savingWorkflow}
+                            <span class="text-xs font-normal text-gray-400 animate-pulse">저장 중...</span>
                         {/if}
-                    </h3>
-                    {#if settings.summary_fields && settings.summary_fields.length > 0}
-                        <button
-                            on:click={generateAllSummaries}
-                            disabled={generatingFieldIds.size > 0 || generatingAll}
-                            title="모든 요약 필드를 LLM으로 자동 생성"
-                            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-                                   bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700
-                                   text-white shadow-sm hover:shadow-md transition-all duration-200
-                                   disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                        >
-                            {#if generatingAll}
-                                <svg
-                                    class="animate-spin h-3.5 w-3.5"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <circle
-                                        class="opacity-25"
-                                        cx="12"
-                                        cy="12"
-                                        r="10"
-                                        stroke="currentColor"
-                                        stroke-width="4"
-                                        fill="none"
-                                    ></circle>
-                                    <path
-                                        class="opacity-75"
-                                        fill="currentColor"
-                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                    ></path>
-                                </svg>
-                            {:else}
-                                <svg
-                                    class="w-3.5 h-3.5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M13 10V3L4 14h7v7l9-11h-7z"
-                                    />
-                                </svg>
-                            {/if}
-                            <span>전체 자동 생성</span>
-                        </button>
-                    {/if}
+                    </div>
+                    <span class="text-gray-400 transition-transform duration-300" class:rotate-180={expandedSection === 'workflow'}>
+                        ▼
+                    </span>
                 </div>
+                {#if expandedSection === 'workflow'}
+                    <div class="flex-1 min-h-[300px] max-h-[500px] overflow-auto bg-gray-50/50">
+                        <WorkflowTree
+                            workflow={workflowData}
+                            workflowActions={settings.workflow_actions || []}
+                            readonly={!allowEdit}
+                            on:change={handleWorkflowChange}
+                        />
+                    </div>
+                {/if}
+            </div>
 
-                <!-- Slide Selection for Summary -->
-                {#if settings.summary_fields && settings.summary_fields.length > 0}
-                    <div
-                        class="bg-gray-50 rounded-lg border border-gray-100 overflow-hidden"
+            <!-- ====== ACCORDION SECTION 2: Summary ====== -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <div class="border-b border-gray-200">
+                <div
+                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors {expandedSection === 'summary' ? 'bg-gray-50' : ''}"
+                    on:click={() => expandedSection = expandedSection === 'summary' ? null : 'summary'}
+                >
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-gray-700">📄 요약 정보</span>
+                        {#if savingSummary}
+                            <span class="text-xs font-normal text-gray-400 animate-pulse">저장 중...</span>
+                        {/if}
+                    </div>
+                    <span class="text-gray-400 transition-transform duration-300" class:rotate-180={expandedSection === 'summary'}>
+                        ▼
+                    </span>
+                </div>
+                {#if expandedSection === 'summary'}
+                    <div class="p-4 space-y-4 max-h-[600px] overflow-y-auto">
+                        <div class="flex items-center justify-end">
+                            {#if settings.summary_fields && settings.summary_fields.length > 0}
+                                <button
+                                    on:click={generateAllSummaries}
+                                    disabled={generatingFieldIds.size > 0 || generatingAll}
+                                    title="모든 요약 필드를 LLM으로 자동 생성"
+                                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+                                           bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700
+                                           text-white shadow-sm hover:shadow-md transition-all duration-200
+                                           disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                                >
+                                    {#if generatingAll}
+                                        <svg class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    {:else}
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                    {/if}
+                                    <span>전체 자동 생성</span>
+                                </button>
+                            {/if}
+                        </div>
+
+                        <!-- Slide Selection for Summary -->
+                        {#if settings.summary_fields && settings.summary_fields.length > 0}
+                            <div
+                                class="bg-gray-50 rounded-lg border border-gray-100 overflow-hidden"
                     >
                         <button
                             class="w-full flex items-center justify-between p-3 text-left hover:bg-gray-100 transition-colors"
@@ -1444,37 +1494,32 @@
                         </p>
                     </div>
                 {/if}
+                    </div>
+                {/if}
             </div>
-        </div>
 
-        <!-- Object List (Bottom Sticky) -->
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div
-            class="shrink-0 border-t border-gray-200 bg-white transition-all duration-300 ease-in-out flex flex-col"
-            style="max-height: {otherShapesExpanded ? '50%' : 'auto'};"
-        >
-            <div
-                class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-100 {otherShapesExpanded
-                    ? 'bg-gray-50'
-                    : ''}"
-                on:click={() => (otherShapesExpanded = !otherShapesExpanded)}
-            >
-                <div class="flex items-center gap-2">
-                    <span class="font-bold text-gray-700">📦 객체 목록</span>
-                    <span
-                        class="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded-full font-mono"
-                        >{allShapes.length}</span
-                    >
-                </div>
-                <span
-                    class="text-gray-400 transition-transform duration-300"
-                    class:rotate-180={otherShapesExpanded}
+            <!-- ====== ACCORDION SECTION 3: Object List ====== -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <div class="border-b border-gray-200 flex-1 flex flex-col min-h-0">
+                <div
+                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shrink-0 {expandedSection === 'objects' ? 'bg-gray-50' : ''}"
+                    on:click={() => expandedSection = expandedSection === 'objects' ? null : 'objects'}
                 >
-                    ▲
-                </span>
-            </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-gray-700">📦 객체 목록</span>
+                        <span
+                            class="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded-full font-mono"
+                        >{allShapes.length}</span>
+                    </div>
+                    <span
+                        class="text-gray-400 transition-transform duration-300"
+                        class:rotate-180={expandedSection === 'objects'}
+                    >
+                        ▼
+                    </span>
+                </div>
 
-            {#if otherShapesExpanded}
+                {#if expandedSection === 'objects'}
                 <div class="overflow-y-auto flex-1 p-0 min-h-0 bg-gray-50/50">
                     {#if allShapes.length === 0}
                         <div
