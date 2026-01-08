@@ -495,9 +495,11 @@
             {@const colors = NODE_TYPE_COLORS[layoutNode.node.type]}
             {@const isSelected = selectedNodeId === layoutNode.id}
             {@const isInvalid = isInvalidAction(layoutNode.node) || hasInvalidParams(layoutNode.node)}
+            {@const canHaveChildren = layoutNode.node.type !== 'Action' && layoutNode.node.type !== 'Condition'}
+            {@const hasNoChildren = canHaveChildren && (!layoutNode.node.children || layoutNode.node.children.length === 0)}
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div
-                class="absolute rounded-lg border-2 shadow-sm cursor-pointer transition-all duration-150
+                class="absolute rounded-lg border-2 shadow-sm cursor-pointer transition-all duration-150 group
                        {colors.bg} {colors.border}
                        {isSelected ? 'ring-2 ring-blue-500 ring-offset-2 shadow-md' : 'hover:shadow-md'}
                        {isInvalid ? 'border-red-500 ring-2 ring-red-200' : ''}"
@@ -506,7 +508,7 @@
                 on:dblclick={(e) => handleNodeDoubleClick(layoutNode.id, e)}
                 on:contextmenu={(e) => handleContextMenu(layoutNode.id, e)}
             >
-                <div class="flex flex-col items-center justify-center h-full p-2 text-center">
+                <div class="flex flex-col items-center justify-center h-full p-2 text-center relative">
                     <span class="text-[10px] font-medium {colors.text} opacity-70 uppercase tracking-wider">
                         {NODE_TYPE_NAMES[layoutNode.node.type]}
                     </span>
@@ -515,6 +517,22 @@
                     </span>
                     {#if isInvalid}
                         <span class="text-[9px] text-red-600 font-medium mt-0.5">유효하지 않음</span>
+                    {/if}
+                    {#if hasNoChildren && !readonly}
+                        <span class="text-[9px] text-gray-400 mt-1 animate-pulse">
+                            우클릭 또는 + 버튼으로 자식 추가
+                        </span>
+                    {/if}
+
+                    <!-- Add Child Button -->
+                    {#if canHaveChildren && !readonly}
+                        <button
+                            class="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sm font-bold z-10"
+                            on:click|stopPropagation={() => openAddModal(layoutNode.id)}
+                            title="자식 노드 추가"
+                        >
+                            +
+                        </button>
                     {/if}
                 </div>
             </div>
