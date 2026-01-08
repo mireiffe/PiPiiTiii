@@ -55,13 +55,19 @@ class LLMService:
             Text chunks from the LLM response
         """
         if self.api_type == "openai":
-            async for chunk in self._generate_openai_stream(system_prompt, user_prompt, image_paths):
+            async for chunk in self._generate_openai_stream(
+                system_prompt, user_prompt, image_paths
+            ):
                 yield chunk
         elif self.api_type == "gemini":
-            async for chunk in self._generate_gemini_stream(system_prompt, user_prompt, image_paths):
+            async for chunk in self._generate_gemini_stream(
+                system_prompt, user_prompt, image_paths
+            ):
                 yield chunk
         elif self.api_type == "openai_compatible":
-            async for chunk in self._generate_openai_compatible_stream(system_prompt, user_prompt, image_paths):
+            async for chunk in self._generate_openai_compatible_stream(
+                system_prompt, user_prompt, image_paths
+            ):
                 yield chunk
         else:
             yield f"Error: Unsupported API type: {self.api_type}"
@@ -86,22 +92,21 @@ class LLMService:
                 if os.path.exists(img_path):
                     base64_image = self._encode_image_to_base64(img_path)
                     mime_type = self._get_image_mime_type(img_path)
-                    content.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{base64_image}"
+                    content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{base64_image}"
+                            },
                         }
-                    })
+                    )
 
             # Add text prompt
-            content.append({
-                "type": "text",
-                "text": user_prompt
-            })
+            content.append({"type": "text", "text": user_prompt})
 
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": content}
+                {"role": "user", "content": content},
             ]
 
             stream = await client.chat.completions.create(
@@ -146,9 +151,7 @@ class LLMService:
             response = await client.aio.models.generate_content_stream(
                 model=self.model_name,
                 contents=content,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt
-                )
+                config=types.GenerateContentConfig(system_instruction=system_prompt),
             )
 
             async for chunk in response:
@@ -176,24 +179,23 @@ class LLMService:
                 if os.path.exists(img_path):
                     base64_image = self._encode_image_to_base64(img_path)
                     mime_type = self._get_image_mime_type(img_path)
-                    content.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{base64_image}"
+                    content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{base64_image}"
+                            },
                         }
-                    })
+                    )
 
             # Add text prompt
-            content.append({
-                "type": "text",
-                "text": user_prompt
-            })
+            content.append({"type": "text", "text": user_prompt})
 
             payload = {
                 "model": self.model_name,
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": content}
+                    {"role": "user", "content": content},
                 ],
                 "stream": True,
             }
@@ -227,6 +229,7 @@ class LLMService:
                                 break
                             try:
                                 import json
+
                                 chunk = json.loads(data)
                                 if "choices" in chunk and chunk["choices"]:
                                     delta = chunk["choices"][0].get("delta", {})
@@ -237,3 +240,29 @@ class LLMService:
 
         except Exception as e:
             yield f"Error: {str(e)}"
+
+    async def generate_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> str:
+        """
+        Generate non-streaming text response from LLM (no vision support needed for this).
+
+        Args:
+            system_prompt: System instructions for the LLM
+            user_prompt: User query/prompt
+
+        Returns:
+            Complete text response
+        """
+        response_text = ""
+        # We can reuse the stream method and accumulate, or implement specific non-stream calls.
+        # reusing stream is easier for now to maintain consistency across providers.
+        try:
+            async for chunk in self.generate_stream(system_prompt, user_prompt, []):
+                response_text += chunk
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+        return response_text

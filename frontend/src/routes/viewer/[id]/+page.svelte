@@ -1,10 +1,15 @@
-<script>
+﻿<script>
     import { page } from "$app/stores";
     import { onMount, tick } from "svelte";
+    import { slide } from "svelte/transition";
     import { marked } from "marked";
-    import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
     import WorkflowTree from "$lib/components/WorkflowTree.svelte";
     import Button from "$lib/components/ui/Button.svelte";
+    import ViewerToolbar from "$lib/components/viewer/ViewerToolbar.svelte";
+    import ViewerSidebar from "$lib/components/viewer/ViewerSidebar.svelte";
+    import ViewerCanvas from "$lib/components/viewer/ViewerCanvas.svelte";
+    import ViewerRightPane from "$lib/components/viewer/ViewerRightPane.svelte";
+
     import {
         fetchProject,
         updateShapePositions,
@@ -25,8 +30,8 @@
 
     // Configure marked options
     marked.setOptions({
-        breaks: true,  // Convert \n to <br>
-        gfm: true,     // GitHub Flavored Markdown
+        breaks: true, // Convert \n to <br>
+        gfm: true, // GitHub Flavored Markdown
     });
 
     const projectId = $page.params.id;
@@ -80,7 +85,7 @@
     let savingWorkflow = false;
 
     // Accordion state for right pane sections
-    let expandedSection = 'workflow'; // 'workflow' | 'summary' | 'objects' - default is workflow
+    let expandedSection = "workflow"; // 'workflow' | 'summary' | 'objects' - default is workflow
 
     // LLM auto-generation state
     let generatingFieldIds = new Set(); // Track multiple fields being generated in parallel
@@ -104,7 +109,7 @@
             .map((s) => s.slide_index);
     }
 
-    // 이미지 shape 필터링
+    // ?대?吏 shape ?꾪꽣留?
     $: imageShapes = allShapes.filter(
         (s) =>
             s.image_path ||
@@ -238,9 +243,49 @@
         }
     }
 
-    function handleWorkflowChange(event) {
+    async function handleWorkflowChange(event) {
         const newWorkflow = event.detail;
         saveWorkflow(newWorkflow);
+    }
+
+    async function handleGenerateWorkflow(event) {
+        const query = event.detail;
+        if (!query) return;
+
+        savingWorkflow = true;
+        try {
+            const { generateWorkflowLLM } = await import("$lib/api/project");
+            const res = await generateWorkflowLLM(projectId, query);
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === "success" && data.workflow) {
+                    workflowData = data.workflow;
+                    // Workflow is already updated in DB backend-side, but let's refresh local state just in case
+                    alert("워크플로우가 수정되었습니다.");
+                } else if (data.status === "confirmation_required") {
+                    const message = `정의되지 않은 액션이 사용되었습니다:\n\n${data.undefined_actions.join("\n")}\n\n그래도 수정하시겠습니까?`;
+                    if (confirm(message)) {
+                        workflowData = data.workflow;
+                        await saveWorkflow(workflowData);
+                        alert(
+                            "워크플로우가 수정되었습니다 (정의되지 않은 액션 포함).",
+                        );
+                    }
+                } else {
+                    alert(
+                        `워크플로우 수정 실패: ${data.message || "알 수 없는 오류"}`,
+                    );
+                }
+            } else {
+                alert("워크플로우 수정 요청 실패");
+            }
+        } catch (e) {
+            console.error("Failed to generate workflow", e);
+            alert(`오류 발생: ${e.message}`);
+        } finally {
+            savingWorkflow = false;
+        }
     }
 
     async function saveSummary() {
@@ -261,7 +306,10 @@
     }
 
     // LLM Auto-generation functions
-    async function generateSummaryForField(fieldId, skipSaveOnComplete = false) {
+    async function generateSummaryForField(
+        fieldId,
+        skipSaveOnComplete = false,
+    ) {
         if (generatingFieldIds.has(fieldId)) return;
 
         generatingFieldIds.add(fieldId);
@@ -304,7 +352,7 @@
         } catch (e) {
             console.error("Failed to generate summary", e);
             if (!skipSaveOnComplete) {
-                alert(`요약 생성 실패: ${e.message}`);
+                alert(`?붿빟 ?앹꽦 ?ㅽ뙣: ${e.message}`);
             }
         } finally {
             generatingFieldIds.delete(fieldId);
@@ -322,7 +370,9 @@
 
         // Generate all fields in parallel
         await Promise.all(
-            sortedFields.map((field) => generateSummaryForField(field.id, true))
+            sortedFields.map((field) =>
+                generateSummaryForField(field.id, true),
+            ),
         );
 
         generatingAll = false;
@@ -711,1008 +761,135 @@
         window.removeEventListener("mousemove", handleResize);
         window.removeEventListener("mouseup", stopResize);
     }
+
+    async function handleDownload() {
+        if (downloading) return;
+        downloading = true;
+        try {
+            await downloadProject(projectId);
+        } catch (e) {
+            console.error(e);
+            alert("Failed to download PPT");
+        } finally {
+            downloading = false;
+        }
+    }
 </script>
 
 <div class="flex h-screen bg-gray-100 overflow-hidden">
-    <!-- Left Sidebar (Slides) -->
-    <div class="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
-        <div
-            class="p-5 border-b border-gray-200 bg-white flex flex-col gap-2 shadow-sm z-10"
-        >
-            <h1
-                class="font-bold text-gray-800 truncate text-lg"
-                title={project?.ppt_path.split("\\").pop()}
-            >
-                {project?.ppt_path.split("\\").pop() || "Loading..."}
-            </h1>
-            <Button
-                href="/"
-                variant="ghost"
-                size="sm"
-                class="-ml-2 justify-start text-gray-500"
-            >
-                <svg
-                    class="w-4 h-4 mr-1"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    ><path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                    /></svg
-                >
-                Back to Dashboard
-            </Button>
-        </div>
+    <!-- Left Sidebar -->
+    <ViewerSidebar
+        {project}
+        {projectId}
+        {currentSlideIndex}
+        {useThumbnails}
+        on:select={(e) => selectSlide(e.detail.index)}
+    />
 
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
-            {#if project}
-                {#each project.slides as slide, i}
-                    <button
-                        id={`slide-thumb-${i}`}
-                        class="w-full text-left p-2 rounded hover:bg-gray-50 transition {currentSlideIndex ===
-                        i
-                            ? 'ring-2 ring-blue-500 bg-blue-50'
-                            : ''}"
-                        on:click={() => selectSlide(i)}
-                    >
-                        <div
-                            class="aspect-video bg-white border border-gray-200 mb-1 relative overflow-hidden"
-                        >
-                            {#if useThumbnails}
-                                <img
-                                    src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, "0")}_thumb.png`}
-                                    alt={`Slide ${slide.slide_index} thumbnail`}
-                                    class="w-full h-full object-contain"
-                                    on:error={(e) => {
-                                        console.warn(
-                                            `Thumbnail not found for slide ${slide.slide_index}`,
-                                        );
-                                        e.target.style.display = "none";
-                                    }}
-                                />
-                            {:else}
-                                <div
-                                    class="absolute top-0 left-0 origin-top-left pointer-events-none"
-                                    style="transform: scale({200 /
-                                        (project.slide_width ||
-                                            960)}); width: {project.slide_width}px; height: {project.slide_height}px;"
-                                >
-                                    {#each slide.shapes.sort((a, b) => (a.z_order_position || 0) - (b.z_order_position || 0)) as shape}
-                                        <div class="absolute top-0 left-0">
-                                            <ShapeRenderer
-                                                {shape}
-                                                {projectId}
-                                            />
-                                        </div>
-                                    {/each}
-                                </div>
-                            {/if}
-                        </div>
-                        <span class="text-sm text-gray-600 font-medium"
-                            >Slide {slide.slide_index}</span
-                        >
-                    </button>
-                {/each}
-            {/if}
-        </div>
-    </div>
+    <!-- Right Pane (Order swapped in DOM but visually controlled by flex and order if needed, but here it is absolute or flex item? It's flex-col layout) -->
+    <!-- Wait, ViewerRightPane is likely at the end of the file. Let me check the end of file -->
 
     <!-- Main Canvas Area -->
     {#if !rightPaneFullscreen}
-    <div
-        class="flex-1 flex flex-col relative overflow-hidden"
-        bind:clientWidth={containerWidth}
-    >
-        <!-- Toolbar -->
         <div
-            class="min-h-[3.5rem] h-auto bg-white border-b border-gray-200 flex flex-wrap items-center justify-between px-4 py-2 gap-2 shrink-0 z-10"
+            class="flex-1 flex flex-col relative overflow-hidden"
+            bind:clientWidth={containerWidth}
         >
-            {#if allowEdit}
-                <div class="flex items-center space-x-2">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={historyIndex <= 0}
-                        on:click={undo}
-                        title="Undo (Ctrl+Z)"
-                    >
-                        ↩️ Undo
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={historyIndex >= history.length - 1}
-                        on:click={redo}
-                        title="Redo (Ctrl+Y)"
-                    >
-                        ↪️ Redo
-                    </Button>
-                    <div class="w-px h-6 bg-gray-300 mx-2"></div>
-                    <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={!isDirty || saving}
-                        loading={saving}
-                        on:click={handleSaveState}
-                    >
-                        {saving ? "Saving..." : "Save State"}
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        on:click={handleReset}
-                    >
-                        Reset
-                    </Button>
-                </div>
-            {:else}
-                <div class="w-2"></div>
-            {/if}
+            <ViewerToolbar
+                {historyIndex}
+                historyLength={history.length}
+                {isDirty}
+                {saving}
+                {allowEdit}
+                {useThumbnails}
+                {loadingSettings}
+                {downloading}
+                {scale}
+                on:undo={undo}
+                on:redo={redo}
+                on:saveState={handleSaveState}
+                on:reset={handleReset}
+                on:toggleThumbnailView={toggleThumbnailView}
+                on:reparseAll={handleReparseAll}
+                on:reparseSlide={handleReparseSlide}
+                on:download={handleDownload}
+                on:zoomIn={() => (scale *= 1.1)}
+                on:zoomOut={() => (scale *= 0.9)}
+            />
 
-            <div class="flex items-center space-x-2 shrink-0">
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    on:click={toggleThumbnailView}
-                    disabled={loadingSettings}
-                    title={useThumbnails
-                        ? "렌더링 보기로 전환"
-                        : "썸네일 보기로 전환"}
-                >
-                    {#if useThumbnails}
-                        <svg
-                            class="w-3 h-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"
-                            />
-                        </svg>
-                        <span>썸네일</span>
-                    {:else}
-                        <svg
-                            class="w-3 h-3 mr-1"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            ><path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                            /><path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                            /></svg
-                        >
-                        <span>렌더링</span>
-                    {/if}
-                </Button>
-                <div class="w-px h-4 bg-gray-300 mx-1"></div>
-                <Button
-                    variant="destructive"
-                    size="sm"
-                    on:click={handleReparseAll}
-                >
-                    Reparse All
-                </Button>
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    on:click={handleReparseSlide}
-                >
-                    Reparse Slide
-                </Button>
-                <Button
-                    variant="success"
-                    size="sm"
-                    on:click={async () => {
-                        if (downloading) return;
-                        downloading = true;
-                        try {
-                            await downloadProject(projectId);
-                        } catch (e) {
-                            console.error(e);
-                            alert("Failed to download PPT");
-                        } finally {
-                            downloading = false;
-                        }
-                    }}
-                    disabled={downloading}
-                    loading={downloading}
-                >
-                    Download
-                </Button>
-                <div class="w-px h-4 bg-gray-300 mx-2"></div>
-                <button
-                    class="p-1 hover:bg-gray-100 rounded w-8 h-8 flex items-center justify-center transition-colors text-gray-600"
-                    on:click={() => (scale *= 1.1)}>+</button
-                >
-                <span class="text-xs text-gray-500 w-12 text-center font-mono"
-                    >{Math.round(scale * 100)}%</span
-                >
-                <button
-                    class="p-1 hover:bg-gray-100 rounded w-8 h-8 flex items-center justify-center transition-colors text-gray-600"
-                    on:click={() => (scale *= 0.9)}>-</button
-                >
-            </div>
+            <!-- Canvas -->
+            <ViewerCanvas
+                {project}
+                {currentSlide}
+                {scale}
+                {useThumbnails}
+                {projectId}
+                {sortedShapes}
+                {selectedShapeId}
+                on:wheel={handleWheel}
+                on:shapeMouseDown={(e) =>
+                    handleMouseDown(e.detail.event, e.detail.shape)}
+                on:canvasMouseDown={() => (selectedShapeId = null)}
+            />
         </div>
 
-        <!-- Canvas -->
+        <!-- Resize Handle -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
-            class="flex-1 overflow-auto bg-gray-100 p-8 flex items-center justify-center"
-            on:wheel={handleWheel}
-            on:mousedown={() => (selectedShapeId = null)}
+            class="w-4 -ml-2 z-20 flex items-center justify-center cursor-col-resize group shrink-0 relative"
+            on:mousedown={startResize}
         >
-            {#if currentSlide}
+            <div
+                class="absolute inset-y-0 left-1/2 w-0.5 bg-gray-200 group-hover:bg-blue-400 transition-colors"
+            ></div>
+            <div
+                class="w-4 h-8 bg-white border border-gray-300 rounded shadow-sm flex flex-col items-center justify-center gap-0.5 z-10 group-hover:border-blue-400 group-hover:text-blue-500"
+            >
                 <div
-                    style={`
-                        width: ${project.slide_width * scale}px;
-                        height: ${project.slide_height * scale}px;
-                    `}
-                >
-                    <div
-                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left"
-                        style={`
-                            width: ${project.slide_width}px;
-                            height: ${project.slide_height}px;
-                            transform: scale(${scale});
-                        `}
-                    >
-                        {#if useThumbnails}
-                            <img
-                                src={`/api/results/${projectId}/thumbnails/slide_${currentSlide.slide_index.toString().padStart(3, "0")}_thumb.png`}
-                                alt={`Slide ${currentSlide.slide_index} thumbnail`}
-                                class="w-full h-full object-contain"
-                                on:error={(e) => {
-                                    console.warn(
-                                        `Thumbnail not found for slide ${currentSlide.slide_index}, falling back to rendering`,
-                                    );
-                                    e.target.style.display = "none";
-                                }}
-                            />
-                        {:else}
-                            {#each sortedShapes as shape (shape.shape_index)}
-                                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                <div
-                                    on:mousedown={(e) =>
-                                        handleMouseDown(e, shape)}
-                                    class="absolute"
-                                    style={`
-                                        left: 0;
-                                        top: 0;
-                                        width: 0;
-                                        height: 0;
-                                        cursor: grab;
-                                    `}
-                                >
-                                    <ShapeRenderer
-                                        {shape}
-                                        {projectId}
-                                        highlight={selectedShapeId ===
-                                            shape.shape_index}
-                                    />
-                                </div>
-                            {/each}
-                        {/if}
-                    </div>
-                </div>
-            {/if}
+                    class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
+                ></div>
+                <div
+                    class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
+                ></div>
+                <div
+                    class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
+                ></div>
+            </div>
         </div>
-    </div>
-
-    <!-- Resize Handle -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <!-- Resize Handle -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div
-        class="w-4 -ml-2 z-20 flex items-center justify-center cursor-col-resize group shrink-0 relative"
-        on:mousedown={startResize}
-    >
-        <div
-            class="absolute inset-y-0 left-1/2 w-0.5 bg-gray-200 group-hover:bg-blue-400 transition-colors"
-        ></div>
-        <div
-            class="w-4 h-8 bg-white border border-gray-300 rounded shadow-sm flex flex-col items-center justify-center gap-0.5 z-10 group-hover:border-blue-400 group-hover:text-blue-500"
-        >
-            <div
-                class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
-            ></div>
-            <div
-                class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
-            ></div>
-            <div
-                class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500"
-            ></div>
-        </div>
-    </div>
     {/if}
 
     <!-- Right Sidebar -->
-    <div
-        class="bg-white border-l border-gray-200 flex flex-col {rightPaneFullscreen ? 'flex-1' : 'shrink-0'}"
-        style={rightPaneFullscreen ? '' : `width: ${rightPaneWidth}px;`}
-    >
-        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 class="font-bold text-gray-800">프로젝트 정보</h2>
-            <button
-                class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all
-                       {rightPaneFullscreen
-                           ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
-                on:click={() => rightPaneFullscreen = !rightPaneFullscreen}
-                title={rightPaneFullscreen ? '일반 보기' : '전체 보기'}
-            >
-                {#if rightPaneFullscreen}
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.5 3.5M9 15v4.5M9 15H4.5M9 15l-5.5 5.5M15 9h4.5M15 9V4.5M15 9l5.5-5.5M15 15h4.5M15 15v4.5m0-4.5l5.5 5.5" />
-                    </svg>
-                    <span>일반</span>
-                {:else}
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                    </svg>
-                    <span>전체</span>
-                {/if}
-            </button>
-        </div>
-
-        <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
-            <!-- ====== ACCORDION SECTION 1: Workflow ====== -->
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div class="border-b border-gray-200 {expandedSection === 'workflow' ? 'flex-1 flex flex-col min-h-0' : ''}">
-                <div
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors {expandedSection === 'workflow' ? 'bg-gray-50' : ''} shrink-0"
-                    on:click={() => expandedSection = expandedSection === 'workflow' ? null : 'workflow'}
-                >
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold text-gray-700">🔄 워크플로우</span>
-                        {#if savingWorkflow}
-                            <span class="text-xs font-normal text-gray-400 animate-pulse">저장 중...</span>
-                        {/if}
-                    </div>
-                    <span class="text-gray-400 transition-transform duration-300" class:rotate-180={expandedSection === 'workflow'}>
-                        ▼
-                    </span>
-                </div>
-                {#if expandedSection === 'workflow'}
-                    <div class="flex-1 min-h-0 overflow-auto bg-gray-50/50">
-                        <WorkflowTree
-                            workflow={workflowData}
-                            workflowActions={settings.workflow_actions || []}
-                            readonly={!allowEdit}
-                            on:change={handleWorkflowChange}
-                        />
-                    </div>
-                {/if}
-            </div>
-
-            <!-- ====== ACCORDION SECTION 2: Summary ====== -->
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div class="border-b border-gray-200 {expandedSection === 'summary' ? 'flex-1 flex flex-col min-h-0' : ''}">
-                <div
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors {expandedSection === 'summary' ? 'bg-gray-50' : ''} shrink-0"
-                    on:click={() => expandedSection = expandedSection === 'summary' ? null : 'summary'}
-                >
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold text-gray-700">📄 요약 정보</span>
-                        {#if savingSummary}
-                            <span class="text-xs font-normal text-gray-400 animate-pulse">저장 중...</span>
-                        {/if}
-                    </div>
-                    <span class="text-gray-400 transition-transform duration-300" class:rotate-180={expandedSection === 'summary'}>
-                        ▼
-                    </span>
-                </div>
-                {#if expandedSection === 'summary'}
-                    <div class="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
-                        <div class="flex items-center justify-end">
-                            {#if settings.summary_fields && settings.summary_fields.length > 0}
-                                <button
-                                    on:click={generateAllSummaries}
-                                    disabled={generatingFieldIds.size > 0 || generatingAll}
-                                    title="모든 요약 필드를 LLM으로 자동 생성"
-                                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-                                           bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700
-                                           text-white shadow-sm hover:shadow-md transition-all duration-200
-                                           disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                                >
-                                    {#if generatingAll}
-                                        <svg class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                    {:else}
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                        </svg>
-                                    {/if}
-                                    <span>전체 자동 생성</span>
-                                </button>
-                            {/if}
-                        </div>
-
-                        <!-- Slide Selection for Summary -->
-                        {#if settings.summary_fields && settings.summary_fields.length > 0}
-                            <div
-                                class="bg-gray-50 rounded-lg border border-gray-100 overflow-hidden"
-                    >
-                        <button
-                            class="w-full flex items-center justify-between p-3 text-left hover:bg-gray-100 transition-colors"
-                            on:click={() =>
-                                (showSlideSelector = !showSlideSelector)}
-                        >
-                            <div
-                                class="flex items-center gap-2 overflow-hidden"
-                            >
-                                <span
-                                    class="text-xs font-semibold text-gray-500 whitespace-nowrap"
-                                    >참조 슬라이드:</span
-                                >
-                                <div class="flex gap-1 overflow-hidden">
-                                    {#if selectedSlideIndices.length === 0}
-                                        <span
-                                            class="text-xs text-gray-400 italic"
-                                            >선택 없음</span
-                                        >
-                                    {:else}
-                                        {#each selectedSlideIndices.sort((a, b) => a - b) as idx}
-                                            <span
-                                                class="bg-white border border-gray-200 text-gray-600 text-[10px] px-1.5 py-0.5 rounded shadow-sm"
-                                            >
-                                                #{idx}
-                                            </span>
-                                        {/each}
-                                    {/if}
-                                </div>
-                            </div>
-                            <svg
-                                class="w-4 h-4 text-gray-400 transform transition-transform {showSlideSelector
-                                    ? 'rotate-180'
-                                    : ''}"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                                ><path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M19 9l-7 7-7-7"
-                                /></svg
-                            >
-                        </button>
-
-                        {#if showSlideSelector}
-                            <div
-                                class="p-3 bg-white border-t border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200"
-                            >
-                                <div
-                                    class="flex items-center justify-between mb-2"
-                                >
-                                    <p class="text-[10px] text-gray-400">
-                                        최대 3개까지 선택하여 요약에 참조합니다.
-                                    </p>
-                                </div>
-                                <div
-                                    class="grid grid-cols-5 gap-1 max-h-32 overflow-y-auto p-1"
-                                >
-                                    {#if project}
-                                        {#each project.slides as slide}
-                                            <button
-                                                class="text-xs p-1.5 rounded border transition flex flex-col items-center justify-center gap-1 {selectedSlideIndices.includes(
-                                                    slide.slide_index,
-                                                )
-                                                    ? 'bg-blue-50 text-blue-600 border-blue-200 ring-1 ring-blue-100'
-                                                    : 'bg-white text-gray-500 border-gray-100 hover:border-gray-300 hover:bg-gray-50'}
-                                                        {selectedSlideIndices.length >=
-                                                    3 &&
-                                                !selectedSlideIndices.includes(
-                                                    slide.slide_index,
-                                                )
-                                                    ? 'opacity-40 cursor-not-allowed'
-                                                    : ''}"
-                                                on:click={() =>
-                                                    toggleSlideSelection(
-                                                        slide.slide_index,
-                                                    )}
-                                                disabled={selectedSlideIndices.length >=
-                                                    3 &&
-                                                    !selectedSlideIndices.includes(
-                                                        slide.slide_index,
-                                                    )}
-                                            >
-                                                <span class="font-medium"
-                                                    >{slide.slide_index}</span
-                                                >
-                                            </button>
-                                        {/each}
-                                    {/if}
-                                </div>
-                            </div>
-                        {/if}
-                    </div>
-                {/if}
-
-                {#if settings.summary_fields && settings.summary_fields.length > 0}
-                    <div class="space-y-4">
-                        {#each settings.summary_fields.sort((a, b) => a.order - b.order) as field}
-                            <div class="group">
-                                <div
-                                    class="flex items-center justify-between mb-1.5 px-0.5"
-                                >
-                                    <div class="flex items-center gap-2">
-                                        <label
-                                            class="text-xs font-semibold text-gray-600 uppercase tracking-wider"
-                                        >
-                                            {field.name}
-                                        </label>
-                                        <!-- Compare button - shows when LLM version exists and differs from user version -->
-                                        {#if summaryDataLLM[field.id] && summaryDataLLM[field.id] !== summaryData[field.id]}
-                                            <button
-                                                class="text-[9px] px-1.5 py-0.5 rounded-full transition-all flex items-center gap-0.5 {comparingFieldId ===
-                                                field.id
-                                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                                    : 'bg-gray-100 text-gray-500 hover:bg-amber-50 hover:text-amber-600 border border-transparent hover:border-amber-200'}"
-                                                on:click={() =>
-                                                    toggleCompare(field.id)}
-                                                title={comparingFieldId ===
-                                                field.id
-                                                    ? "비교 닫기"
-                                                    : "LLM 버전과 비교"}
-                                            >
-                                                <svg
-                                                    class="w-2.5 h-2.5"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                                                    />
-                                                </svg>
-                                                <span
-                                                    >{comparingFieldId ===
-                                                    field.id
-                                                        ? "닫기"
-                                                        : "비교"}</span
-                                                >
-                                            </button>
-                                        {/if}
-                                    </div>
-                                    <button
-                                        class="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md
-                                               bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700
-                                               text-white shadow-sm hover:shadow transition-all duration-200
-                                               disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                                        on:click={() =>
-                                            generateSummaryForField(field.id)}
-                                        disabled={generatingFieldIds.has(field.id) ||
-                                            generatingAll}
-                                        title="이 항목을 LLM으로 자동 생성"
-                                    >
-                                        {#if generatingFieldIds.has(field.id)}
-                                            <svg
-                                                class="animate-spin w-3 h-3"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <circle
-                                                    class="opacity-25"
-                                                    cx="12"
-                                                    cy="12"
-                                                    r="10"
-                                                    stroke="currentColor"
-                                                    stroke-width="4"
-                                                    fill="none"
-                                                ></circle>
-                                                <path
-                                                    class="opacity-75"
-                                                    fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                ></path>
-                                            </svg>
-                                        {:else}
-                                            <svg
-                                                class="w-3 h-3"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                                                />
-                                            </svg>
-                                        {/if}
-                                        <span>자동 생성</span>
-                                    </button>
-                                </div>
-
-                                <!-- Comparison View -->
-                                {#if comparingFieldId === field.id && summaryDataLLM[field.id]}
-                                    <div
-                                        class="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg"
-                                    >
-                                        <div
-                                            class="flex items-center justify-between mb-1.5"
-                                        >
-                                            <span
-                                                class="text-[10px] font-medium text-amber-700"
-                                                >LLM 생성 버전</span
-                                            >
-                                            <button
-                                                class="text-[9px] px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded transition-colors flex items-center gap-1"
-                                                on:click={() =>
-                                                    restoreLLMVersion(field.id)}
-                                                title="LLM 버전으로 되돌리기"
-                                            >
-                                                <svg
-                                                    class="w-2.5 h-2.5"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                                    />
-                                                </svg>
-                                                <span>이 버전으로 복원</span>
-                                            </button>
-                                        </div>
-                                        <div
-                                            class="text-xs text-amber-900/80 leading-relaxed max-h-32 overflow-y-auto prose prose-xs prose-amber"
-                                        >
-                                            {@html marked(summaryDataLLM[field.id] || '')}
-                                        </div>
-                                    </div>
-                                {/if}
-
-                                <div class="relative">
-                                    <!-- Edit/Preview Toggle -->
-                                    <div class="flex justify-end mb-2">
-                                        <div class="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
-                                            <button
-                                                class="px-3 py-1 text-xs font-medium rounded-md transition-all {editingFieldId === field.id
-                                                    ? 'bg-white text-gray-700 shadow-sm'
-                                                    : 'text-gray-500 hover:text-gray-700'}"
-                                                on:click={() => editingFieldId = field.id}
-                                            >
-                                                편집
-                                            </button>
-                                            <button
-                                                class="px-3 py-1 text-xs font-medium rounded-md transition-all {editingFieldId !== field.id
-                                                    ? 'bg-white text-gray-700 shadow-sm'
-                                                    : 'text-gray-500 hover:text-gray-700'}"
-                                                on:click={() => { editingFieldId = null; saveSummary(); }}
-                                            >
-                                                미리보기
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {#if editingFieldId === field.id}
-                                        <!-- Edit Mode -->
-                                        <textarea
-                                            class="w-full text-base leading-relaxed p-4 border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder-gray-300 resize-y min-h-[320px] hover:border-gray-300 {generatingFieldIds.has(field.id)
-                                                ? 'bg-indigo-50/30'
-                                                : 'bg-white'}"
-                                            style="font-size: 15px;"
-                                            rows="12"
-                                            placeholder="{field.name}에 대한 내용을 입력하세요... (자동 저장됨)"
-                                            bind:value={summaryData[field.id]}
-                                            on:blur={saveSummary}
-                                            on:keydown={(e) => {
-                                                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                                                    e.preventDefault();
-                                                    saveSummary();
-                                                    editingFieldId = null;
-                                                    e.target.blur();
-                                                }
-                                            }}
-                                            disabled={generatingFieldIds.has(field.id)}
-                                        ></textarea>
-                                    {:else}
-                                        <!-- Preview Mode (Markdown Rendered) -->
-                                        <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                        <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                        <div
-                                            class="w-full min-h-[320px] p-4 border border-gray-200 rounded-lg shadow-sm bg-white cursor-pointer hover:border-gray-300 transition-all overflow-auto"
-                                            on:click={() => editingFieldId = field.id}
-                                            title="클릭하여 편집"
-                                        >
-                                            {#if summaryData[field.id]}
-                                                <div class="prose prose-sm max-w-none prose-headings:text-gray-800 prose-p:text-gray-600 prose-strong:text-gray-700 prose-ul:text-gray-600 prose-ol:text-gray-600">
-                                                    {@html marked(summaryData[field.id] || '')}
-                                                </div>
-                                            {:else}
-                                                <p class="text-gray-300 italic">{field.name}에 대한 내용을 입력하세요...</p>
-                                            {/if}
-                                        </div>
-                                    {/if}
-
-                                    {#if generatingFieldIds.has(field.id)}
-                                        <div
-                                            class="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-[1px] rounded-lg"
-                                        >
-                                            <div
-                                                class="flex items-center gap-2 text-indigo-600 text-sm font-medium"
-                                            >
-                                                <svg
-                                                    class="animate-spin h-4 w-4"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <circle
-                                                        class="opacity-25"
-                                                        cx="12"
-                                                        cy="12"
-                                                        r="10"
-                                                        stroke="currentColor"
-                                                        stroke-width="4"
-                                                        fill="none"
-                                                    ></circle>
-                                                    <path
-                                                        class="opacity-75"
-                                                        fill="currentColor"
-                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                    ></path>
-                                                </svg>
-                                                작성 중...
-                                            </div>
-                                        </div>
-                                    {/if}
-                                </div>
-                            </div>
-                        {/each}
-                    </div>
-                {:else}
-                    <div
-                        class="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200"
-                    >
-                        <p class="text-sm text-gray-500 mb-1">
-                            정보 필드가 없습니다.
-                        </p>
-                        <p class="text-xs text-gray-400">
-                            설정에서 요약 필드를 추가해주세요.
-                        </p>
-                    </div>
-                {/if}
-                    </div>
-                {/if}
-            </div>
-
-            <!-- ====== ACCORDION SECTION 3: Object List ====== -->
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div class="border-b border-gray-200 {expandedSection === 'objects' ? 'flex-1 flex flex-col min-h-0' : ''}">
-                <div
-                    class="w-full flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors shrink-0 {expandedSection === 'objects' ? 'bg-gray-50' : ''}"
-                    on:click={() => expandedSection = expandedSection === 'objects' ? null : 'objects'}
-                >
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold text-gray-700">📦 객체 목록</span>
-                        <span
-                            class="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded-full font-mono"
-                        >{allShapes.length}</span>
-                    </div>
-                    <span
-                        class="text-gray-400 transition-transform duration-300"
-                        class:rotate-180={expandedSection === 'objects'}
-                    >
-                        ▼
-                    </span>
-                </div>
-
-                {#if expandedSection === 'objects'}
-                <div class="overflow-y-auto flex-1 p-0 min-h-0 bg-gray-50/50">
-                    {#if allShapes.length === 0}
-                        <div
-                            class="p-8 text-gray-400 text-sm text-center flex flex-col items-center gap-2"
-                        >
-                            <span class="text-2xl">📭</span>
-                            <span>발견된 객체가 없습니다</span>
-                        </div>
-                    {:else}
-                        <div class="p-2 space-y-4">
-                            <!-- 이미지 객체 -->
-                            {#if imageShapes.length > 0}
-                                <div>
-                                    <div
-                                        class="flex items-center gap-2 px-2 py-1 mb-1"
-                                    >
-                                        <span
-                                            class="text-xs font-bold text-orange-600 uppercase tracking-wide"
-                                            >이미지 assets</span
-                                        >
-                                        <span class="h-px flex-1 bg-orange-200"
-                                        ></span>
-                                    </div>
-                                    <ul class="space-y-1">
-                                        {#each imageShapes as shape}
-                                            <li>
-                                                <button
-                                                    class="w-full text-left p-2 rounded-lg text-sm flex items-start gap-3 transition-all border {selectedShapeId ===
-                                                    shape.shape_index
-                                                        ? 'bg-orange-50 border-orange-200 shadow-sm ring-1 ring-orange-200'
-                                                        : 'bg-white border-transparent hover:border-orange-200 hover:shadow-sm'}"
-                                                    on:click={() =>
-                                                        (selectedShapeId =
-                                                            shape.shape_index)}
-                                                >
-                                                    {#if shape.description}
-                                                        <div
-                                                            class="mt-0.5 text-green-500"
-                                                            title="설명 완료"
-                                                        >
-                                                            ✅
-                                                        </div>
-                                                    {:else}
-                                                        <div
-                                                            class="mt-0.5 text-orange-400 animate-pulse"
-                                                            title="설명 필요"
-                                                        >
-                                                            ⚠️
-                                                        </div>
-                                                    {/if}
-                                                    <div class="flex-1 min-w-0">
-                                                        <div
-                                                            class="font-medium text-gray-700 truncate"
-                                                            title={shape.name}
-                                                        >
-                                                            {shape.name}
-                                                        </div>
-                                                        {#if shape.description}
-                                                            <div
-                                                                class="text-xs text-gray-400 truncate mt-0.5"
-                                                            >
-                                                                {shape.description}
-                                                            </div>
-                                                        {:else}
-                                                            <div
-                                                                class="text-xs text-orange-400 mt-0.5"
-                                                            >
-                                                                설명을
-                                                                입력해주세요
-                                                            </div>
-                                                        {/if}
-                                                    </div>
-                                                </button>
-                                            </li>
-                                        {/each}
-                                    </ul>
-                                </div>
-                            {/if}
-
-                            <!-- 기타 객체 -->
-                            {#if otherShapes.length > 0}
-                                <div>
-                                    <div
-                                        class="flex items-center gap-2 px-2 py-1 mb-1"
-                                    >
-                                        <span
-                                            class="text-xs font-bold text-gray-500 uppercase tracking-wide"
-                                            >기타 객체</span
-                                        >
-                                        <span class="h-px flex-1 bg-gray-200"
-                                        ></span>
-                                    </div>
-                                    <ul class="space-y-1">
-                                        {#each otherShapes as shape}
-                                            <li>
-                                                <button
-                                                    class="w-full text-left p-2 rounded-lg text-sm flex items-start gap-3 transition-all border {selectedShapeId ===
-                                                    shape.shape_index
-                                                        ? 'bg-blue-50 border-blue-200 shadow-sm ring-1 ring-blue-200'
-                                                        : 'bg-white border-transparent hover:border-gray-200 hover:shadow-sm'}"
-                                                    on:click={() =>
-                                                        (selectedShapeId =
-                                                            shape.shape_index)}
-                                                >
-                                                    <div
-                                                        class="mt-0.5 text-gray-400"
-                                                    >
-                                                        🔹
-                                                    </div>
-                                                    <div class="flex-1 min-w-0">
-                                                        <div
-                                                            class="font-medium text-gray-700 truncate"
-                                                            title={shape.name}
-                                                        >
-                                                            {shape.name}
-                                                        </div>
-                                                        {#if shape.description}
-                                                            <div
-                                                                class="text-xs text-gray-400 truncate mt-0.5"
-                                                            >
-                                                                {shape.description}
-                                                            </div>
-                                                        {/if}
-                                                    </div>
-                                                    {#if shape.description}
-                                                        <div
-                                                            class="mt-0.5 text-gray-300"
-                                                            title="설명 있음"
-                                                        >
-                                                            📝
-                                                        </div>
-                                                    {/if}
-                                                </button>
-                                            </li>
-                                        {/each}
-                                    </ul>
-                                </div>
-                            {/if}
-                        </div>
-                    {/if}
-                </div>
-
-                <!-- Description Editor (Sticky at bottom of Object List) -->
-                {#if selectedShape}
-                    <div
-                        class="p-3 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10"
-                    >
-                        <div class="flex items-center justify-between mb-2">
-                            <span
-                                class="text-xs font-bold text-gray-500 uppercase"
-                                >Description</span
-                            >
-                            <span
-                                class="text-xs text-gray-400 max-w-[150px] truncate"
-                                >{selectedShape.name}</span
-                            >
-                        </div>
-                        <div class="relative">
-                            <textarea
-                                class="w-full text-sm p-2 pr-10 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none transition-shadow"
-                                rows="2"
-                                placeholder="객체에 대한 설명을 입력하세요..."
-                                bind:value={editingDescription}
-                                on:keydown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey) {
-                                        e.preventDefault();
-                                        handleSaveDescription();
-                                    }
-                                }}
-                            ></textarea>
-                            <button
-                                class="absolute right-2 bottom-2 p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-transform active:scale-95"
-                                on:click={handleSaveDescription}
-                                title="저장 (Enter)"
-                            >
-                                <svg
-                                    class="w-4 h-4"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                    ><path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M5 13l4 4L19 7"
-                                    /></svg
-                                >
-                            </button>
-                        </div>
-                    </div>
-                {/if}
-            {/if}
-        </div>
-    </div>
-</div>
+    <ViewerRightPane
+        bind:rightPaneFullscreen
+        bind:rightPaneWidth
+        {expandedSection}
+        {workflowData}
+        {settings}
+        {allowEdit}
+        {savingWorkflow}
+        bind:summaryData
+        bind:summaryDataLLM
+        {savingSummary}
+        {generatingFieldIds}
+        {generatingAll}
+        {selectedSlideIndices}
+        {comparingFieldId}
+        {editingFieldId}
+        {allShapes}
+        {selectedShapeId}
+        bind:editingDescription
+        {project}
+        on:workflowChange={handleWorkflowChange}
+        on:generateWorkflow={handleGenerateWorkflow}
+        on:generateAllSummaries={generateAllSummaries}
+        on:toggleSlideSelection={(e) =>
+            toggleSlideSelection(e.detail.slideIndex)}
+        on:toggleCompare={(e) => toggleCompare(e.detail.fieldId)}
+        on:generateSummaryForField={(e) =>
+            generateSummaryForField(e.detail.fieldId)}
+        on:restoreLLMVersion={(e) => restoreLLMVersion(e.detail.fieldId)}
+        on:saveSummary={saveSummary}
+        on:selectShape={(e) => (selectedShapeId = e.detail.shapeIndex)}
+        on:handleSaveDescription={handleSaveDescription}
+    />
 </div>

@@ -1,0 +1,148 @@
+<script>
+    import Button from "$lib/components/ui/Button.svelte";
+    import { createEventDispatcher } from "svelte";
+
+    export let historyIndex;
+    export let historyLength;
+    export let isDirty;
+    export let saving;
+    export let allowEdit;
+    export let useThumbnails;
+    export let loadingSettings;
+    export let downloading;
+    export let scale;
+
+    const dispatch = createEventDispatcher();
+</script>
+
+<div
+    class="min-h-[3.5rem] h-auto bg-white border-b border-gray-200 flex flex-wrap items-center justify-between px-4 py-2 gap-2 shrink-0 z-10"
+>
+    {#if allowEdit}
+        <div class="flex items-center space-x-2">
+            <Button
+                variant="ghost"
+                size="sm"
+                disabled={historyIndex <= 0}
+                on:click={() => dispatch("undo")}
+                title="Undo (Ctrl+Z)"
+            >
+                ↩️ Undo
+            </Button>
+            <Button
+                variant="ghost"
+                size="sm"
+                disabled={historyIndex >= historyLength - 1}
+                on:click={() => dispatch("redo")}
+                title="Redo (Ctrl+Y)"
+            >
+                ↪️ Redo
+            </Button>
+            <div class="w-px h-6 bg-gray-300 mx-2"></div>
+            <Button
+                variant="primary"
+                size="sm"
+                disabled={!isDirty || saving}
+                loading={saving}
+                on:click={() => dispatch("saveState")}
+            >
+                {saving ? "Saving..." : "Save State"}
+            </Button>
+            <Button
+                variant="secondary"
+                size="sm"
+                on:click={() => dispatch("reset")}
+            >
+                Reset
+            </Button>
+        </div>
+    {:else}
+        <div class="w-2"></div>
+    {/if}
+
+    <div class="flex items-center space-x-2 shrink-0">
+        <Button
+            variant="secondary"
+            size="sm"
+            on:click={() => dispatch("toggleThumbnailView")}
+            disabled={loadingSettings}
+            title={useThumbnails ? "렌더링 보기로 전환" : "썸네일 보기로 전환"}
+        >
+            {#if useThumbnails}
+                <svg
+                    class="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"
+                    />
+                </svg>
+                <span>썸네일</span>
+            {:else}
+                <svg
+                    class="w-3 h-3 mr-1"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    ><path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    /><path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    /></svg
+                >
+                <span>렌더링</span>
+            {/if}
+        </Button>
+        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        <Button
+            variant="destructive"
+            size="sm"
+            on:click={() => dispatch("reparseAll")}
+        >
+            Reparse All
+        </Button>
+        <Button
+            variant="secondary"
+            size="sm"
+            on:click={() => dispatch("reparseSlide")}
+        >
+            Reparse Slide
+        </Button>
+        <Button
+            variant="success"
+            size="sm"
+            on:click={() => dispatch("download")}
+            disabled={downloading}
+            loading={downloading}
+        >
+            Download
+        </Button>
+        <div class="w-px h-4 bg-gray-300 mx-2"></div>
+        <button
+            class="p-1 hover:bg-gray-100 rounded w-8 h-8 flex items-center justify-center transition-colors text-gray-600"
+            on:click={() => dispatch("zoomIn")}
+        >
+            +
+        </button>
+        <span class="text-xs text-gray-500 w-12 text-center font-mono">
+            {Math.round(scale * 100)}%
+        </span>
+        <button
+            class="p-1 hover:bg-gray-100 rounded w-8 h-8 flex items-center justify-center transition-colors text-gray-600"
+            on:click={() => dispatch("zoomOut")}
+        >
+            -
+        </button>
+    </div>
+</div>

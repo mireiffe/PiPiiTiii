@@ -202,3 +202,11 @@ export async function updateProjectWorkflow(id: string, workflow: WorkflowData) 
 export async function validateWorkflows() {
     return apiFetch("/api/workflow/validate");
 }
+
+export async function generateWorkflowLLM(projectId: string, query: string) {
+    return apiFetch(`/api/project/${projectId}/workflow/generate_llm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+    });
+}

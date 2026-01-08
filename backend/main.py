@@ -29,11 +29,13 @@ def calculate_prompt_version(settings: dict) -> str:
     # Create a deterministic string from prompts
     prompt_data = []
     for field in sorted(summary_fields, key=lambda x: x.get("id", "")):
-        prompt_data.append({
-            "id": field.get("id", ""),
-            "system_prompt": field.get("system_prompt", ""),
-            "user_prompt": field.get("user_prompt", "")
-        })
+        prompt_data.append(
+            {
+                "id": field.get("id", ""),
+                "system_prompt": field.get("system_prompt", ""),
+                "user_prompt": field.get("user_prompt", ""),
+            }
+        )
     prompt_str = json.dumps(prompt_data, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(prompt_str.encode()).hexdigest()[:12]
 
@@ -253,8 +255,15 @@ class WorkflowAction(BaseModel):
     params: List[WorkflowActionParam] = []
 
 
+class WorkflowPrompts(BaseModel):
+    system_prompt: str = ""
+    user_prompt: str = ""
+
+
 class Settings(BaseModel):
     llm: LLMConfig
+    workflow_llm: Optional[LLMConfig] = None
+    workflow_prompts: Optional[WorkflowPrompts] = None
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
     workflow_actions: List[WorkflowAction] = []
@@ -816,10 +825,14 @@ def load_settings() -> dict:
             return settings
     else:
         return {
-            "llm": {
+            "workflow_llm": {
                 "api_type": "openai",
                 "api_endpoint": "https://api.openai.com/v1",
                 "model_name": "gpt-4o",
+            },
+            "workflow_prompts": {
+                "system_prompt": "당신은 로봇이나 에이전트의 행동을 제어하는 Behavior Tree 워크플로우를 생성하고 수정하는 전문가입니다. 주어진 요청에 따라 워크플로우를 분석하고 수정된 JSON을 반환해야 합니다. 정해진 액션과 파라미터 규격을 엄격히 준수하세요.",
+                "user_prompt": "사용 가능한 액션 목록(파라미터 포함):\n{available_actions}\n\n현재 워크플로우: {workflow_json}\n\n요청사항: {query}\n\n위 요청사항을 반영하여 수정된 워크플로우 JSON 전체를 마크다운 코드 블록(json)으로 감싸서 반환해주세요.",
             },
             "summary_fields": [
                 {
@@ -848,24 +861,20 @@ def get_default_workflow_actions() -> list:
         {
             "id": "action_analyze",
             "name": "분석",
-            "params": [
-                {"id": "target", "name": "분석대상", "required": True}
-            ]
+            "params": [{"id": "target", "name": "분석대상", "required": True}],
         },
         {
             "id": "action_verify",
             "name": "확인",
-            "params": [
-                {"id": "target", "name": "확인대상", "required": True}
-            ]
+            "params": [{"id": "target", "name": "확인대상", "required": True}],
         },
         {
             "id": "action_inspect",
             "name": "검사",
             "params": [
                 {"id": "target", "name": "검사대상", "required": True},
-                {"id": "criteria", "name": "검사기준", "required": False}
-            ]
+                {"id": "criteria", "name": "검사기준", "required": False},
+            ],
         },
     ]
 
@@ -896,6 +905,7 @@ def update_settings(settings: Settings):
 
 # ========== Workflow API ==========
 
+
 @app.get("/api/project/{project_id}/workflow")
 def get_project_workflow(project_id: str):
     """Get workflow (Behavior Tree) for a project."""
@@ -903,7 +913,9 @@ def get_project_workflow(project_id: str):
         workflow = db.get_project_workflow(project_id)
         return {"workflow": workflow}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load workflow: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load workflow: {str(e)}"
+        )
 
 
 @app.post("/api/project/{project_id}/workflow")
@@ -913,7 +925,231 @@ def update_project_workflow(project_id: str, workflow: WorkflowData):
         db.update_project_workflow(project_id, workflow.dict())
         return {"status": "success", "message": "Workflow updated successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save workflow: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save workflow: {str(e)}"
+        )
+
+
+class GenerateWorkflowRequest(BaseModel):
+    query: str
+
+
+@app.post("/api/project/{project_id}/workflow/generate_llm")
+async def generate_workflow_llm(project_id: str, request: GenerateWorkflowRequest):
+    """
+    Generate/Modify workflow using LLM.
+    """
+    try:
+        settings = load_settings()
+
+        # Use workflow_llm
+        llm_config_data = settings.get("workflow_llm")
+        if not llm_config_data:
+            raise HTTPException(
+                status_code=500,
+                detail="Workflow LLM configuration is missing in settings.",
+            )
+
+        llm_config = LLMConfig(**llm_config_data)
+
+        workflow_prompts = settings.get("workflow_prompts")
+        if not workflow_prompts:
+            raise HTTPException(
+                status_code=500,
+                detail="Workflow prompts configuration is missing in settings.",
+            )
+
+        system_prompt = workflow_prompts.get("system_prompt")
+        user_prompt_template = workflow_prompts.get("user_prompt")
+
+        if not system_prompt or not user_prompt_template:
+            raise HTTPException(
+                status_code=500,
+                detail="System or User prompt is missing in workflow_prompts settings.",
+            )
+
+        # Get available actions with params
+        workflow_actions = settings.get("workflow_actions", [])
+        # Provide full schema to LLM
+        available_actions_list = [
+            {
+                "id": a["id"],
+                "name": a["name"],
+                "params": [
+                    {
+                        "id": p["id"],
+                        "name": p["name"],
+                        "required": p.get("required", False),
+                    }
+                    for p in a.get("params", [])
+                ],
+            }
+            for a in workflow_actions
+        ]
+        available_actions_str = json.dumps(
+            available_actions_list, ensure_ascii=False, indent=2
+        )
+
+        # Get current workflow
+        current_workflow = db.get_project_workflow(project_id)
+        workflow_json = json.dumps(current_workflow, ensure_ascii=False, indent=2)
+
+        # Prepare prompts
+        user_prompt = user_prompt_template.replace(
+            "{workflow_json}", workflow_json
+        ).replace("{query}", request.query)
+        if "{available_actions}" in user_prompt:
+            user_prompt = user_prompt.replace(
+                "{available_actions}", available_actions_str
+            )
+        else:
+            # Append if not in template (backward compatibility for existing settings)
+            user_prompt += f"\n\n[참고] 사용 가능한 액션 및 파라미터 목록 (엄격 준수):\n{available_actions_str}"
+
+        # Enforce strict JSON output
+        user_prompt += "\n\n중요: 다른 설명 없이 오직 JSON 데이터만 반환하세요. 정의되지 않은 액션이나 파라미터는 사용하지 마세요."
+
+        # Call LLM
+        llm_service = LLMService(llm_config.dict())
+        response = await llm_service.generate_text(system_prompt, user_prompt)
+
+        # Helper to extract JSON
+        def extract_first_json(text):
+            try:
+                # 1. Try markdown code blocks
+                import re
+
+                # Match content inside ``` ... ```
+                code_blocks = re.findall(r"```(?:json)?(.*?)```", text, re.DOTALL)
+                for block in code_blocks:
+                    # Try to find JSON inside the block
+                    block = block.strip()
+                    start = block.find("{")
+                    if start != -1:
+                        # Try brace counting within the block
+                        count = 0
+                        for i in range(start, len(block)):
+                            if block[i] == "{":
+                                count += 1
+                            elif block[i] == "}":
+                                count -= 1
+                                if count == 0:
+                                    candidate = block[start : i + 1]
+                                    try:
+                                        json.loads(candidate)
+                                        return candidate
+                                    except:
+                                        pass
+
+                # 2. If no valid JSON in code blocks, try global brace counting
+                # Find first '{'
+                start_index = text.find("{")
+                if start_index == -1:
+                    return None
+
+                count = 0
+                for i in range(start_index, len(text)):
+                    if text[i] == "{":
+                        count += 1
+                    elif text[i] == "}":
+                        count -= 1
+                        if count == 0:
+                            return text[start_index : i + 1]
+
+                return None
+            except Exception as e:
+                print(f"JSON Extraction Error: {e}")
+                return None
+
+        new_workflow_json_str = extract_first_json(response)
+
+        if new_workflow_json_str:
+            try:
+                new_workflow_data = json.loads(new_workflow_json_str)
+                # Basic validation: check if it has rootId and nodes
+                if (
+                    "rootId" not in new_workflow_data
+                    or "nodes" not in new_workflow_data
+                ):
+                    raise ValueError("LLM response is not a valid workflow structure")
+
+                # Enhanced Validation
+                defined_actions = {a["id"]: a for a in workflow_actions}
+                validation_issues = []
+
+                nodes = new_workflow_data.get("nodes", {})
+                for node_id, node in nodes.items():
+                    if node.get("type") == "Action":
+                        action_id = node.get("actionId")
+                        if not action_id:
+                            continue  # Could be issue, but let's focus on undefined values
+
+                        if action_id not in defined_actions:
+                            validation_issues.append(
+                                f"Node '{node.get('name', node_id)}' uses undefined action '{action_id}'"
+                            )
+                        else:
+                            # Validate params
+                            action_def = defined_actions[action_id]
+                            defined_params = {
+                                p["id"]: p for p in action_def.get("params", [])
+                            }
+                            node_params = node.get("params", {}) or {}
+
+                            # Check for undefined params
+                            for p_key in node_params.keys():
+                                if p_key not in defined_params:
+                                    validation_issues.append(
+                                        f"Node '{node.get('name', node_id)}' (Action: {action_id}) uses undefined param '{p_key}'"
+                                    )
+
+                            # Check for missing required params
+                            for p_id, p_def in defined_params.items():
+                                if (
+                                    p_def.get("required", False)
+                                    and p_id not in node_params
+                                ):
+                                    validation_issues.append(
+                                        f"Node '{node.get('name', node_id)}' (Action: {action_id}) missing required param '{p_id}'"
+                                    )
+
+                if validation_issues:
+                    return {
+                        "status": "confirmation_required",
+                        "workflow": new_workflow_data,
+                        "undefined_actions": validation_issues,  # Keeping key for frontend compat, but now contains broader issues
+                        "message": "워크플로우 검증 문제 발생",
+                        "llm_response": response,
+                    }
+
+                # Update DB
+                db.update_project_workflow(project_id, new_workflow_data)
+
+                return {
+                    "status": "success",
+                    "workflow": new_workflow_data,
+                    "llm_response": response,
+                }
+            except json.JSONDecodeError as e:
+                print(f"JSON Parse Error: {str(e)}")
+                print(f"Raw Response: {response}")
+                print(f"Extracted String: {new_workflow_json_str}")
+                return {
+                    "status": "error",
+                    "message": f"Failed to parse LLM response as JSON: {str(e)}",
+                    "llm_response": response,
+                }
+        else:
+            print(f"No JSON found. Raw Response: {response}")
+            return {
+                "status": "error",
+                "message": "No JSON found in LLM response",
+                "llm_response": response,
+            }
+
+    except Exception as e:
+        print(f"Workflow generation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/workflow/validate")
@@ -931,7 +1167,7 @@ def validate_all_workflows():
         for action in workflow_actions:
             valid_actions[action["id"]] = {
                 "name": action["name"],
-                "params": {p["id"] for p in action.get("params", [])}
+                "params": {p["id"] for p in action.get("params", [])},
             }
 
         # Check all workflows
@@ -950,34 +1186,37 @@ def validate_all_workflows():
                 if node.get("type") == "Action":
                     action_id = node.get("actionId")
                     if action_id and action_id not in valid_actions:
-                        issues.append({
-                            "type": "invalid_action",
-                            "node_id": node_id,
-                            "action_id": action_id,
-                            "action_name": node.get("name", "")
-                        })
+                        issues.append(
+                            {
+                                "type": "invalid_action",
+                                "node_id": node_id,
+                                "action_id": action_id,
+                                "action_name": node.get("name", ""),
+                            }
+                        )
                     elif action_id and action_id in valid_actions:
                         # Check params
                         node_params = node.get("params", {})
                         valid_param_ids = valid_actions[action_id]["params"]
                         for param_id in node_params.keys():
                             if param_id not in valid_param_ids:
-                                issues.append({
-                                    "type": "invalid_param",
-                                    "node_id": node_id,
-                                    "action_id": action_id,
-                                    "param_id": param_id
-                                })
+                                issues.append(
+                                    {
+                                        "type": "invalid_param",
+                                        "node_id": node_id,
+                                        "action_id": action_id,
+                                        "param_id": param_id,
+                                    }
+                                )
 
             if issues:
-                invalid_projects.append({
-                    "project_id": project["id"],
-                    "issues": issues
-                })
+                invalid_projects.append({"project_id": project["id"], "issues": issues})
 
         return {"invalid_projects": invalid_projects}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to validate workflows: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to validate workflows: {str(e)}"
+        )
 
 
 @app.get("/api/project/{project_id}/summary")
@@ -1181,10 +1420,7 @@ def get_projects_summary_status():
         else:
             status["is_outdated"] = False
 
-    return {
-        "current_version": current_version,
-        "projects": statuses
-    }
+    return {"current_version": current_version, "projects": statuses}
 
 
 class BatchGenerateSummaryRequest(BaseModel):
@@ -1250,8 +1486,13 @@ async def batch_generate_summary(request: BatchGenerateSummaryRequest):
                 async def generate_field_summary(field):
                     """Generate summary for a single field"""
                     field_id = field.get("id")
-                    system_prompt = field.get("system_prompt", "당신은 PPT 프레젠테이션을 분석하는 전문가입니다.")
-                    user_prompt = field.get("user_prompt", "이 슬라이드들의 내용을 요약해주세요.")
+                    system_prompt = field.get(
+                        "system_prompt",
+                        "당신은 PPT 프레젠테이션을 분석하는 전문가입니다.",
+                    )
+                    user_prompt = field.get(
+                        "user_prompt", "이 슬라이드들의 내용을 요약해주세요."
+                    )
 
                     content = ""
                     async for chunk in llm_service.generate_stream(
