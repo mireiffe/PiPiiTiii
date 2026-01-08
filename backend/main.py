@@ -241,10 +241,29 @@ class SummaryField(BaseModel):
     user_prompt: str = ""
 
 
+class WorkflowActionParam(BaseModel):
+    id: str
+    name: str
+    required: bool = False
+
+
+class WorkflowAction(BaseModel):
+    id: str
+    name: str
+    params: List[WorkflowActionParam] = []
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
+    workflow_actions: List[WorkflowAction] = []
+
+
+class WorkflowData(BaseModel):
+    rootId: str
+    nodes: Dict[str, Any]
+    meta: Dict[str, Any] = {}
 
 
 class SummaryData(BaseModel):
@@ -790,7 +809,11 @@ def load_settings() -> dict:
     """Load settings from file or return defaults."""
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            settings = json.load(f)
+            # Ensure workflow_actions exists (migration for existing settings)
+            if "workflow_actions" not in settings:
+                settings["workflow_actions"] = get_default_workflow_actions()
+            return settings
     else:
         return {
             "llm": {
@@ -815,7 +838,36 @@ def load_settings() -> dict:
                 },
             ],
             "use_thumbnails": True,
+            "workflow_actions": get_default_workflow_actions(),
         }
+
+
+def get_default_workflow_actions() -> list:
+    """Return default workflow actions."""
+    return [
+        {
+            "id": "action_analyze",
+            "name": "분석",
+            "params": [
+                {"id": "target", "name": "분석대상", "required": True}
+            ]
+        },
+        {
+            "id": "action_verify",
+            "name": "확인",
+            "params": [
+                {"id": "target", "name": "확인대상", "required": True}
+            ]
+        },
+        {
+            "id": "action_inspect",
+            "name": "검사",
+            "params": [
+                {"id": "target", "name": "검사대상", "required": True},
+                {"id": "criteria", "name": "검사기준", "required": False}
+            ]
+        },
+    ]
 
 
 @app.get("/api/settings")
@@ -840,6 +892,92 @@ def update_settings(settings: Settings):
         raise HTTPException(
             status_code=500, detail=f"Failed to save settings: {str(e)}"
         )
+
+
+# ========== Workflow API ==========
+
+@app.get("/api/project/{project_id}/workflow")
+def get_project_workflow(project_id: str):
+    """Get workflow (Behavior Tree) for a project."""
+    try:
+        workflow = db.get_project_workflow(project_id)
+        return {"workflow": workflow}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load workflow: {str(e)}")
+
+
+@app.post("/api/project/{project_id}/workflow")
+def update_project_workflow(project_id: str, workflow: WorkflowData):
+    """Update workflow (Behavior Tree) for a project."""
+    try:
+        db.update_project_workflow(project_id, workflow.dict())
+        return {"status": "success", "message": "Workflow updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save workflow: {str(e)}")
+
+
+@app.get("/api/workflow/validate")
+def validate_all_workflows():
+    """
+    Validate all project workflows against current settings.
+    Returns list of projects with invalid actions or params.
+    """
+    try:
+        settings = load_settings()
+        workflow_actions = settings.get("workflow_actions", [])
+
+        # Build lookup maps for valid actions and their params
+        valid_actions = {}
+        for action in workflow_actions:
+            valid_actions[action["id"]] = {
+                "name": action["name"],
+                "params": {p["id"] for p in action.get("params", [])}
+            }
+
+        # Check all workflows
+        all_workflows = db.get_all_workflows()
+        invalid_projects = []
+
+        for project in all_workflows:
+            workflow = project.get("workflow")
+            if not workflow:
+                continue
+
+            nodes = workflow.get("nodes", {})
+            issues = []
+
+            for node_id, node in nodes.items():
+                if node.get("type") == "Action":
+                    action_id = node.get("actionId")
+                    if action_id and action_id not in valid_actions:
+                        issues.append({
+                            "type": "invalid_action",
+                            "node_id": node_id,
+                            "action_id": action_id,
+                            "action_name": node.get("name", "")
+                        })
+                    elif action_id and action_id in valid_actions:
+                        # Check params
+                        node_params = node.get("params", {})
+                        valid_param_ids = valid_actions[action_id]["params"]
+                        for param_id in node_params.keys():
+                            if param_id not in valid_param_ids:
+                                issues.append({
+                                    "type": "invalid_param",
+                                    "node_id": node_id,
+                                    "action_id": action_id,
+                                    "param_id": param_id
+                                })
+
+            if issues:
+                invalid_projects.append({
+                    "project_id": project["id"],
+                    "issues": issues
+                })
+
+        return {"invalid_projects": invalid_projects}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to validate workflows: {str(e)}")
 
 
 @app.get("/api/project/{project_id}/summary")

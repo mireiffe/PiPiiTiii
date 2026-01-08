@@ -44,6 +44,11 @@ class Database:
             cursor.execute("ALTER TABLE projects ADD COLUMN summary_prompt_version TEXT")
             print("Added summary_prompt_version column to projects table")
 
+        # Migration: Add workflow_data column for Behavior Tree workflow
+        if "workflow_data" not in columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN workflow_data TEXT")
+            print("Added workflow_data column to projects table")
+
         conn.commit()
         conn.close()
 
@@ -371,5 +376,51 @@ class Database:
                 "id": row[0],
                 "has_summary": has_summary,
                 "prompt_version": row[2] or None
+            })
+        return result
+
+    def get_project_workflow(self, project_id: str) -> Optional[Dict[str, Any]]:
+        """Get workflow data (Behavior Tree) for a project."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT workflow_data FROM projects WHERE id = ?",
+            (project_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row and row[0]:
+            return json.loads(row[0])
+        return None
+
+    def update_project_workflow(self, project_id: str, workflow_data: Dict[str, Any]):
+        """Update workflow data (Behavior Tree) for a project."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET workflow_data = ? WHERE id = ?",
+            (json.dumps(workflow_data, ensure_ascii=False), project_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_all_workflows(self) -> List[Dict[str, Any]]:
+        """Get workflow data for all projects (for validation)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, workflow_data FROM projects")
+        rows = cursor.fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            workflow = None
+            if row[1]:
+                try:
+                    workflow = json.loads(row[1])
+                except json.JSONDecodeError:
+                    workflow = None
+            result.append({
+                "id": row[0],
+                "workflow": workflow
             })
         return result
