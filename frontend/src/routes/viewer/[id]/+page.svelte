@@ -85,6 +85,7 @@
     let savingWorkflow = false;
     let captureMode = false; // Capture mode for phenomenon node
     let workflowTreeRef; // Reference to WorkflowTree component
+    let captureOverlays = []; // Capture regions to display on canvas
 
     // Accordion state for right pane sections
     let expandedSection = "workflow"; // 'workflow' | 'summary' | 'objects' - default is workflow
@@ -257,6 +258,8 @@
     async function handleWorkflowChange(event) {
         const newWorkflow = event.detail;
         saveWorkflow(newWorkflow);
+        // Update capture overlays after workflow change
+        updateCaptureOverlays();
     }
 
     function handleCapture(event) {
@@ -272,6 +275,14 @@
 
     function toggleCaptureMode() {
         captureMode = !captureMode;
+    }
+
+    function updateCaptureOverlays() {
+        if (workflowTreeRef && workflowTreeRef.isPhenomenonSelected()) {
+            captureOverlays = workflowTreeRef.getSelectedPhenomenonCaptures();
+        } else {
+            captureOverlays = [];
+        }
     }
 
     async function handleGenerateWorkflow(event) {
@@ -873,6 +884,7 @@
                 {sortedShapes}
                 {selectedShapeId}
                 {captureMode}
+                {captureOverlays}
                 on:wheel={handleWheel}
                 on:slideInView={handleSlideInView}
                 on:shapeMouseDown={(e) =>
@@ -933,6 +945,7 @@
         on:workflowChange={handleWorkflowChange}
         on:generateWorkflow={handleGenerateWorkflow}
         on:toggleCaptureMode={toggleCaptureMode}
+        on:nodeSelect={updateCaptureOverlays}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
             toggleSlideSelection(e.detail.slideIndex)}

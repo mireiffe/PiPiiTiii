@@ -97,6 +97,7 @@
             on:workflowChange
             on:generateWorkflow
             on:toggleCaptureMode
+            on:nodeSelect
         />
 
         <!-- Summary Section -->

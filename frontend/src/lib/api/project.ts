@@ -168,8 +168,19 @@ export interface SlideCapture {
     y: number;
     width: number;
     height: number;
-    thumbnailDataUrl?: string; // Base64 encoded thumbnail
 }
+
+// Color palette for capture regions
+export const CAPTURE_COLORS = [
+    { bg: 'rgba(239, 68, 68, 0.2)', border: '#ef4444', name: '빨강' },   // red
+    { bg: 'rgba(59, 130, 246, 0.2)', border: '#3b82f6', name: '파랑' },  // blue
+    { bg: 'rgba(34, 197, 94, 0.2)', border: '#22c55e', name: '초록' },   // green
+    { bg: 'rgba(168, 85, 247, 0.2)', border: '#a855f7', name: '보라' },  // purple
+    { bg: 'rgba(249, 115, 22, 0.2)', border: '#f97316', name: '주황' },  // orange
+    { bg: 'rgba(236, 72, 153, 0.2)', border: '#ec4899', name: '분홍' },  // pink
+    { bg: 'rgba(20, 184, 166, 0.2)', border: '#14b8a6', name: '청록' },  // teal
+    { bg: 'rgba(234, 179, 8, 0.2)', border: '#eab308', name: '노랑' },   // yellow
+];
 
 export interface WorkflowNode {
     type: "Selector" | "Sequence" | "Condition" | "Action" | "Phenomenon";

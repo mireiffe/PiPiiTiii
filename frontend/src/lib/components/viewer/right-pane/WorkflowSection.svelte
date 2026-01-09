@@ -59,6 +59,7 @@
                     workflowActions={settings.workflow_actions || []}
                     readonly={false}
                     on:change={(e) => dispatch("workflowChange", e.detail)}
+                    on:nodeSelect
                 />
             </div>
             <div class="px-4 py-3 bg-white border-t border-gray-100">

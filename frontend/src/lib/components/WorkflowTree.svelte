@@ -6,6 +6,7 @@
         WorkflowAction,
         SlideCapture,
     } from "$lib/api/project";
+    import { CAPTURE_COLORS } from "$lib/api/project";
     // [수정됨] slide를 import 목록에 추가했습니다.
     import { fade, scale as scaleTransition, slide } from "svelte/transition";
 
@@ -135,6 +136,11 @@
         selectedNode?.type === "Action"
             ? getActionInfo(selectedNode.actionId)
             : null;
+
+    // Dispatch event when node selection changes
+    $: if (typeof selectedNodeId !== 'undefined') {
+        dispatch("nodeSelect", { nodeId: selectedNodeId, isPhenomenon: selectedNode?.type === "Phenomenon" });
+    }
     $: canUndo = historyIndex > 0;
     $: canRedo = historyIndex < historyStack.length - 1;
 
@@ -783,6 +789,24 @@
         }
         return null;
     }
+
+    // Get captures with color index for overlay display
+    export function getSelectedPhenomenonCaptures(): Array<SlideCapture & { colorIndex: number }> {
+        if (!selectedNodeId || !workflow) return [];
+        const node = workflow.nodes[selectedNodeId];
+        if (!node || node.type !== "Phenomenon" || !node.captures) return [];
+        return node.captures.map((capture, idx) => ({
+            ...capture,
+            colorIndex: idx
+        }));
+    }
+
+    // Check if a phenomenon node is selected
+    export function isPhenomenonSelected(): boolean {
+        if (!selectedNodeId || !workflow) return false;
+        const node = workflow.nodes[selectedNodeId];
+        return node?.type === "Phenomenon";
+    }
     function updateNodeParam(nodeId: string, paramId: string, value: string) {
         if (!workflow) return;
         const updated = JSON.parse(JSON.stringify(workflow));
@@ -1116,28 +1140,30 @@
                         </span>
 
                         {#if layoutNode.node.type === "Phenomenon"}
-                            <!-- Phenomenon node: show captures and description -->
+                            <!-- Phenomenon node: show captures as colored rectangles -->
                             <div class="flex-1 flex flex-col gap-1 mt-1 overflow-hidden">
                                 {#if layoutNode.node.captures && layoutNode.node.captures.length > 0}
                                     <div class="flex gap-1 flex-wrap max-h-[50px] overflow-hidden">
-                                        {#each layoutNode.node.captures.slice(0, 4) as capture, idx}
-                                            <div class="w-10 h-8 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-[8px] text-gray-500 overflow-hidden">
-                                                {#if capture.thumbnailDataUrl}
-                                                    <img src={capture.thumbnailDataUrl} alt="캡처 {idx + 1}" class="w-full h-full object-cover" />
-                                                {:else}
-                                                    S{capture.slideIndex}
-                                                {/if}
+                                        {#each layoutNode.node.captures.slice(0, 6) as capture, idx}
+                                            {@const color = CAPTURE_COLORS[idx % CAPTURE_COLORS.length]}
+                                            <div
+                                                class="w-12 h-7 rounded border-2 flex flex-col items-center justify-center text-[7px] font-medium"
+                                                style="background-color: {color.bg}; border-color: {color.border}; color: {color.border};"
+                                                title="슬라이드 {capture.slideIndex}: ({capture.x}, {capture.y}) {capture.width}×{capture.height}"
+                                            >
+                                                <span class="font-bold">#{idx + 1}</span>
+                                                <span class="opacity-80">S{capture.slideIndex}</span>
                                             </div>
                                         {/each}
-                                        {#if layoutNode.node.captures.length > 4}
-                                            <div class="w-10 h-8 bg-gray-100 rounded border border-gray-300 flex items-center justify-center text-[8px] text-gray-500">
-                                                +{layoutNode.node.captures.length - 4}
+                                        {#if layoutNode.node.captures.length > 6}
+                                            <div class="w-8 h-7 bg-gray-100 rounded border border-gray-300 flex items-center justify-center text-[8px] text-gray-500">
+                                                +{layoutNode.node.captures.length - 6}
                                             </div>
                                         {/if}
                                     </div>
                                 {:else}
                                     <div class="text-[9px] text-gray-400 italic">
-                                        캡처 이미지 없음
+                                        캡처 영역 없음
                                     </div>
                                 {/if}
                                 {#if layoutNode.node.description}
@@ -1226,24 +1252,28 @@
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-gray-500 mb-1">
-                            캡처 이미지 ({selectedNode.captures?.length || 0}개)
+                            캡처 영역 ({selectedNode.captures?.length || 0}개)
                         </label>
                         <p class="text-[10px] text-gray-400 mb-2">
                             캔버스에서 마우스 우클릭+드래그로 캡처 영역을 지정하세요
                         </p>
                         {#if selectedNode.captures && selectedNode.captures.length > 0}
-                            <div class="flex gap-2 flex-wrap max-h-[80px] overflow-y-auto">
+                            <div class="space-y-1.5 max-h-[100px] overflow-y-auto pr-1">
                                 {#each selectedNode.captures as capture, idx}
-                                    <div class="relative group">
-                                        <div class="w-14 h-12 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-[10px] text-gray-500 overflow-hidden">
-                                            {#if capture.thumbnailDataUrl}
-                                                <img src={capture.thumbnailDataUrl} alt="캡처 {idx + 1}" class="w-full h-full object-cover" />
-                                            {:else}
-                                                슬라이드 {capture.slideIndex}
-                                            {/if}
+                                    {@const color = CAPTURE_COLORS[idx % CAPTURE_COLORS.length]}
+                                    <div class="flex items-center gap-2 group">
+                                        <div
+                                            class="w-6 h-6 rounded border-2 flex items-center justify-center text-[10px] font-bold shrink-0"
+                                            style="background-color: {color.bg}; border-color: {color.border}; color: {color.border};"
+                                        >
+                                            {idx + 1}
+                                        </div>
+                                        <div class="flex-1 text-[10px] text-gray-600 min-w-0">
+                                            <span class="font-medium">슬라이드 {capture.slideIndex}</span>
+                                            <span class="text-gray-400 ml-1">({capture.x}, {capture.y}) {capture.width}×{capture.height}</span>
                                         </div>
                                         <button
-                                            class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                            class="w-5 h-5 bg-red-100 text-red-500 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-red-200 shrink-0"
                                             on:click={() => removeCapture(selectedNodeId, idx)}
                                             title="캡처 삭제"
                                         >×</button>
@@ -1251,7 +1281,7 @@
                                 {/each}
                             </div>
                         {:else}
-                            <div class="text-xs text-gray-400 italic py-2">캡처된 이미지가 없습니다</div>
+                            <div class="text-xs text-gray-400 italic py-2">캡처된 영역이 없습니다</div>
                         {/if}
                     </div>
                 </div>

@@ -1,6 +1,7 @@
 <script>
     import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
     import { createEventDispatcher, onMount, tick } from "svelte";
+    import { CAPTURE_COLORS } from "$lib/api/project";
 
     export let project;
     export let currentSlide;
@@ -11,6 +12,7 @@
     export let selectedShapeId;
     export let currentSlideIndex;
     export let captureMode = false; // Enable capture mode
+    export let captureOverlays = []; // Capture regions to display when phenomenon node is selected
 
     const dispatch = createEventDispatcher();
     let slideElements = {};
@@ -124,7 +126,7 @@
         };
     }
 
-    async function handleCaptureEnd(e) {
+    function handleCaptureEnd(e) {
         window.removeEventListener('mousemove', handleCaptureMove);
         window.removeEventListener('mouseup', handleCaptureEnd);
 
@@ -143,22 +145,13 @@
             return;
         }
 
-        // Create thumbnail from the capture region
-        let thumbnailDataUrl = null;
-        try {
-            thumbnailDataUrl = await createCaptureThumbnail(captureSlideIndex, x, y, width, height);
-        } catch (err) {
-            console.warn('Failed to create capture thumbnail:', err);
-        }
-
-        // Dispatch capture event
+        // Dispatch capture event (coordinates only, no thumbnail)
         dispatch('capture', {
             slideIndex: captureSlideIndex + 1, // Convert to 1-based index
             x: Math.round(x),
             y: Math.round(y),
             width: Math.round(width),
-            height: Math.round(height),
-            thumbnailDataUrl
+            height: Math.round(height)
         });
 
         isCapturing = false;
@@ -166,46 +159,9 @@
         captureSlideElement = null;
     }
 
-    async function createCaptureThumbnail(slideIndex, x, y, width, height) {
-        // Try to get thumbnail from the slide thumbnail image
-        const thumbUrl = `/api/results/${projectId}/thumbnails/slide_${(slideIndex + 1).toString().padStart(3, "0")}_thumb.png`;
-
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-                // Calculate the scale factor between original slide and thumbnail
-                const thumbScale = img.width / project.slide_width;
-
-                // Create canvas for cropped region
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-
-                // Set thumbnail size (max 100x80)
-                const maxWidth = 100;
-                const maxHeight = 80;
-                const aspectRatio = width / height;
-
-                if (aspectRatio > maxWidth / maxHeight) {
-                    canvas.width = maxWidth;
-                    canvas.height = maxWidth / aspectRatio;
-                } else {
-                    canvas.height = maxHeight;
-                    canvas.width = maxHeight * aspectRatio;
-                }
-
-                // Draw the cropped region
-                ctx.drawImage(
-                    img,
-                    x * thumbScale, y * thumbScale, width * thumbScale, height * thumbScale,
-                    0, 0, canvas.width, canvas.height
-                );
-
-                resolve(canvas.toDataURL('image/png'));
-            };
-            img.onerror = () => reject(new Error('Failed to load thumbnail'));
-            img.src = thumbUrl;
-        });
+    // Get capture overlays for a specific slide
+    function getCaptureOverlaysForSlide(slideIndex) {
+        return captureOverlays.filter(c => c.slideIndex === slideIndex + 1);
     }
 
     // Calculate capture selection rectangle for display
@@ -302,7 +258,7 @@
                             />
                         {/if}
 
-                        <!-- Capture selection rectangle -->
+                        <!-- Capture selection rectangle (during capture) -->
                         {#if isCapturing && captureSlideIndex === i && captureRect}
                             <div
                                 class="absolute border-2 border-red-500 bg-red-500/20 pointer-events-none"
@@ -314,6 +270,29 @@
                                 `}
                             ></div>
                         {/if}
+
+                        <!-- Capture overlay rectangles (when phenomenon node is selected) -->
+                        {#each getCaptureOverlaysForSlide(i) as overlay, idx}
+                            {@const color = CAPTURE_COLORS[overlay.colorIndex % CAPTURE_COLORS.length]}
+                            <div
+                                class="absolute pointer-events-none border-2"
+                                style={`
+                                    left: ${overlay.x}px;
+                                    top: ${overlay.y}px;
+                                    width: ${overlay.width}px;
+                                    height: ${overlay.height}px;
+                                    background-color: ${color.bg};
+                                    border-color: ${color.border};
+                                `}
+                            >
+                                <div
+                                    class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t"
+                                    style="background-color: {color.border};"
+                                >
+                                    #{overlay.colorIndex + 1}
+                                </div>
+                            </div>
+                        {/each}
                     </div>
                 </div>
             {/each}
