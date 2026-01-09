@@ -9,28 +9,33 @@
     const dispatch = createEventDispatcher();
 
     // Node type display names
-    const NODE_TYPE_NAMES = {
+    const NODE_TYPE_NAMES: Record<string, string> = {
         Selector: '탐색',
         Sequence: '정보 수집',
         Condition: '분기',
         Action: '액션'
     };
 
-    const NODE_TYPE_COLORS = {
-        Selector: { bg: 'bg-purple-100', border: 'border-purple-300', text: 'text-purple-700' },
-        Sequence: { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-700' },
-        Condition: { bg: 'bg-yellow-100', border: 'border-yellow-300', text: 'text-yellow-700' },
-        Action: { bg: 'bg-green-100', border: 'border-green-300', text: 'text-green-700' }
+    const NODE_TYPE_COLORS: Record<string, { bg: string; border: string; text: string; darkBg: string }> = {
+        Selector: { bg: 'bg-purple-100', border: 'border-purple-400', text: 'text-purple-700', darkBg: 'bg-purple-500' },
+        Sequence: { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-700', darkBg: 'bg-blue-500' },
+        Condition: { bg: 'bg-yellow-100', border: 'border-yellow-400', text: 'text-yellow-700', darkBg: 'bg-yellow-500' },
+        Action: { bg: 'bg-green-100', border: 'border-green-400', text: 'text-green-700', darkBg: 'bg-green-500' }
     };
 
     // UI state
     let selectedNodeId: string | null = null;
-    let editingNodeId: string | null = null;
     let draggedNodeId: string | null = null;
     let dropTargetId: string | null = null;
+    let dropPosition: 'child' | 'before' | 'after' | null = null;
+    let isDragging = false;
+    let dragOffset = { x: 0, y: 0 };
+    let dragPosition = { x: 0, y: 0 };
 
-    // Context menu
-    let contextMenu = { show: false, x: 0, y: 0, nodeId: '' };
+    // Undo/Redo history
+    let historyStack: WorkflowData[] = [];
+    let historyIndex = -1;
+    const MAX_HISTORY = 50;
 
     // Add new node modal
     let showAddModal = false;
@@ -38,13 +43,10 @@
     let newNodeType: 'Selector' | 'Sequence' | 'Condition' | 'Action' = 'Action';
     let newNodeActionId: string = '';
 
-    // Edit node modal
-    let showEditModal = false;
-    let editNodeId: string | null = null;
-    let editNodeName: string = '';
-    let editNodeParams: Record<string, string> = {};
+    // Container ref
+    let containerRef: HTMLDivElement;
 
-    // Calculate tree layout
+    // Layout calculation
     interface LayoutNode {
         id: string;
         node: WorkflowNode;
@@ -60,13 +62,49 @@
     let canvasWidth = 0;
     let canvasHeight = 0;
 
-    const NODE_WIDTH = 140;
-    const NODE_HEIGHT = 60;
-    const H_SPACING = 30;
-    const V_SPACING = 80;
+    const NODE_WIDTH = 180;
+    const NODE_HEIGHT = 80;
+    const H_SPACING = 25;
+    const V_SPACING = 60;
+
+    // Initialize history when workflow changes externally
+    $: if (workflow && historyStack.length === 0) {
+        pushHistory(workflow);
+    }
 
     $: if (workflow) {
         calculateLayout();
+    }
+
+    function pushHistory(state: WorkflowData) {
+        // Remove any states after current index (new branch)
+        historyStack = historyStack.slice(0, historyIndex + 1);
+        historyStack.push(JSON.parse(JSON.stringify(state)));
+        if (historyStack.length > MAX_HISTORY) {
+            historyStack = historyStack.slice(1);
+        }
+        historyIndex = historyStack.length - 1;
+    }
+
+    function undo() {
+        if (historyIndex > 0) {
+            historyIndex--;
+            const state = JSON.parse(JSON.stringify(historyStack[historyIndex]));
+            dispatch('change', state);
+        }
+    }
+
+    function redo() {
+        if (historyIndex < historyStack.length - 1) {
+            historyIndex++;
+            const state = JSON.parse(JSON.stringify(historyStack[historyIndex]));
+            dispatch('change', state);
+        }
+    }
+
+    function updateWorkflow(newWorkflow: WorkflowData) {
+        pushHistory(newWorkflow);
+        dispatch('change', newWorkflow);
     }
 
     function calculateLayout() {
@@ -79,14 +117,12 @@
 
         layoutRoot = buildLayoutTree(workflow.rootId, null);
         if (layoutRoot) {
-            // Calculate positions
             const treeWidth = calculateSubtreeWidth(layoutRoot);
             positionNodes(layoutRoot, 0, treeWidth);
 
-            // Calculate canvas size
             const bounds = getTreeBounds(layoutRoot);
-            canvasWidth = Math.max(400, bounds.maxX + NODE_WIDTH + 40);
-            canvasHeight = Math.max(200, bounds.maxY + NODE_HEIGHT + 40);
+            canvasWidth = Math.max(400, bounds.maxX + NODE_WIDTH + 60);
+            canvasHeight = Math.max(200, bounds.maxY + NODE_HEIGHT + 60);
         }
     }
 
@@ -131,22 +167,19 @@
         return Math.max(NODE_WIDTH, totalWidth);
     }
 
-    function positionNodes(node: LayoutNode, depth: number, availableWidth: number, startX = 20) {
-        node.y = depth * (NODE_HEIGHT + V_SPACING) + 20;
+    function positionNodes(node: LayoutNode, depth: number, availableWidth: number, startX = 30) {
+        node.y = depth * (NODE_HEIGHT + V_SPACING) + 30;
 
         if (node.children.length === 0) {
             node.x = startX + (availableWidth - NODE_WIDTH) / 2;
             return;
         }
 
-        // Calculate width for each child subtree
         const childWidths = node.children.map(c => calculateSubtreeWidth(c));
         const totalChildrenWidth = childWidths.reduce((a, b) => a + b, 0) + (node.children.length - 1) * H_SPACING;
 
-        // Center the node above its children
         node.x = startX + (availableWidth - NODE_WIDTH) / 2;
 
-        // Position children
         let childX = startX + (availableWidth - totalChildrenWidth) / 2;
         for (let i = 0; i < node.children.length; i++) {
             const child = node.children[i];
@@ -169,7 +202,6 @@
         return { maxX, maxY };
     }
 
-    // Get all layout nodes as flat array for rendering
     function flattenTree(node: LayoutNode | null): LayoutNode[] {
         if (!node) return [];
         const result = [node];
@@ -196,38 +228,168 @@
         return node.name || NODE_TYPE_NAMES[node.type];
     }
 
+    // Get parameter display for node
+    function getNodeParams(node: WorkflowNode): { name: string; value: string }[] {
+        if (node.type !== 'Action' || !node.params) return [];
+        const action = getActionInfo(node.actionId);
+        if (!action) return [];
+
+        return action.params.map(p => ({
+            name: p.name,
+            value: node.params?.[p.id] || ''
+        })).filter(p => p.value);
+    }
+
     // Event handlers
     function handleNodeClick(nodeId: string, e: MouseEvent) {
         e.stopPropagation();
         selectedNodeId = nodeId;
     }
 
-    function handleNodeDoubleClick(nodeId: string, e: MouseEvent) {
-        if (readonly) return;
-        e.stopPropagation();
-        openEditModal(nodeId);
-    }
-
     function handleCanvasClick() {
         selectedNodeId = null;
-        contextMenu.show = false;
     }
 
-    function handleContextMenu(nodeId: string, e: MouseEvent) {
-        if (readonly) return;
+    // Drag and drop handlers
+    function handleDragStart(nodeId: string, e: MouseEvent) {
+        if (readonly || nodeId === workflow?.rootId) return;
+
         e.preventDefault();
-        e.stopPropagation();
-        selectedNodeId = nodeId;
-        contextMenu = { show: true, x: e.clientX, y: e.clientY, nodeId };
+        draggedNodeId = nodeId;
+        isDragging = true;
+
+        const node = allNodes.find(n => n.id === nodeId);
+        if (node) {
+            dragOffset = {
+                x: e.clientX - node.x,
+                y: e.clientY - node.y
+            };
+            dragPosition = { x: node.x, y: node.y };
+        }
+
+        window.addEventListener('mousemove', handleDragMove);
+        window.addEventListener('mouseup', handleDragEnd);
     }
 
-    function closeContextMenu() {
-        contextMenu.show = false;
+    function handleDragMove(e: MouseEvent) {
+        if (!isDragging || !draggedNodeId) return;
+
+        dragPosition = {
+            x: e.clientX - dragOffset.x,
+            y: e.clientY - dragOffset.y
+        };
+
+        // Find drop target
+        const rect = containerRef.getBoundingClientRect();
+        const x = e.clientX - rect.left + containerRef.scrollLeft;
+        const y = e.clientY - rect.top + containerRef.scrollTop;
+
+        let foundTarget: string | null = null;
+        let foundPosition: 'child' | 'before' | 'after' | null = null;
+
+        for (const node of allNodes) {
+            if (node.id === draggedNodeId) continue;
+            if (isDescendant(draggedNodeId, node.id)) continue;
+
+            const nodeRect = {
+                left: node.x,
+                top: node.y,
+                right: node.x + NODE_WIDTH,
+                bottom: node.y + NODE_HEIGHT
+            };
+
+            if (x >= nodeRect.left - 20 && x <= nodeRect.right + 20 &&
+                y >= nodeRect.top - 20 && y <= nodeRect.bottom + 20) {
+
+                foundTarget = node.id;
+
+                // Determine drop position
+                const canHaveChildren = node.node.type !== 'Action' && node.node.type !== 'Condition';
+                if (canHaveChildren && y >= nodeRect.top && y <= nodeRect.bottom) {
+                    foundPosition = 'child';
+                } else if (y < nodeRect.top + NODE_HEIGHT / 2) {
+                    foundPosition = 'before';
+                } else {
+                    foundPosition = 'after';
+                }
+                break;
+            }
+        }
+
+        dropTargetId = foundTarget;
+        dropPosition = foundPosition;
+    }
+
+    function handleDragEnd(e: MouseEvent) {
+        window.removeEventListener('mousemove', handleDragMove);
+        window.removeEventListener('mouseup', handleDragEnd);
+
+        if (draggedNodeId && dropTargetId && dropPosition) {
+            moveNode(draggedNodeId, dropTargetId, dropPosition);
+        }
+
+        draggedNodeId = null;
+        dropTargetId = null;
+        dropPosition = null;
+        isDragging = false;
+    }
+
+    function isDescendant(ancestorId: string, nodeId: string): boolean {
+        const ancestor = workflow?.nodes?.[ancestorId];
+        if (!ancestor || !ancestor.children) return false;
+
+        for (const childId of ancestor.children) {
+            if (childId === nodeId) return true;
+            if (isDescendant(childId, nodeId)) return true;
+        }
+        return false;
+    }
+
+    function moveNode(nodeId: string, targetId: string, position: 'child' | 'before' | 'after') {
+        if (!workflow) return;
+
+        const updatedWorkflow = JSON.parse(JSON.stringify(workflow)) as WorkflowData;
+
+        // Find current parent and remove from it
+        let currentParentId: string | null = null;
+        for (const [id, node] of Object.entries(updatedWorkflow.nodes)) {
+            if (node.children?.includes(nodeId)) {
+                currentParentId = id;
+                node.children = node.children.filter(c => c !== nodeId);
+                break;
+            }
+        }
+
+        if (position === 'child') {
+            // Add as child of target
+            const target = updatedWorkflow.nodes[targetId];
+            if (!target.children) target.children = [];
+            target.children.push(nodeId);
+        } else {
+            // Add as sibling of target
+            let targetParentId: string | null = null;
+            for (const [id, node] of Object.entries(updatedWorkflow.nodes)) {
+                if (node.children?.includes(targetId)) {
+                    targetParentId = id;
+                    break;
+                }
+            }
+
+            if (targetParentId) {
+                const parent = updatedWorkflow.nodes[targetParentId];
+                if (parent.children) {
+                    const targetIndex = parent.children.indexOf(targetId);
+                    const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+                    parent.children.splice(insertIndex, 0, nodeId);
+                }
+            }
+        }
+
+        updateWorkflow(updatedWorkflow);
     }
 
     // Add child node
     function openAddModal(parentId: string) {
-        closeContextMenu();
         addModalParentId = parentId;
         newNodeType = 'Action';
         newNodeActionId = workflowActions.length > 0 ? workflowActions[0].id : '';
@@ -257,60 +419,28 @@
             newNode.name = NODE_TYPE_NAMES[newNodeType];
         }
 
-        // Add to workflow
-        const updatedWorkflow = { ...workflow };
-        updatedWorkflow.nodes = { ...workflow.nodes, [newId]: newNode };
+        const updatedWorkflow = JSON.parse(JSON.stringify(workflow)) as WorkflowData;
+        updatedWorkflow.nodes[newId] = newNode;
 
-        // Add as child to parent
         const parent = updatedWorkflow.nodes[addModalParentId];
         if (parent) {
             if (!parent.children) parent.children = [];
-            parent.children = [...parent.children, newId];
+            parent.children.push(newId);
         }
 
-        dispatch('change', updatedWorkflow);
+        updateWorkflow(updatedWorkflow);
         showAddModal = false;
-    }
-
-    // Edit node
-    function openEditModal(nodeId: string) {
-        const node = workflow?.nodes?.[nodeId];
-        if (!node) return;
-
-        editNodeId = nodeId;
-        editNodeName = node.name || '';
-        editNodeParams = { ...(node.params || {}) };
-        showEditModal = true;
-        closeContextMenu();
-    }
-
-    function confirmEditNode() {
-        if (!workflow || !editNodeId) return;
-
-        const updatedWorkflow = { ...workflow };
-        const node = { ...updatedWorkflow.nodes[editNodeId] };
-
-        if (node.type === 'Action') {
-            node.params = { ...editNodeParams };
-        } else {
-            node.name = editNodeName;
-        }
-
-        updatedWorkflow.nodes = { ...updatedWorkflow.nodes, [editNodeId]: node };
-        dispatch('change', updatedWorkflow);
-        showEditModal = false;
+        selectedNodeId = newId;
     }
 
     // Delete node
     function deleteNode(nodeId: string) {
         if (!workflow || nodeId === workflow.rootId) return;
 
-        closeContextMenu();
-
-        const updatedWorkflow = { ...workflow };
+        const updatedWorkflow = JSON.parse(JSON.stringify(workflow)) as WorkflowData;
 
         // Remove from parent's children
-        for (const [id, node] of Object.entries(updatedWorkflow.nodes)) {
+        for (const node of Object.values(updatedWorkflow.nodes)) {
             if (node.children?.includes(nodeId)) {
                 node.children = node.children.filter(c => c !== nodeId);
             }
@@ -318,7 +448,7 @@
 
         // Remove node and its descendants
         const toRemove = new Set<string>();
-        collectDescendants(nodeId, toRemove);
+        collectDescendants(nodeId, toRemove, updatedWorkflow);
 
         const newNodes: Record<string, WorkflowNode> = {};
         for (const [id, node] of Object.entries(updatedWorkflow.nodes)) {
@@ -328,16 +458,26 @@
         }
 
         updatedWorkflow.nodes = newNodes;
-        dispatch('change', updatedWorkflow);
+        updateWorkflow(updatedWorkflow);
+        selectedNodeId = null;
     }
 
-    function collectDescendants(nodeId: string, result: Set<string>) {
+    function collectDescendants(nodeId: string, result: Set<string>, wf: WorkflowData) {
         result.add(nodeId);
-        const node = workflow?.nodes?.[nodeId];
+        const node = wf.nodes?.[nodeId];
         if (node?.children) {
             for (const childId of node.children) {
-                collectDescendants(childId, result);
+                collectDescendants(childId, result, wf);
             }
+        }
+    }
+
+    // Delete entire workflow
+    function deleteWorkflow() {
+        if (confirm('워크플로우 전체를 삭제하시겠습니까?')) {
+            dispatch('change', null);
+            historyStack = [];
+            historyIndex = -1;
         }
     }
 
@@ -354,7 +494,97 @@
             },
             meta: { version: 1 }
         };
-        dispatch('change', initialWorkflow);
+        updateWorkflow(initialWorkflow);
+    }
+
+    // Update node inline
+    function updateNodeName(nodeId: string, name: string) {
+        if (!workflow) return;
+        const updatedWorkflow = JSON.parse(JSON.stringify(workflow)) as WorkflowData;
+        if (updatedWorkflow.nodes[nodeId]) {
+            updatedWorkflow.nodes[nodeId].name = name;
+            updateWorkflow(updatedWorkflow);
+        }
+    }
+
+    function updateNodeParam(nodeId: string, paramId: string, value: string) {
+        if (!workflow) return;
+        const updatedWorkflow = JSON.parse(JSON.stringify(workflow)) as WorkflowData;
+        const node = updatedWorkflow.nodes[nodeId];
+        if (node && node.type === 'Action') {
+            if (!node.params) node.params = {};
+            node.params[paramId] = value;
+            updateWorkflow(updatedWorkflow);
+        }
+    }
+
+    function updateNodeType(nodeId: string, newType: 'Selector' | 'Sequence' | 'Condition' | 'Action') {
+        if (!workflow || nodeId === workflow.rootId) return;
+        const updatedWorkflow = JSON.parse(JSON.stringify(workflow)) as WorkflowData;
+        const node = updatedWorkflow.nodes[nodeId];
+        if (node) {
+            const oldType = node.type;
+            node.type = newType;
+
+            // Handle children based on type change
+            if (newType === 'Action' || newType === 'Condition') {
+                // These types can't have children
+                if (node.children && node.children.length > 0) {
+                    // Remove children
+                    for (const childId of node.children) {
+                        const toRemove = new Set<string>();
+                        collectDescendants(childId, toRemove, updatedWorkflow);
+                        for (const id of toRemove) {
+                            delete updatedWorkflow.nodes[id];
+                        }
+                    }
+                }
+                delete node.children;
+            } else if (!node.children) {
+                node.children = [];
+            }
+
+            // Handle action-specific properties
+            if (newType === 'Action') {
+                if (!node.actionId && workflowActions.length > 0) {
+                    node.actionId = workflowActions[0].id;
+                    const action = getActionInfo(node.actionId);
+                    if (action) {
+                        node.name = action.name;
+                        node.params = {};
+                        for (const param of action.params) {
+                            node.params[param.id] = '';
+                        }
+                    }
+                }
+            } else {
+                delete node.actionId;
+                delete node.params;
+                if (!node.name) {
+                    node.name = NODE_TYPE_NAMES[newType];
+                }
+            }
+
+            updateWorkflow(updatedWorkflow);
+        }
+    }
+
+    function updateNodeAction(nodeId: string, actionId: string) {
+        if (!workflow) return;
+        const updatedWorkflow = JSON.parse(JSON.stringify(workflow)) as WorkflowData;
+        const node = updatedWorkflow.nodes[nodeId];
+        if (node && node.type === 'Action') {
+            node.actionId = actionId;
+            const action = getActionInfo(actionId);
+            if (action) {
+                node.name = action.name;
+                node.params = {};
+                for (const param of action.params) {
+                    node.params[param.id] = '';
+                }
+            }
+            updateWorkflow(updatedWorkflow);
+        }
     }
 
     // Draw connections
@@ -375,20 +605,7 @@
         return !workflowActions.some(a => a.id === node.actionId);
     }
 
-    // Check for invalid params
-    function hasInvalidParams(node: WorkflowNode): boolean {
-        if (node.type !== 'Action' || !node.actionId || !node.params) return false;
-        const action = getActionInfo(node.actionId);
-        if (!action) return true;
-
-        const validParamIds = new Set(action.params.map(p => p.id));
-        for (const paramId of Object.keys(node.params)) {
-            if (!validParamIds.has(paramId)) return true;
-        }
-        return false;
-    }
-
-    // Find loopback connections (from failed Selector children back to Selector)
+    // Loopback connections for Selector
     function getLoopbackConnections(): { fromId: string; toId: string }[] {
         const connections: { fromId: string; toId: string }[] = [];
 
@@ -396,7 +613,6 @@
 
         for (const [nodeId, node] of Object.entries(workflow.nodes)) {
             if (node.type === 'Selector' && node.children && node.children.length > 1) {
-                // Each child except the last can loop back to the selector
                 for (let i = 0; i < node.children.length - 1; i++) {
                     connections.push({
                         fromId: node.children[i],
@@ -417,112 +633,230 @@
         const endX = toNode.x + NODE_WIDTH;
         const endY = toNode.y + NODE_HEIGHT / 2;
 
-        // Draw a curved path that goes to the right and back
         const offset = 30;
         return `M ${startX} ${startY}
                 C ${startX + offset} ${startY}, ${endX + offset} ${endY}, ${endX} ${endY}`;
     }
+
+    // Keyboard shortcuts
+    function handleKeyDown(e: KeyboardEvent) {
+        if (readonly) return;
+
+        // Undo/Redo
+        if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                undo();
+            } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+                e.preventDefault();
+                redo();
+            }
+        }
+
+        // Delete selected node
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNodeId) {
+            if (selectedNodeId !== workflow?.rootId) {
+                e.preventDefault();
+                deleteNode(selectedNodeId);
+            }
+        }
+
+        // Escape to deselect
+        if (e.key === 'Escape') {
+            selectedNodeId = null;
+            showAddModal = false;
+        }
+    }
+
+    $: selectedNode = selectedNodeId && workflow?.nodes?.[selectedNodeId] ? workflow.nodes[selectedNodeId] : null;
+    $: selectedAction = selectedNode?.type === 'Action' ? getActionInfo(selectedNode.actionId) : null;
+    $: canUndo = historyIndex > 0;
+    $: canRedo = historyIndex < historyStack.length - 1;
 </script>
 
-<div class="workflow-tree-container relative h-full bg-gray-50 rounded-lg overflow-auto"
-     on:click={handleCanvasClick}
-     on:keydown={(e) => e.key === 'Escape' && closeContextMenu()}
-     role="application"
-     tabindex="0">
+<svelte:window on:keydown={handleKeyDown} />
 
-    {#if !workflow || !workflow.nodes || Object.keys(workflow.nodes).length === 0}
-        <!-- Empty state -->
-        <div class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400">
-            <svg class="w-12 h-12 mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                      d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-            </svg>
-            <p class="text-sm mb-3">워크플로우가 없습니다</p>
+<div class="workflow-container flex flex-col h-full" bind:this={containerRef}>
+    <!-- Canvas area -->
+    <div class="flex-1 relative bg-gray-50 rounded-lg overflow-auto min-h-[250px]"
+         on:click={handleCanvasClick}
+         role="application"
+         tabindex="0">
+
+        {#if !workflow || !workflow.nodes || Object.keys(workflow.nodes).length === 0}
+            <!-- Empty state -->
+            <div class="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-400">
+                <svg class="w-12 h-12 mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                          d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+                <p class="text-sm mb-3">워크플로우가 없습니다</p>
+                {#if !readonly}
+                    <button
+                        class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        on:click={createInitialWorkflow}
+                    >
+                        워크플로우 생성
+                    </button>
+                {/if}
+            </div>
+        {:else}
+            <!-- Toolbar -->
             {#if !readonly}
-                <button
-                    class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                    on:click={createInitialWorkflow}
-                >
-                    워크플로우 생성
-                </button>
+                <div class="sticky top-0 left-0 right-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200 px-3 py-2 flex items-center gap-2">
+                    <button
+                        class="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                        on:click={undo}
+                        disabled={!canUndo}
+                        title="실행취소 (Ctrl+Z)"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                    </button>
+                    <button
+                        class="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                        on:click={redo}
+                        disabled={!canRedo}
+                        title="다시실행 (Ctrl+Y)"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                        </svg>
+                    </button>
+
+                    <div class="w-px h-5 bg-gray-300 mx-1"></div>
+
+                    <button
+                        class="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                        on:click={() => selectedNodeId && deleteNode(selectedNodeId)}
+                        disabled={!selectedNodeId || selectedNodeId === workflow?.rootId}
+                        title="노드 삭제 (Delete)"
+                    >
+                        <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+
+                    <div class="flex-1"></div>
+
+                    <button
+                        class="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded"
+                        on:click={deleteWorkflow}
+                        title="워크플로우 전체 삭제"
+                    >
+                        워크플로우 삭제
+                    </button>
+                </div>
             {/if}
-        </div>
-    {:else}
-        <!-- Tree canvas -->
-        <svg width={canvasWidth} height={canvasHeight} class="workflow-canvas">
-            <!-- Draw connections first (behind nodes) -->
-            <g class="connections">
-                {#each allNodes as layoutNode}
-                    {#each layoutNode.children as child}
-                        <path
-                            d={getConnectionPath(layoutNode, child)}
-                            fill="none"
-                            stroke="#9CA3AF"
-                            stroke-width="2"
-                            class="transition-colors"
-                        />
+
+            <!-- Tree canvas -->
+            <svg width={canvasWidth} height={canvasHeight} class="workflow-canvas">
+                <g class="connections">
+                    {#each allNodes as layoutNode}
+                        {#each layoutNode.children as child}
+                            <path
+                                d={getConnectionPath(layoutNode, child)}
+                                fill="none"
+                                stroke={dropTargetId === layoutNode.id && dropPosition === 'child' ? '#3B82F6' : '#9CA3AF'}
+                                stroke-width={dropTargetId === layoutNode.id && dropPosition === 'child' ? 3 : 2}
+                                class="transition-colors"
+                            />
+                        {/each}
                     {/each}
-                {/each}
 
-                <!-- Loopback arrows -->
-                {#each loopbackConnections as conn}
-                    {@const fromNode = allNodes.find(n => n.id === conn.fromId)}
-                    {@const toNode = allNodes.find(n => n.id === conn.toId)}
-                    {#if fromNode && toNode}
-                        <path
-                            d={getLoopbackPath(fromNode, toNode)}
-                            fill="none"
-                            stroke="#EF4444"
-                            stroke-width="2"
-                            stroke-dasharray="5,5"
-                            marker-end="url(#loopback-arrow)"
-                            class="transition-colors opacity-60"
-                        />
+                    <!-- Loopback arrows -->
+                    {#each loopbackConnections as conn}
+                        {@const fromNode = allNodes.find(n => n.id === conn.fromId)}
+                        {@const toNode = allNodes.find(n => n.id === conn.toId)}
+                        {#if fromNode && toNode}
+                            <path
+                                d={getLoopbackPath(fromNode, toNode)}
+                                fill="none"
+                                stroke="#EF4444"
+                                stroke-width="2"
+                                stroke-dasharray="5,5"
+                                marker-end="url(#loopback-arrow)"
+                                class="transition-colors opacity-60"
+                            />
+                        {/if}
+                    {/each}
+
+                    <!-- Drop indicator line -->
+                    {#if dropTargetId && (dropPosition === 'before' || dropPosition === 'after')}
+                        {@const targetNode = allNodes.find(n => n.id === dropTargetId)}
+                        {#if targetNode}
+                            <line
+                                x1={targetNode.x - 10}
+                                y1={dropPosition === 'before' ? targetNode.y - 5 : targetNode.y + NODE_HEIGHT + 5}
+                                x2={targetNode.x + NODE_WIDTH + 10}
+                                y2={dropPosition === 'before' ? targetNode.y - 5 : targetNode.y + NODE_HEIGHT + 5}
+                                stroke="#3B82F6"
+                                stroke-width="3"
+                                stroke-linecap="round"
+                            />
+                        {/if}
                     {/if}
-                {/each}
-            </g>
+                </g>
 
-            <!-- Arrow marker definition -->
-            <defs>
-                <marker id="loopback-arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                    <path d="M0,0 L0,6 L9,3 z" fill="#EF4444" />
-                </marker>
-            </defs>
-        </svg>
+                <defs>
+                    <marker id="loopback-arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L9,3 z" fill="#EF4444" />
+                    </marker>
+                </defs>
+            </svg>
 
-        <!-- Nodes (positioned absolutely over SVG) -->
-        {#each allNodes as layoutNode (layoutNode.id)}
-            {@const colors = NODE_TYPE_COLORS[layoutNode.node.type]}
-            {@const isSelected = selectedNodeId === layoutNode.id}
-            {@const isInvalid = isInvalidAction(layoutNode.node) || hasInvalidParams(layoutNode.node)}
-            {@const canHaveChildren = layoutNode.node.type !== 'Action' && layoutNode.node.type !== 'Condition'}
-            {@const hasNoChildren = canHaveChildren && (!layoutNode.node.children || layoutNode.node.children.length === 0)}
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div
-                class="absolute rounded-lg border-2 shadow-sm cursor-pointer transition-all duration-150 group
-                       {colors.bg} {colors.border}
-                       {isSelected ? 'ring-2 ring-blue-500 ring-offset-2 shadow-md' : 'hover:shadow-md'}
-                       {isInvalid ? 'border-red-500 ring-2 ring-red-200' : ''}"
-                style="left: {layoutNode.x}px; top: {layoutNode.y}px; width: {NODE_WIDTH}px; height: {NODE_HEIGHT}px;"
-                on:click={(e) => handleNodeClick(layoutNode.id, e)}
-                on:dblclick={(e) => handleNodeDoubleClick(layoutNode.id, e)}
-                on:contextmenu={(e) => handleContextMenu(layoutNode.id, e)}
-            >
-                <div class="flex flex-col items-center justify-center h-full p-2 text-center relative">
-                    <span class="text-[10px] font-medium {colors.text} opacity-70 uppercase tracking-wider">
+            <!-- Nodes -->
+            {#each allNodes as layoutNode (layoutNode.id)}
+                {@const colors = NODE_TYPE_COLORS[layoutNode.node.type]}
+                {@const isSelected = selectedNodeId === layoutNode.id}
+                {@const isDragTarget = dropTargetId === layoutNode.id && dropPosition === 'child'}
+                {@const isBeingDragged = draggedNodeId === layoutNode.id}
+                {@const isInvalid = isInvalidAction(layoutNode.node)}
+                {@const canHaveChildren = layoutNode.node.type !== 'Action' && layoutNode.node.type !== 'Condition'}
+                {@const params = getNodeParams(layoutNode.node)}
+                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                <div
+                    class="absolute rounded-lg border-2 shadow-sm transition-all duration-150 group
+                           {colors.bg} {colors.border}
+                           {isSelected ? 'ring-2 ring-blue-500 ring-offset-1 shadow-lg z-10' : 'hover:shadow-md'}
+                           {isDragTarget ? 'ring-2 ring-blue-400 ring-offset-2 scale-105' : ''}
+                           {isBeingDragged ? 'opacity-50' : ''}
+                           {isInvalid ? 'border-red-500 ring-2 ring-red-200' : ''}
+                           {readonly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}"
+                    style="left: {layoutNode.x}px; top: {layoutNode.y}px; width: {NODE_WIDTH}px; min-height: {NODE_HEIGHT}px;"
+                    on:click={(e) => handleNodeClick(layoutNode.id, e)}
+                    on:mousedown={(e) => handleDragStart(layoutNode.id, e)}
+                >
+                    <!-- Node type badge -->
+                    <div class="absolute -top-2.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold text-white {colors.darkBg}">
                         {NODE_TYPE_NAMES[layoutNode.node.type]}
-                    </span>
-                    <span class="text-sm font-semibold {colors.text} truncate w-full mt-0.5">
-                        {getNodeDisplayName(layoutNode.node)}
-                    </span>
-                    {#if isInvalid}
-                        <span class="text-[9px] text-red-600 font-medium mt-0.5">유효하지 않음</span>
-                    {/if}
-                    {#if hasNoChildren && !readonly}
-                        <span class="text-[9px] text-gray-400 mt-1 animate-pulse">
-                            우클릭 또는 + 버튼으로 자식 추가
+                    </div>
+
+                    <div class="flex flex-col p-2 pt-3">
+                        <!-- Node name -->
+                        <span class="text-sm font-semibold {colors.text} truncate">
+                            {getNodeDisplayName(layoutNode.node)}
                         </span>
-                    {/if}
+
+                        <!-- Parameters (small text) -->
+                        {#if params.length > 0}
+                            <div class="mt-1 space-y-0.5">
+                                {#each params.slice(0, 2) as param}
+                                    <div class="text-[10px] text-gray-500 truncate">
+                                        <span class="font-medium">{param.name}:</span> {param.value}
+                                    </div>
+                                {/each}
+                                {#if params.length > 2}
+                                    <div class="text-[10px] text-gray-400">+{params.length - 2} more...</div>
+                                {/if}
+                            </div>
+                        {/if}
+
+                        {#if isInvalid}
+                            <span class="text-[9px] text-red-600 font-medium mt-1">유효하지 않음</span>
+                        {/if}
+                    </div>
 
                     <!-- Add Child Button -->
                     {#if canHaveChildren && !readonly}
@@ -535,48 +869,145 @@
                         </button>
                     {/if}
                 </div>
-            </div>
-        {/each}
-    {/if}
+            {/each}
 
-    <!-- Context Menu -->
-    {#if contextMenu.show}
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div
-            class="fixed bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 min-w-[140px]"
-            style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
-            on:click|stopPropagation
-        >
-            <button
-                class="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
-                on:click={() => openAddModal(contextMenu.nodeId)}
-            >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                자식 추가
-            </button>
-            <button
-                class="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
-                on:click={() => openEditModal(contextMenu.nodeId)}
-            >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                편집
-            </button>
-            {#if contextMenu.nodeId !== workflow?.rootId}
-                <div class="border-t border-gray-100 my-1"></div>
+            <!-- Drag ghost -->
+            {#if isDragging && draggedNodeId}
+                {@const dragNode = allNodes.find(n => n.id === draggedNodeId)}
+                {#if dragNode}
+                    {@const colors = NODE_TYPE_COLORS[dragNode.node.type]}
+                    <div
+                        class="fixed rounded-lg border-2 shadow-xl pointer-events-none z-50 opacity-80
+                               {colors.bg} {colors.border}"
+                        style="left: {dragPosition.x}px; top: {dragPosition.y}px; width: {NODE_WIDTH}px; min-height: {NODE_HEIGHT}px;"
+                    >
+                        <div class="absolute -top-2.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold text-white {colors.darkBg}">
+                            {NODE_TYPE_NAMES[dragNode.node.type]}
+                        </div>
+                        <div class="flex flex-col p-2 pt-3">
+                            <span class="text-sm font-semibold {colors.text} truncate">
+                                {getNodeDisplayName(dragNode.node)}
+                            </span>
+                        </div>
+                    </div>
+                {/if}
+            {/if}
+        {/if}
+    </div>
+
+    <!-- Node Editor Panel (shown when node is selected) - Bottom panel -->
+    {#if selectedNode && !readonly && workflow}
+        <div class="bg-white border-t border-gray-200 p-3 flex-shrink-0 max-h-[200px] overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    {@const colors = NODE_TYPE_COLORS[selectedNode.type]}
+                    <div class="px-2 py-0.5 rounded text-[10px] font-bold text-white {colors.darkBg}">
+                        {NODE_TYPE_NAMES[selectedNode.type]}
+                    </div>
+                    <h3 class="font-semibold text-gray-800 text-sm">{getNodeDisplayName(selectedNode)}</h3>
+                </div>
                 <button
-                    class="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                    on:click={() => deleteNode(contextMenu.nodeId)}
+                    class="text-gray-400 hover:text-gray-600 p-1"
+                    on:click={() => selectedNodeId = null}
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
-                    삭제
                 </button>
-            {/if}
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Left column: Type and Name/Action -->
+                <div class="space-y-2">
+                    <!-- Node Type -->
+                    <div>
+                        <label class="block text-[10px] font-medium text-gray-500 mb-0.5">타입</label>
+                        {#if selectedNodeId === workflow.rootId}
+                            <div class="text-xs text-gray-700 py-1">{NODE_TYPE_NAMES[selectedNode.type]}</div>
+                        {:else}
+                            <select
+                                class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                value={selectedNode.type}
+                                on:change={(e) => selectedNodeId && updateNodeType(selectedNodeId, e.currentTarget.value as any)}
+                            >
+                                <option value="Sequence">정보 수집 (Sequence)</option>
+                                <option value="Selector">탐색 (Selector)</option>
+                                <option value="Condition">분기 (Condition)</option>
+                                <option value="Action">액션 (Action)</option>
+                            </select>
+                        {/if}
+                    </div>
+
+                    <!-- Node Name (for non-Action nodes) -->
+                    {#if selectedNode.type !== 'Action'}
+                        <div>
+                            <label class="block text-[10px] font-medium text-gray-500 mb-0.5">이름</label>
+                            <input
+                                type="text"
+                                class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                value={selectedNode.name || ''}
+                                on:change={(e) => selectedNodeId && updateNodeName(selectedNodeId, e.currentTarget.value)}
+                                placeholder="노드 이름"
+                            />
+                        </div>
+                    {:else}
+                        <!-- Action Selection -->
+                        <div>
+                            <label class="block text-[10px] font-medium text-gray-500 mb-0.5">액션</label>
+                            {#if workflowActions.length === 0}
+                                <p class="text-[10px] text-gray-400">정의된 액션이 없습니다</p>
+                            {:else}
+                                <select
+                                    class="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    value={selectedNode.actionId || ''}
+                                    on:change={(e) => selectedNodeId && updateNodeAction(selectedNodeId, e.currentTarget.value)}
+                                >
+                                    {#each workflowActions as action}
+                                        <option value={action.id}>{action.name}</option>
+                                    {/each}
+                                </select>
+                            {/if}
+                        </div>
+                    {/if}
+                </div>
+
+                <!-- Right column: Parameters or Delete -->
+                <div class="space-y-2">
+                    {#if selectedNode.type === 'Action' && selectedAction?.params && selectedAction.params.length > 0}
+                        <!-- Action Parameters -->
+                        <div class="space-y-1.5">
+                            <label class="block text-[10px] font-medium text-gray-500">파라미터</label>
+                            {#each selectedAction.params as param}
+                                <div class="flex items-center gap-1">
+                                    <label class="text-[10px] text-gray-400 w-16 truncate" title={param.name}>
+                                        {param.name}{#if param.required}<span class="text-red-500">*</span>{/if}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        class="flex-1 text-xs border border-gray-300 rounded px-2 py-0.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        value={selectedNode.params?.[param.id] || ''}
+                                        on:change={(e) => selectedNodeId && updateNodeParam(selectedNodeId, param.id, e.currentTarget.value)}
+                                        placeholder={param.name}
+                                    />
+                                </div>
+                            {/each}
+                        </div>
+                    {:else if selectedNodeId !== workflow.rootId}
+                        <!-- Delete Button -->
+                        <div class="flex items-end h-full pb-1">
+                            <button
+                                class="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 py-1.5 px-3 rounded flex items-center gap-1.5"
+                                on:click={() => selectedNodeId && deleteNode(selectedNodeId)}
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                노드 삭제
+                            </button>
+                        </div>
+                    {/if}
+                </div>
+            </div>
         </div>
     {/if}
 </div>
@@ -641,80 +1072,8 @@
     </div>
 {/if}
 
-<!-- Edit Node Modal -->
-{#if showEditModal && editNodeId}
-    {@const editNode = workflow?.nodes?.[editNodeId]}
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" on:click={() => showEditModal = false}>
-        <div class="bg-white rounded-lg shadow-xl p-6 w-80" on:click|stopPropagation>
-            <h3 class="text-lg font-bold text-gray-800 mb-4">노드 편집</h3>
-
-            {#if editNode}
-                <div class="space-y-4">
-                    {#if editNode.type !== 'Action'}
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">노드 이름</label>
-                            <input
-                                type="text"
-                                bind:value={editNodeName}
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                                placeholder="노드 이름"
-                            />
-                        </div>
-                    {:else}
-                        {@const action = getActionInfo(editNode.actionId)}
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">액션</label>
-                            <p class="text-sm text-gray-600 mb-3">{action?.name || '알 수 없는 액션'}</p>
-                        </div>
-
-                        {#if action?.params && action.params.length > 0}
-                            <div class="space-y-3">
-                                <label class="block text-sm font-medium text-gray-700">파라미터</label>
-                                {#each action.params as param}
-                                    <div>
-                                        <label class="block text-xs text-gray-500 mb-1">
-                                            {param.name}
-                                            {#if param.required}
-                                                <span class="text-red-500">*</span>
-                                            {/if}
-                                        </label>
-                                        <input
-                                            type="text"
-                                            bind:value={editNodeParams[param.id]}
-                                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                                            placeholder={param.name}
-                                        />
-                                    </div>
-                                {/each}
-                            </div>
-                        {:else}
-                            <p class="text-sm text-gray-400">이 액션에는 파라미터가 없습니다.</p>
-                        {/if}
-                    {/if}
-                </div>
-            {/if}
-
-            <div class="flex justify-end gap-2 mt-6">
-                <button
-                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                    on:click={() => showEditModal = false}
-                >
-                    취소
-                </button>
-                <button
-                    class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-                    on:click={confirmEditNode}
-                >
-                    저장
-                </button>
-            </div>
-        </div>
-    </div>
-{/if}
-
 <style>
-    .workflow-tree-container {
+    .workflow-container {
         position: relative;
         min-height: 200px;
     }
