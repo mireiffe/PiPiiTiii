@@ -147,9 +147,9 @@
             {#if expandedSection === "workflow"}
                 <div
                     transition:slide={{ duration: 200, axis: "y" }}
-                    class="border-t border-gray-100 bg-gray-50/30 flex-1 flex flex-col min-h-0"
+                    class="border-t border-gray-100 bg-gray-50/30 flex-1 flex flex-col min-h-[350px]"
                 >
-                    <div class="flex-1 h-full overflow-auto custom-scrollbar">
+                    <div class="flex-1 overflow-hidden">
                         <WorkflowTree
                             workflow={workflowData}
                             workflowActions={settings.workflow_actions || []}
