@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-
+TRUST_ENV = os.environ.get("TRUST_ENV", True).lower() == "true"
 
 class LLMService:
     def __init__(self, config: Dict[str, Any]):
@@ -210,7 +210,10 @@ class LLMService:
             if not endpoint.endswith("/chat/completions"):
                 endpoint = f"{endpoint}/chat/completions"
 
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(
+                timeout=120.0,
+                trust_env=TRUST_ENV,
+            ) as client:
                 async with client.stream(
                     "POST",
                     endpoint,
