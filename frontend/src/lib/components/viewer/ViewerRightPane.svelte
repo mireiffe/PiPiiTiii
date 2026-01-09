@@ -27,6 +27,14 @@
     const dispatch = createEventDispatcher();
 
     let showSlideSelector = false;
+    let workflowTextarea;
+
+    function autoResizeTextarea() {
+        if (workflowTextarea) {
+            workflowTextarea.style.height = 'auto';
+            workflowTextarea.style.height = Math.min(workflowTextarea.scrollHeight, 200) + 'px';
+        }
+    }
 
     // Derived shapes
     $: imageShapes = allShapes.filter((s) => s.type_name === "Picture");
@@ -141,22 +149,28 @@
                     transition:slide={{ duration: 200, axis: "y" }}
                     class="border-t border-gray-100 bg-gray-50/30 flex-1 flex flex-col min-h-0"
                 >
-                    <div class="px-4 py-3 bg-white border-b border-gray-100">
-                        <label
-                            class="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center justify-between"
-                        >
-                            <span>✨ AI 워크플로우 수정</span>
-                            {#if !workflowData}
-                                <span class="text-[10px] text-red-400"
-                                    >워크플로우가 없습니다</span
-                                >
-                            {/if}
-                        </label>
+                    <div class="flex-1 h-full overflow-auto custom-scrollbar">
+                        <WorkflowTree
+                            workflow={workflowData}
+                            workflowActions={settings.workflow_actions || []}
+                            readonly={false}
+                            on:change={(e) =>
+                                dispatch("workflowChange", e.detail)}
+                        />
+                    </div>
+                    <div class="px-4 py-3 bg-white border-t border-gray-100">
+                        {#if !workflowData}
+                            <span class="text-[10px] text-red-400 block mb-2"
+                                >워크플로우가 없습니다</span
+                            >
+                        {/if}
                         <div class="relative">
                             <textarea
-                                class="w-full text-xs p-2.5 pr-10 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-gray-50 focus:bg-white transition-colors"
-                                rows="2"
+                                bind:this={workflowTextarea}
+                                class="w-full text-xs p-2.5 pr-10 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-gray-50 focus:bg-white transition-colors overflow-hidden"
+                                rows="1"
                                 placeholder="예: 검사 노드 추가해줘, 분석 파라미터를 필수로 변경해줘..."
+                                on:input={autoResizeTextarea}
                                 on:keydown={(e) => {
                                     if (e.key === "Enter" && !e.shiftKey) {
                                         e.preventDefault();
@@ -165,6 +179,7 @@
                                             e.currentTarget.value,
                                         );
                                         e.currentTarget.value = "";
+                                        autoResizeTextarea();
                                     }
                                 }}
                             ></textarea>
@@ -180,6 +195,7 @@
                                             textarea.value,
                                         );
                                         textarea.value = "";
+                                        autoResizeTextarea();
                                     }
                                 }}
                             >
@@ -197,15 +213,6 @@
                                 >
                             </button>
                         </div>
-                    </div>
-                    <div class="flex-1 h-full overflow-auto custom-scrollbar">
-                        <WorkflowTree
-                            workflow={workflowData}
-                            workflowActions={settings.workflow_actions || []}
-                            readonly={false}
-                            on:change={(e) =>
-                                dispatch("workflowChange", e.detail)}
-                        />
                     </div>
                 </div>
             {/if}
