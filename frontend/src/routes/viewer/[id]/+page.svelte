@@ -720,9 +720,10 @@
     }
 
     function handleWheel(e) {
-        if (e.ctrlKey) {
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        const wheelEvent = e.detail;
+        if (wheelEvent && wheelEvent.ctrlKey) {
+            wheelEvent.preventDefault();
+            const delta = wheelEvent.deltaY > 0 ? 0.9 : 1.1;
             scale *= delta;
         }
     }
