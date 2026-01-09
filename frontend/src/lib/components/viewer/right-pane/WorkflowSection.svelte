@@ -8,6 +8,8 @@
     export let workflowData;
     export let settings;
     export let savingWorkflow = false;
+    export let captureMode = false;
+    export let workflowTreeRef = null;
 
     const dispatch = createEventDispatcher();
 
@@ -27,6 +29,9 @@
         }
         return false;
     }
+
+    // Check if we have a phenomenon node in the workflow
+    $: hasPhenomenonNode = workflowData?.nodes && Object.values(workflowData.nodes).some(n => n.type === "Phenomenon");
 </script>
 
 <div
@@ -49,6 +54,7 @@
         >
             <div class="flex-1 overflow-hidden">
                 <WorkflowTree
+                    bind:this={workflowTreeRef}
                     workflow={workflowData}
                     workflowActions={settings.workflow_actions || []}
                     readonly={false}
@@ -56,6 +62,32 @@
                 />
             </div>
             <div class="px-4 py-3 bg-white border-t border-gray-100">
+                {#if hasPhenomenonNode}
+                    <div class="mb-3">
+                        <button
+                            class="w-full py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-all
+                                   {captureMode
+                                       ? 'bg-red-500 text-white hover:bg-red-600'
+                                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'}"
+                            on:click={() => dispatch('toggleCaptureMode')}
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            {#if captureMode}
+                                캡처 모드 종료
+                            {:else}
+                                발생 현상 캡처하기
+                            {/if}
+                        </button>
+                        {#if captureMode}
+                            <p class="text-[10px] text-red-500 mt-1 text-center">
+                                캔버스에서 마우스 우클릭+드래그로 영역을 선택하세요
+                            </p>
+                        {/if}
+                    </div>
+                {/if}
                 {#if !workflowData}
                     <span class="text-[10px] text-red-400 block mb-2">
                         워크플로우가 없습니다

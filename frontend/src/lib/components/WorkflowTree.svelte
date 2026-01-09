@@ -4,6 +4,7 @@
         WorkflowData,
         WorkflowNode,
         WorkflowAction,
+        SlideCapture,
     } from "$lib/api/project";
     // [수정됨] slide를 import 목록에 추가했습니다.
     import { fade, scale as scaleTransition, slide } from "svelte/transition";
@@ -16,8 +17,9 @@
 
     // --- Constants ---
     const NODE_TYPE_NAMES: Record<string, string> = {
-        Selector: "탐색",
-        Sequence: "정보 수집",
+        Phenomenon: "발생 현상",
+        Selector: "원인 도출",
+        Sequence: "원인 후보 분석",
         Condition: "분기",
         Action: "액션",
     };
@@ -26,6 +28,12 @@
         string,
         { bg: string; border: string; text: string; darkBg: string }
     > = {
+        Phenomenon: {
+            bg: "bg-red-100",
+            border: "border-red-400",
+            text: "text-red-700",
+            darkBg: "bg-red-500",
+        },
         Selector: {
             bg: "bg-purple-100",
             border: "border-purple-400",
@@ -54,6 +62,7 @@
 
     const NODE_WIDTH = 180;
     const NODE_HEIGHT = 80;
+    const PHENOMENON_NODE_HEIGHT = 140; // Taller for captures
     const H_SPACING = 40;
     const V_SPACING = 80;
     const MAX_HISTORY = 50;
@@ -176,7 +185,7 @@
         layoutRoot = buildLayoutTree(workflow.rootId, null);
         if (layoutRoot) {
             const treeWidth = calculateSubtreeWidth(layoutRoot);
-            positionNodes(layoutRoot, 0, treeWidth);
+            positionNodes(layoutRoot, 50, treeWidth); // Start at y=50
             const bounds = getTreeBounds(layoutRoot);
 
             // Canvas size covers the tree (plus padding)
@@ -187,6 +196,10 @@
 
             allNodes = flattenTree(layoutRoot);
         }
+    }
+
+    function getNodeHeight(node: WorkflowNode): number {
+        return node.type === "Phenomenon" ? PHENOMENON_NODE_HEIGHT : NODE_HEIGHT;
     }
 
     function buildLayoutTree(
@@ -202,7 +215,7 @@
             x: 0,
             y: 0,
             width: NODE_WIDTH,
-            height: NODE_HEIGHT,
+            height: getNodeHeight(node),
             children: [],
             parent,
         };
@@ -227,11 +240,11 @@
 
     function positionNodes(
         node: LayoutNode,
-        depth: number,
+        currentY: number,
         availableWidth: number,
         startX = 50,
     ) {
-        node.y = depth * (NODE_HEIGHT + V_SPACING) + 50;
+        node.y = currentY;
 
         if (node.children.length === 0) {
             node.x = startX + (availableWidth - NODE_WIDTH) / 2;
@@ -246,10 +259,11 @@
         // Center parent relative to children
         node.x = startX + (availableWidth - NODE_WIDTH) / 2;
 
+        const nextY = currentY + node.height + V_SPACING;
         let childX = startX + (availableWidth - totalChildrenWidth) / 2;
         for (let i = 0; i < node.children.length; i++) {
             const childWidth = childWidths[i];
-            positionNodes(node.children[i], depth + 1, childWidth, childX);
+            positionNodes(node.children[i], nextY, childWidth, childX);
             childX += childWidth + H_SPACING;
         }
     }
@@ -622,12 +636,36 @@
     }
 
     function createInitialWorkflow() {
+        // Create the workflow with 3-stage structure:
+        // 1. Phenomenon (발생 현상) - Root
+        // 2. Sequence (원인 후보 분석) - Left children for candidate analysis
+        // 3. Selector (원인 도출) - Rightmost child for root cause finding
         updateWorkflow({
-            rootId: "root",
-            nodes: { root: { type: "Sequence", name: "시작", children: [] } },
+            rootId: "phenomenon",
+            nodes: {
+                "phenomenon": {
+                    type: "Phenomenon",
+                    name: "발생 현상",
+                    description: "",
+                    captures: [],
+                    children: ["candidate_analysis", "root_cause_selector"]
+                },
+                "candidate_analysis": {
+                    type: "Sequence",
+                    name: "원인 후보 분석",
+                    children: []
+                },
+                "root_cause_selector": {
+                    type: "Selector",
+                    name: "원인 도출",
+                    children: []
+                }
+            },
             meta: { version: 1 },
         });
         setTimeout(fitView, 50);
+        // Select the phenomenon node for editing
+        selectedNodeId = "phenomenon";
     }
 
     // --- Helpers ---
@@ -691,7 +729,7 @@
         return `M ${startX} ${startY} C ${startX + 50} ${startY}, ${endX + 50} ${endY}, ${endX} ${endY}`;
     }
 
-    // --- Inline Updates (Name, Params, Type) ---
+    // --- Inline Updates (Name, Params, Type, Description, Captures) ---
     function updateNodeName(nodeId: string, name: string) {
         if (!workflow) return;
         const updated = JSON.parse(JSON.stringify(workflow));
@@ -699,6 +737,51 @@
             updated.nodes[nodeId].name = name;
             updateWorkflow(updated);
         }
+    }
+
+    function updateNodeDescription(nodeId: string, description: string) {
+        if (!workflow) return;
+        const updated = JSON.parse(JSON.stringify(workflow));
+        if (updated.nodes[nodeId]) {
+            updated.nodes[nodeId].description = description;
+            updateWorkflow(updated);
+        }
+    }
+
+    function addCapture(nodeId: string, capture: SlideCapture) {
+        if (!workflow) return;
+        const updated = JSON.parse(JSON.stringify(workflow));
+        const node = updated.nodes[nodeId];
+        if (node && node.type === "Phenomenon") {
+            if (!node.captures) node.captures = [];
+            node.captures.push(capture);
+            updateWorkflow(updated);
+        }
+    }
+
+    function removeCapture(nodeId: string, captureIndex: number) {
+        if (!workflow) return;
+        const updated = JSON.parse(JSON.stringify(workflow));
+        const node = updated.nodes[nodeId];
+        if (node && node.captures && captureIndex >= 0 && captureIndex < node.captures.length) {
+            node.captures.splice(captureIndex, 1);
+            updateWorkflow(updated);
+        }
+    }
+
+    // Export function to add capture from external component
+    export function addCaptureToNode(nodeId: string, capture: SlideCapture) {
+        addCapture(nodeId, capture);
+    }
+
+    // Get the current phenomenon node ID (for external components to add captures)
+    export function getPhenomenonNodeId(): string | null {
+        if (!workflow) return null;
+        // Find the phenomenon node
+        for (const [id, node] of Object.entries(workflow.nodes)) {
+            if (node.type === "Phenomenon") return id;
+        }
+        return null;
     }
     function updateNodeParam(nodeId: string, paramId: string, value: string) {
         if (!workflow) return;
@@ -1024,7 +1107,7 @@
                         {NODE_TYPE_NAMES[layoutNode.node.type]}
                     </div>
 
-                    <div class="flex flex-col p-2 pt-3 h-full justify-between">
+                    <div class="flex flex-col p-2 pt-3 h-full justify-between overflow-hidden">
                         <span
                             class="text-sm font-semibold {colors.text} truncate"
                             title={getNodeDisplayName(layoutNode.node)}
@@ -1032,7 +1115,38 @@
                             {getNodeDisplayName(layoutNode.node)}
                         </span>
 
-                        {#if layoutNode.node.type === "Action"}
+                        {#if layoutNode.node.type === "Phenomenon"}
+                            <!-- Phenomenon node: show captures and description -->
+                            <div class="flex-1 flex flex-col gap-1 mt-1 overflow-hidden">
+                                {#if layoutNode.node.captures && layoutNode.node.captures.length > 0}
+                                    <div class="flex gap-1 flex-wrap max-h-[50px] overflow-hidden">
+                                        {#each layoutNode.node.captures.slice(0, 4) as capture, idx}
+                                            <div class="w-10 h-8 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-[8px] text-gray-500 overflow-hidden">
+                                                {#if capture.thumbnailDataUrl}
+                                                    <img src={capture.thumbnailDataUrl} alt="캡처 {idx + 1}" class="w-full h-full object-cover" />
+                                                {:else}
+                                                    S{capture.slideIndex}
+                                                {/if}
+                                            </div>
+                                        {/each}
+                                        {#if layoutNode.node.captures.length > 4}
+                                            <div class="w-10 h-8 bg-gray-100 rounded border border-gray-300 flex items-center justify-center text-[8px] text-gray-500">
+                                                +{layoutNode.node.captures.length - 4}
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {:else}
+                                    <div class="text-[9px] text-gray-400 italic">
+                                        캡처 이미지 없음
+                                    </div>
+                                {/if}
+                                {#if layoutNode.node.description}
+                                    <div class="text-[9px] text-gray-600 truncate" title={layoutNode.node.description}>
+                                        {layoutNode.node.description}
+                                    </div>
+                                {/if}
+                            </div>
+                        {:else if layoutNode.node.type === "Action"}
                             {@const params = getNodeParams(layoutNode.node)}
                             <div
                                 class="text-[9px] text-gray-500 overflow-hidden"
@@ -1091,125 +1205,178 @@
                 >
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            {#if selectedNode.type === "Phenomenon"}
+                <!-- Phenomenon node settings -->
                 <div class="space-y-3">
                     <div>
-                        <label
-                            class="block text-xs font-medium text-gray-500 mb-1"
-                            >타입</label
-                        >
-                        {#if selectedNodeId === workflow.rootId}
-                            <div class="text-sm font-medium">
-                                {NODE_TYPE_NAMES[selectedNode.type]}
-                            </div>
-                        {:else}
-                            <select
-                                class="w-full text-sm border rounded px-2 py-1.5"
-                                value={selectedNode.type}
-                                on:change={(e) =>
-                                    updateNodeType(
-                                        selectedNodeId,
-                                        e.currentTarget.value,
-                                    )}
-                            >
-                                <option value="Sequence"
-                                    >정보 수집 (Sequence)</option
-                                >
-                                <option value="Selector">탐색 (Selector)</option
-                                >
-                                <option value="Condition"
-                                    >분기 (Condition)</option
-                                >
-                                <option value="Action">액션 (Action)</option>
-                            </select>
-                        {/if}
+                        <label class="block text-xs font-medium text-gray-500 mb-1">타입</label>
+                        <div class="text-sm font-medium text-red-600">
+                            {NODE_TYPE_NAMES[selectedNode.type]}
+                        </div>
                     </div>
-
-                    {#if selectedNode.type !== "Action"}
-                        <div>
-                            <label
-                                class="block text-xs font-medium text-gray-500 mb-1"
-                                >이름</label
-                            >
-                            <input
-                                type="text"
-                                class="w-full text-sm border rounded px-2 py-1.5"
-                                value={selectedNode.name || ""}
-                                on:change={(e) =>
-                                    updateNodeName(
-                                        selectedNodeId,
-                                        e.currentTarget.value,
-                                    )}
-                            />
-                        </div>
-                    {:else}
-                        <div>
-                            <label
-                                class="block text-xs font-medium text-gray-500 mb-1"
-                                >액션</label
-                            >
-                            <select
-                                class="w-full text-sm border rounded px-2 py-1.5"
-                                value={selectedNode.actionId || ""}
-                                on:change={(e) =>
-                                    updateNodeAction(
-                                        selectedNodeId,
-                                        e.currentTarget.value,
-                                    )}
-                            >
-                                {#each workflowActions as action}
-                                    <option value={action.id}
-                                        >{action.name}</option
-                                    >
-                                {/each}
-                            </select>
-                        </div>
-                    {/if}
-                </div>
-
-                <div class="space-y-3">
-                    {#if selectedNode.type === "Action" && selectedAction}
-                        <div>
-                            <label
-                                class="block text-xs font-medium text-gray-500 mb-1"
-                                >파라미터</label
-                            >
-                            <div
-                                class="space-y-2 max-h-[120px] overflow-y-auto pr-1"
-                            >
-                                {#each selectedAction.params as param}
-                                    <div class="flex flex-col gap-0.5">
-                                        <span class="text-[10px] text-gray-400"
-                                            >{param.name}{#if param.required}*{/if}</span
-                                        >
-                                        <input
-                                            type="text"
-                                            class="w-full text-xs border rounded px-2 py-1"
-                                            value={selectedNode.params?.[
-                                                param.id
-                                            ] || ""}
-                                            on:change={(e) =>
-                                                updateNodeParam(
-                                                    selectedNodeId,
-                                                    param.id,
-                                                    e.currentTarget.value,
-                                                )}
-                                        />
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">현상 설명</label>
+                        <textarea
+                            class="w-full text-sm border rounded px-2 py-1.5 resize-none"
+                            rows="2"
+                            placeholder="발생한 현상을 설명하세요..."
+                            value={selectedNode.description || ""}
+                            on:change={(e) => updateNodeDescription(selectedNodeId, e.currentTarget.value)}
+                        ></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">
+                            캡처 이미지 ({selectedNode.captures?.length || 0}개)
+                        </label>
+                        <p class="text-[10px] text-gray-400 mb-2">
+                            캔버스에서 마우스 우클릭+드래그로 캡처 영역을 지정하세요
+                        </p>
+                        {#if selectedNode.captures && selectedNode.captures.length > 0}
+                            <div class="flex gap-2 flex-wrap max-h-[80px] overflow-y-auto">
+                                {#each selectedNode.captures as capture, idx}
+                                    <div class="relative group">
+                                        <div class="w-14 h-12 bg-gray-200 rounded border border-gray-300 flex items-center justify-center text-[10px] text-gray-500 overflow-hidden">
+                                            {#if capture.thumbnailDataUrl}
+                                                <img src={capture.thumbnailDataUrl} alt="캡처 {idx + 1}" class="w-full h-full object-cover" />
+                                            {:else}
+                                                슬라이드 {capture.slideIndex}
+                                            {/if}
+                                        </div>
+                                        <button
+                                            class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                            on:click={() => removeCapture(selectedNodeId, idx)}
+                                            title="캡처 삭제"
+                                        >×</button>
                                     </div>
                                 {/each}
                             </div>
-                        </div>
-                    {:else if selectedNodeId !== workflow.rootId}
-                        <div class="flex items-end h-full">
-                            <button
-                                class="w-full py-2 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded border border-red-200"
-                                on:click={() => deleteNode(selectedNodeId)}
-                                >노드 삭제</button
-                            >
-                        </div>
-                    {/if}
+                        {:else}
+                            <div class="text-xs text-gray-400 italic py-2">캡처된 이미지가 없습니다</div>
+                        {/if}
+                    </div>
                 </div>
-            </div>
+            {:else}
+                <!-- Other node types settings -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-3">
+                        <div>
+                            <label
+                                class="block text-xs font-medium text-gray-500 mb-1"
+                                >타입</label
+                            >
+                            {#if selectedNodeId === workflow.rootId}
+                                <div class="text-sm font-medium">
+                                    {NODE_TYPE_NAMES[selectedNode.type]}
+                                </div>
+                            {:else}
+                                <select
+                                    class="w-full text-sm border rounded px-2 py-1.5"
+                                    value={selectedNode.type}
+                                    on:change={(e) =>
+                                        updateNodeType(
+                                            selectedNodeId,
+                                            e.currentTarget.value,
+                                        )}
+                                >
+                                    <option value="Sequence"
+                                        >원인 후보 분석 (Sequence)</option
+                                    >
+                                    <option value="Selector">원인 도출 (Selector)</option
+                                    >
+                                    <option value="Condition"
+                                        >분기 (Condition)</option
+                                    >
+                                    <option value="Action">액션 (Action)</option>
+                                </select>
+                            {/if}
+                        </div>
+
+                        {#if selectedNode.type !== "Action"}
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-500 mb-1"
+                                    >이름</label
+                                >
+                                <input
+                                    type="text"
+                                    class="w-full text-sm border rounded px-2 py-1.5"
+                                    value={selectedNode.name || ""}
+                                    on:change={(e) =>
+                                        updateNodeName(
+                                            selectedNodeId,
+                                            e.currentTarget.value,
+                                        )}
+                                />
+                            </div>
+                        {:else}
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-500 mb-1"
+                                    >액션</label
+                                >
+                                <select
+                                    class="w-full text-sm border rounded px-2 py-1.5"
+                                    value={selectedNode.actionId || ""}
+                                    on:change={(e) =>
+                                        updateNodeAction(
+                                            selectedNodeId,
+                                            e.currentTarget.value,
+                                        )}
+                                >
+                                    {#each workflowActions as action}
+                                        <option value={action.id}
+                                            >{action.name}</option
+                                        >
+                                    {/each}
+                                </select>
+                            </div>
+                        {/if}
+                    </div>
+
+                    <div class="space-y-3">
+                        {#if selectedNode.type === "Action" && selectedAction}
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-500 mb-1"
+                                    >파라미터</label
+                                >
+                                <div
+                                    class="space-y-2 max-h-[120px] overflow-y-auto pr-1"
+                                >
+                                    {#each selectedAction.params as param}
+                                        <div class="flex flex-col gap-0.5">
+                                            <span class="text-[10px] text-gray-400"
+                                                >{param.name}{#if param.required}*{/if}</span
+                                            >
+                                            <input
+                                                type="text"
+                                                class="w-full text-xs border rounded px-2 py-1"
+                                                value={selectedNode.params?.[
+                                                    param.id
+                                                ] || ""}
+                                                on:change={(e) =>
+                                                    updateNodeParam(
+                                                        selectedNodeId,
+                                                        param.id,
+                                                        e.currentTarget.value,
+                                                    )}
+                                            />
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                        {:else if selectedNodeId !== workflow.rootId}
+                            <div class="flex items-end h-full">
+                                <button
+                                    class="w-full py-2 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded border border-red-200"
+                                    on:click={() => deleteNode(selectedNodeId)}
+                                    >노드 삭제</button
+                                >
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
         </div>
     {/if}
 </div>
@@ -1258,8 +1425,8 @@
                         bind:value={newNodeType}
                         class="w-full border rounded px-3 py-2"
                     >
-                        <option value="Sequence">정보 수집</option>
-                        <option value="Selector">탐색</option>
+                        <option value="Sequence">원인 후보 분석</option>
+                        <option value="Selector">원인 도출</option>
                         <option value="Condition">분기</option>
                         <option value="Action">액션</option>
                     </select>

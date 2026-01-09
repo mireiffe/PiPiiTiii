@@ -83,6 +83,8 @@
     // Workflow state
     let workflowData = null;
     let savingWorkflow = false;
+    let captureMode = false; // Capture mode for phenomenon node
+    let workflowTreeRef; // Reference to WorkflowTree component
 
     // Accordion state for right pane sections
     let expandedSection = "workflow"; // 'workflow' | 'summary' | 'objects' - default is workflow
@@ -255,6 +257,21 @@
     async function handleWorkflowChange(event) {
         const newWorkflow = event.detail;
         saveWorkflow(newWorkflow);
+    }
+
+    function handleCapture(event) {
+        const capture = event.detail;
+        // Add capture to the phenomenon node
+        if (workflowData && workflowTreeRef) {
+            const phenomenonNodeId = workflowTreeRef.getPhenomenonNodeId();
+            if (phenomenonNodeId) {
+                workflowTreeRef.addCaptureToNode(phenomenonNodeId, capture);
+            }
+        }
+    }
+
+    function toggleCaptureMode() {
+        captureMode = !captureMode;
     }
 
     async function handleGenerateWorkflow(event) {
@@ -855,11 +872,13 @@
                 {projectId}
                 {sortedShapes}
                 {selectedShapeId}
+                {captureMode}
                 on:wheel={handleWheel}
                 on:slideInView={handleSlideInView}
                 on:shapeMouseDown={(e) =>
                     handleMouseDown(e.detail.event, e.detail.shape)}
                 on:canvasMouseDown={() => (selectedShapeId = null)}
+                on:capture={handleCapture}
             />
         </div>
 
@@ -892,11 +911,13 @@
     <ViewerRightPane
         bind:rightPaneFullscreen
         bind:rightPaneWidth
+        bind:workflowTreeRef
         {expandedSection}
         {workflowData}
         {settings}
         {allowEdit}
         {savingWorkflow}
+        {captureMode}
         bind:summaryData
         bind:summaryDataLLM
         {savingSummary}
@@ -911,6 +932,7 @@
         {project}
         on:workflowChange={handleWorkflowChange}
         on:generateWorkflow={handleGenerateWorkflow}
+        on:toggleCaptureMode={toggleCaptureMode}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
             toggleSlideSelection(e.detail.slideIndex)}

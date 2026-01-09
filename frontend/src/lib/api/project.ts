@@ -161,12 +161,25 @@ export async function updateProjectPromptVersion(id: string) {
 
 // ========== Workflow API ==========
 
+// Slide capture region for Phenomenon node
+export interface SlideCapture {
+    slideIndex: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    thumbnailDataUrl?: string; // Base64 encoded thumbnail
+}
+
 export interface WorkflowNode {
-    type: "Selector" | "Sequence" | "Condition" | "Action";
+    type: "Selector" | "Sequence" | "Condition" | "Action" | "Phenomenon";
     name?: string;
     children?: string[];
     actionId?: string;
     params?: Record<string, string>;
+    // Phenomenon node specific fields
+    captures?: SlideCapture[];
+    description?: string;
 }
 
 export interface WorkflowData {

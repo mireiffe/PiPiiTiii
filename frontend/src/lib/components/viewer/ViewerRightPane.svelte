@@ -11,6 +11,8 @@
     export let settings;
     export let allowEdit;
     export let savingWorkflow;
+    export let captureMode = false;
+    export let workflowTreeRef = null;
     export let summaryData;
     export let summaryDataLLM;
     export let savingSummary;
@@ -89,9 +91,12 @@
             {workflowData}
             {settings}
             {savingWorkflow}
+            {captureMode}
+            bind:workflowTreeRef
             on:toggleExpand={() => toggleSection("workflow")}
             on:workflowChange
             on:generateWorkflow
+            on:toggleCaptureMode
         />
 
         <!-- Summary Section -->
