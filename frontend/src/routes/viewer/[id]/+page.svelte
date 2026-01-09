@@ -165,6 +165,11 @@
                 updateScale();
                 resetHistory();
                 scrollToSlide(currentSlideIndex);
+
+                // Scroll canvas to initial slide
+                if (canvasComponent) {
+                    canvasComponent.scrollToSlide(currentSlideIndex);
+                }
             }
         } catch (e) {
             console.error(e);
@@ -735,6 +740,8 @@
         }
     }
 
+    let canvasComponent;
+
     async function selectSlide(index) {
         if (isDirty) {
             if (!confirm("You have unsaved changes. Discard them?")) return;
@@ -742,7 +749,22 @@
         currentSlideIndex = index;
         await tick();
         resetHistory();
+
+        // Scroll both sidebar and canvas
         scrollToSlide(index);
+        if (canvasComponent) {
+            canvasComponent.scrollToSlide(index);
+        }
+    }
+
+    // Handle slide coming into view in canvas
+    function handleSlideInView(event) {
+        const newIndex = event.detail.slideIndex;
+        if (newIndex !== currentSlideIndex) {
+            currentSlideIndex = newIndex;
+            // Scroll sidebar to match
+            scrollToSlide(newIndex);
+        }
     }
 
     // Resizable pane
@@ -824,14 +846,17 @@
 
             <!-- Canvas -->
             <ViewerCanvas
+                bind:this={canvasComponent}
                 {project}
                 {currentSlide}
+                {currentSlideIndex}
                 {scale}
                 {useThumbnails}
                 {projectId}
                 {sortedShapes}
                 {selectedShapeId}
                 on:wheel={handleWheel}
+                on:slideInView={handleSlideInView}
                 on:shapeMouseDown={(e) =>
                     handleMouseDown(e.detail.event, e.detail.shape)}
                 on:canvasMouseDown={() => (selectedShapeId = null)}
