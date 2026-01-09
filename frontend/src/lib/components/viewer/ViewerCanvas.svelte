@@ -1,6 +1,7 @@
 <script>
     import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
     import { createEventDispatcher, onMount, tick } from "svelte";
+    import { CAPTURE_COLORS } from "$lib/api/project";
 
     export let project;
     export let currentSlide;
@@ -10,10 +11,19 @@
     export let sortedShapes = [];
     export let selectedShapeId;
     export let currentSlideIndex;
+    export let captureMode = false; // Enable capture mode
+    export let captureOverlays = []; // Capture regions to display when phenomenon node is selected
 
     const dispatch = createEventDispatcher();
     let slideElements = {};
     let observer;
+
+    // Capture selection state
+    let isCapturing = false;
+    let captureStart = { x: 0, y: 0 };
+    let captureEnd = { x: 0, y: 0 };
+    let captureSlideIndex = -1;
+    let captureSlideElement = null;
 
     onMount(() => {
         // Create Intersection Observer to detect which slide is in view
@@ -84,28 +94,116 @@
             el.scrollIntoView({ behavior: "smooth", block: "center" });
         }
     }
+
+    // Capture functions
+    function handleSlideContextMenu(e, slideIndex, slideEl) {
+        if (!captureMode) return;
+        e.preventDefault();
+
+        isCapturing = true;
+        captureSlideIndex = slideIndex;
+        captureSlideElement = slideEl;
+
+        const rect = slideEl.getBoundingClientRect();
+        // Convert to slide coordinates (unscaled)
+        captureStart = {
+            x: (e.clientX - rect.left) / scale,
+            y: (e.clientY - rect.top) / scale
+        };
+        captureEnd = { ...captureStart };
+
+        window.addEventListener('mousemove', handleCaptureMove);
+        window.addEventListener('mouseup', handleCaptureEnd);
+    }
+
+    function handleCaptureMove(e) {
+        if (!isCapturing || !captureSlideElement) return;
+
+        const rect = captureSlideElement.getBoundingClientRect();
+        captureEnd = {
+            x: Math.max(0, Math.min(project.slide_width, (e.clientX - rect.left) / scale)),
+            y: Math.max(0, Math.min(project.slide_height, (e.clientY - rect.top) / scale))
+        };
+    }
+
+    function handleCaptureEnd(e) {
+        window.removeEventListener('mousemove', handleCaptureMove);
+        window.removeEventListener('mouseup', handleCaptureEnd);
+
+        if (!isCapturing) return;
+
+        // Calculate capture region
+        const x = Math.min(captureStart.x, captureEnd.x);
+        const y = Math.min(captureStart.y, captureEnd.y);
+        const width = Math.abs(captureEnd.x - captureStart.x);
+        const height = Math.abs(captureEnd.y - captureStart.y);
+
+        // Minimum size threshold
+        if (width < 20 || height < 20) {
+            isCapturing = false;
+            captureSlideIndex = -1;
+            return;
+        }
+
+        // Dispatch capture event (coordinates only, no thumbnail)
+        dispatch('capture', {
+            slideIndex: captureSlideIndex + 1, // Convert to 1-based index
+            x: Math.round(x),
+            y: Math.round(y),
+            width: Math.round(width),
+            height: Math.round(height)
+        });
+
+        isCapturing = false;
+        captureSlideIndex = -1;
+        captureSlideElement = null;
+    }
+
+    // Get capture overlays for a specific slide
+    function getCaptureOverlaysForSlide(slideIndex) {
+        return captureOverlays.filter(c => c.slideIndex === slideIndex + 1);
+    }
+
+    // Calculate capture selection rectangle for display
+    $: captureRect = isCapturing ? {
+        left: Math.min(captureStart.x, captureEnd.x),
+        top: Math.min(captureStart.y, captureEnd.y),
+        width: Math.abs(captureEnd.x - captureStart.x),
+        height: Math.abs(captureEnd.y - captureStart.y)
+    } : null;
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
-    class="flex-1 overflow-y-auto overflow-x-hidden bg-gray-100 p-8 slides-container"
+    class="flex-1 overflow-y-auto overflow-x-hidden bg-gray-100 p-8 slides-container {captureMode ? 'capture-mode' : ''}"
     on:wheel={handleWheel}
     on:mousedown={handleCanvasMouseDown}
 >
+    {#if captureMode}
+        <div class="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2">
+            <svg class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            캡처 모드: 마우스 우클릭+드래그로 영역을 선택하세요
+        </div>
+    {/if}
+
     <div class="flex flex-col items-center gap-8">
         {#if project?.slides}
             {#each project.slides as slide, i (slide.slide_index)}
+                <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <div
                     bind:this={slideElements[i]}
                     data-slide-index={i}
-                    class="slide-container"
+                    class="slide-container relative"
                     style={`
                         width: ${project.slide_width * scale}px;
                         height: ${project.slide_height * scale}px;
                     `}
+                    on:contextmenu={(e) => handleSlideContextMenu(e, i, slideElements[i].querySelector('.slide-inner'))}
                 >
                     <div
-                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left"
+                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left slide-inner {captureMode ? 'cursor-crosshair' : ''}"
                         style={`
                             width: ${project.slide_width}px;
                             height: ${project.slide_height}px;
@@ -116,7 +214,7 @@
                             <img
                                 src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, "0")}_thumb.png`}
                                 alt={`Slide ${slide.slide_index} thumbnail`}
-                                class="w-full h-full object-contain"
+                                class="w-full h-full object-contain pointer-events-none"
                                 on:error={(e) => {
                                     console.warn(
                                         `Thumbnail not found for slide ${slide.slide_index}, falling back to rendering`,
@@ -153,15 +251,61 @@
                             <img
                                 src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, "0")}_thumb.png`}
                                 alt={`Slide ${slide.slide_index} thumbnail`}
-                                class="w-full h-full object-contain"
+                                class="w-full h-full object-contain pointer-events-none"
                                 on:error={(e) => {
                                     e.target.style.display = "none";
                                 }}
                             />
                         {/if}
+
+                        <!-- Capture selection rectangle (during capture) -->
+                        {#if isCapturing && captureSlideIndex === i && captureRect}
+                            <div
+                                class="absolute border-2 border-red-500 bg-red-500/20 pointer-events-none"
+                                style={`
+                                    left: ${captureRect.left}px;
+                                    top: ${captureRect.top}px;
+                                    width: ${captureRect.width}px;
+                                    height: ${captureRect.height}px;
+                                `}
+                            ></div>
+                        {/if}
+
+                        <!-- Capture overlay rectangles (when phenomenon node is selected) -->
+                        {#each getCaptureOverlaysForSlide(i) as overlay, idx}
+                            {@const color = CAPTURE_COLORS[overlay.colorIndex % CAPTURE_COLORS.length]}
+                            <div
+                                class="absolute pointer-events-none border-2"
+                                style={`
+                                    left: ${overlay.x}px;
+                                    top: ${overlay.y}px;
+                                    width: ${overlay.width}px;
+                                    height: ${overlay.height}px;
+                                    background-color: ${color.bg};
+                                    border-color: ${color.border};
+                                `}
+                            >
+                                <div
+                                    class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t"
+                                    style="background-color: {color.border};"
+                                >
+                                    #{overlay.colorIndex + 1}
+                                </div>
+                            </div>
+                        {/each}
                     </div>
                 </div>
             {/each}
         {/if}
     </div>
 </div>
+
+<style>
+    .capture-mode {
+        cursor: crosshair;
+    }
+    .capture-mode .slide-container:hover {
+        outline: 2px dashed #ef4444;
+        outline-offset: 4px;
+    }
+</style>
