@@ -831,7 +831,7 @@ def load_settings() -> dict:
                 "model_name": "gpt-4o",
             },
             "workflow_prompts": {
-                "system_prompt": "당신은 로봇이나 에이전트의 행동을 제어하는 Behavior Tree 워크플로우를 생성하고 수정하는 전문가입니다. 주어진 요청에 따라 워크플로우를 분석하고 수정된 JSON을 반환해야 합니다. 정해진 액션과 파라미터 규격을 엄격히 준수하세요.",
+                "system_prompt": "당신은 로봇이나 에이전트의 행동을 제어하는 Behavior Tree 워크플로우를 생성하고 수정하는 전문가입니다. 문서 요약 정보가 제공되는 경우 이를 배경 지식으로 활용하여 사용자의 요청을 처리하세요. 주어진 요청에 따라 워크플로우를 분석하고 수정된 JSON을 반환해야 합니다. 정해진 액션과 파라미터 규격을 엄격히 준수하세요.",
                 "user_prompt": "사용 가능한 액션 목록(파라미터 포함):\n{available_actions}\n\n현재 워크플로우: {workflow_json}\n\n요청사항: {query}\n\n위 요청사항을 반영하여 수정된 워크플로우 JSON 전체를 마크다운 코드 블록(json)으로 감싸서 반환해주세요.",
             },
             "summary_fields": [
@@ -967,6 +967,34 @@ async def generate_workflow_llm(project_id: str, request: GenerateWorkflowReques
                 status_code=500,
                 detail="System or User prompt is missing in workflow_prompts settings.",
             )
+
+        # Get summary data to provide as background knowledge
+        summary_data = db.get_project_summary(project_id)
+        summary_text = ""
+        if summary_data:
+            # Format summary data into text
+            user_summary = summary_data.get("user", {})
+            llm_summary = summary_data.get("llm", {})
+
+            if user_summary or llm_summary:
+                summary_text = "=== 문서 배경 지식 ===\n"
+
+                # Use LLM-generated summaries (preferred)
+                if llm_summary:
+                    for field_id, content in llm_summary.items():
+                        if content:
+                            summary_text += f"{content}\n\n"
+                # Fall back to user summaries if no LLM summaries
+                elif user_summary:
+                    for field_id, content in user_summary.items():
+                        if content:
+                            summary_text += f"{content}\n\n"
+
+                summary_text += "======================\n\n"
+
+        # Prepend summary to system prompt
+        if summary_text:
+            system_prompt = summary_text + system_prompt
 
         # Get available actions with params
         workflow_actions = settings.get("workflow_actions", [])
