@@ -32,6 +32,12 @@
     let dragOffset = { x: 0, y: 0 };
     let dragPosition = { x: 0, y: 0 };
 
+    // Canvas panning state
+    let isPanning = false;
+    let panStart = { x: 0, y: 0 };
+    let scrollStart = { x: 0, y: 0 };
+    let hasScrolledToRoot = false;
+
     // Undo/Redo history
     let historyStack: WorkflowData[] = [];
     let historyIndex = -1;
@@ -250,9 +256,67 @@
         selectedNodeId = null;
     }
 
+    // Canvas panning handlers
+    function handleCanvasMouseDown(e: MouseEvent) {
+        // Only pan on middle mouse button or space + left click
+        if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+            e.preventDefault();
+            isPanning = true;
+            panStart = { x: e.clientX, y: e.clientY };
+            scrollStart = { x: containerRef.scrollLeft, y: containerRef.scrollTop };
+            containerRef.style.cursor = 'grabbing';
+        }
+    }
+
+    function handleCanvasPan(e: MouseEvent) {
+        if (!isPanning) return;
+
+        const dx = e.clientX - panStart.x;
+        const dy = e.clientY - panStart.y;
+
+        containerRef.scrollLeft = scrollStart.x - dx;
+        containerRef.scrollTop = scrollStart.y - dy;
+    }
+
+    function handleCanvasPanEnd() {
+        if (isPanning) {
+            isPanning = false;
+            containerRef.style.cursor = '';
+        }
+    }
+
+    // Auto-scroll to root node on initial layout
+    async function scrollToRoot() {
+        if (!containerRef || !layoutRoot || hasScrolledToRoot) return;
+
+        await tick();
+
+        // Center the root node in view
+        const containerRect = containerRef.getBoundingClientRect();
+        const targetX = layoutRoot.x + NODE_WIDTH / 2 - containerRect.width / 2;
+        const targetY = layoutRoot.y - 50; // Add some top padding
+
+        containerRef.scrollTo({
+            left: Math.max(0, targetX),
+            top: Math.max(0, targetY),
+            behavior: 'smooth'
+        });
+
+        hasScrolledToRoot = true;
+    }
+
+    $: if (layoutRoot && containerRef && !hasScrolledToRoot) {
+        scrollToRoot();
+    }
+
+    // Reset scroll flag when workflow changes
+    $: if (workflow) {
+        hasScrolledToRoot = false;
+    }
+
     // Drag and drop handlers
     function handleDragStart(nodeId: string, e: MouseEvent) {
-        if (readonly || nodeId === workflow?.rootId) return;
+        if (readonly || nodeId === workflow?.rootId || isPanning) return;
 
         e.preventDefault();
         draggedNodeId = nodeId;
@@ -260,11 +324,21 @@
 
         const node = allNodes.find(n => n.id === nodeId);
         if (node) {
+            const rect = containerRef.getBoundingClientRect();
+            // Calculate offset relative to canvas position
+            const canvasX = e.clientX - rect.left + containerRef.scrollLeft;
+            const canvasY = e.clientY - rect.top + containerRef.scrollTop;
+
             dragOffset = {
-                x: e.clientX - node.x,
-                y: e.clientY - node.y
+                x: canvasX - node.x,
+                y: canvasY - node.y
             };
-            dragPosition = { x: node.x, y: node.y };
+
+            // Initial drag position in client coordinates
+            dragPosition = {
+                x: e.clientX,
+                y: e.clientY
+            };
         }
 
         window.addEventListener('mousemove', handleDragMove);
@@ -274,9 +348,10 @@
     function handleDragMove(e: MouseEvent) {
         if (!isDragging || !draggedNodeId) return;
 
+        // Update drag position in client coordinates
         dragPosition = {
-            x: e.clientX - dragOffset.x,
-            y: e.clientY - dragOffset.y
+            x: e.clientX,
+            y: e.clientY
         };
 
         // Find drop target
@@ -674,12 +749,13 @@
     $: canRedo = historyIndex < historyStack.length - 1;
 </script>
 
-<svelte:window on:keydown={handleKeyDown} />
+<svelte:window on:keydown={handleKeyDown} on:mousemove={handleCanvasPan} on:mouseup={handleCanvasPanEnd} />
 
 <div class="workflow-container flex flex-col h-full" bind:this={containerRef}>
     <!-- Canvas area -->
-    <div class="flex-1 relative bg-gray-50 rounded-lg overflow-auto min-h-[250px]"
+    <div class="flex-1 relative canvas-background rounded-lg overflow-auto min-h-[250px]"
          on:click={handleCanvasClick}
+         on:mousedown={handleCanvasMouseDown}
          role="application"
          tabindex="0">
 
@@ -879,7 +955,7 @@
                     <div
                         class="fixed rounded-lg border-2 shadow-xl pointer-events-none z-50 opacity-80
                                {colors.bg} {colors.border}"
-                        style="left: {dragPosition.x}px; top: {dragPosition.y}px; width: {NODE_WIDTH}px; min-height: {NODE_HEIGHT}px;"
+                        style="left: {dragPosition.x - dragOffset.x}px; top: {dragPosition.y - dragOffset.y}px; width: {NODE_WIDTH}px; min-height: {NODE_HEIGHT}px;"
                     >
                         <div class="absolute -top-2.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold text-white {colors.darkBg}">
                             {NODE_TYPE_NAMES[dragNode.node.type]}
@@ -1083,5 +1159,11 @@
         top: 0;
         left: 0;
         pointer-events: none;
+    }
+
+    .canvas-background {
+        background-color: #f9fafb;
+        background-image: radial-gradient(circle, #d1d5db 1px, transparent 1px);
+        background-size: 20px 20px;
     }
 </style>
