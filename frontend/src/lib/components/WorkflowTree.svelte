@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts"> 
     import { createEventDispatcher, onMount, tick } from 'svelte';
     import type { WorkflowData, WorkflowNode, WorkflowAction } from '$lib/api/project';
 
