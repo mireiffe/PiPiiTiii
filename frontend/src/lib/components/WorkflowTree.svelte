@@ -897,11 +897,11 @@
 
     <!-- Node Editor Panel (shown when node is selected) - Bottom panel -->
     {#if selectedNode && !readonly && workflow}
+        {@const selectedColors = NODE_TYPE_COLORS[selectedNode.type]}
         <div class="bg-white border-t border-gray-200 p-3 flex-shrink-0 max-h-[200px] overflow-y-auto">
             <div class="flex items-center justify-between mb-3">
                 <div class="flex items-center gap-2">
-                    {@const colors = NODE_TYPE_COLORS[selectedNode.type]}
-                    <div class="px-2 py-0.5 rounded text-[10px] font-bold text-white {colors.darkBg}">
+                    <div class="px-2 py-0.5 rounded text-[10px] font-bold text-white {selectedColors.darkBg}">
                         {NODE_TYPE_NAMES[selectedNode.type]}
                     </div>
                     <h3 class="font-semibold text-gray-800 text-sm">{getNodeDisplayName(selectedNode)}</h3>
