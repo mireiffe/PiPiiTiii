@@ -71,7 +71,7 @@
     $: allowEdit = $page.url.searchParams.get("allowEdit") === "true";
 
     // Resizable pane
-    let rightPaneWidth = 500;
+    let rightPaneWidth = 600;
     let isResizing = false;
 
     // Settings and summary
@@ -127,6 +127,10 @@
     );
 
     onMount(async () => {
+        // Set rightPane width to 35% of window width (min 600px, max 800px)
+        const calculatedWidth = Math.min(800, Math.max(600, window.innerWidth * 0.35));
+        rightPaneWidth = calculatedWidth;
+
         await loadProject();
         await loadSettings();
         await loadSummary();
@@ -751,7 +755,7 @@
     function handleResize(e) {
         if (!isResizing) return;
         const newWidth = window.innerWidth - e.clientX;
-        if (newWidth >= 300 && newWidth <= 800) {
+        if (newWidth >= 300 && newWidth <= 900) {
             rightPaneWidth = newWidth;
         }
     }
