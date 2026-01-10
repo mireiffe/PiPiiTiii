@@ -26,6 +26,7 @@
 		"vite": "^7.2.2"
 	},
 	"dependencies": {
+		"@xyflow/svelte": "^1.5.0",
 		"detect-libc": "^2.1.2",
 		"marked": "^17.0.1"
 	}

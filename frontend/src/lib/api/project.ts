@@ -215,11 +215,11 @@ export async function fetchProjectWorkflow(id: string) {
     return apiFetch(`/api/project/${id}/workflow`);
 }
 
-export async function updateProjectWorkflow(id: string, workflow: WorkflowData) {
+export async function updateProjectWorkflow(id: string, workflow: WorkflowData | null) {
     return apiFetch(`/api/project/${id}/workflow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(workflow),
+        body: JSON.stringify({ workflow }),
     });
 }
 

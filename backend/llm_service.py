@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-TRUST_ENV = os.environ.get("TRUST_ENV", True).lower() == "true"
+TRUST_ENV = os.environ.get("TRUST_ENV", "true").lower() == "true"
 
 class LLMService:
     def __init__(self, config: Dict[str, Any]):

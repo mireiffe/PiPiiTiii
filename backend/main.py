@@ -275,6 +275,10 @@ class WorkflowData(BaseModel):
     meta: Dict[str, Any] = {}
 
 
+class WorkflowUpdateRequest(BaseModel):
+    workflow: Optional[Dict[str, Any]] = None
+
+
 class SummaryData(BaseModel):
     data: Dict[str, str]
 
@@ -919,10 +923,10 @@ def get_project_workflow(project_id: str):
 
 
 @app.post("/api/project/{project_id}/workflow")
-def update_project_workflow(project_id: str, workflow: WorkflowData):
-    """Update workflow (Behavior Tree) for a project."""
+def update_project_workflow(project_id: str, request: WorkflowUpdateRequest):
+    """Update workflow (Behavior Tree) for a project. Pass null to delete workflow."""
     try:
-        db.update_project_workflow(project_id, workflow.dict())
+        db.update_project_workflow(project_id, request.workflow)
         return {"status": "success", "message": "Workflow updated successfully"}
     except Exception as e:
         raise HTTPException(

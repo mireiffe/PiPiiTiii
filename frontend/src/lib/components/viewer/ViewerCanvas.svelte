@@ -95,10 +95,12 @@
         }
     }
 
-    // Capture functions
-    function handleSlideContextMenu(e, slideIndex, slideEl) {
+    // Capture functions - left click + drag when in capture mode
+    function handleSlideCaptureStart(e, slideIndex, slideEl) {
         if (!captureMode) return;
+        if (e.button !== 0) return; // Left click only
         e.preventDefault();
+        e.stopPropagation();
 
         isCapturing = true;
         captureSlideIndex = slideIndex;
@@ -174,8 +176,9 @@
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
-    class="flex-1 overflow-y-auto overflow-x-hidden bg-gray-100 p-8 slides-container {captureMode ? 'capture-mode' : ''}"
+    class="flex-1 overflow-auto bg-gray-100 p-8 slides-container {captureMode ? 'capture-mode' : ''}"
     on:wheel={handleWheel}
     on:mousedown={handleCanvasMouseDown}
 >
@@ -184,13 +187,14 @@
             <svg class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
-            캡처 모드: 마우스 우클릭+드래그로 영역을 선택하세요
+            캡처 모드: 마우스 좌클릭+드래그로 영역을 선택하세요
         </div>
     {/if}
 
     <div class="flex flex-col items-center gap-8">
         {#if project?.slides}
             {#each project.slides as slide, i (slide.slide_index)}
+                <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                 <div
                     bind:this={slideElements[i]}
@@ -200,7 +204,7 @@
                         width: ${project.slide_width * scale}px;
                         height: ${project.slide_height * scale}px;
                     `}
-                    on:contextmenu={(e) => handleSlideContextMenu(e, i, slideElements[i].querySelector('.slide-inner'))}
+                    on:mousedown={(e) => handleSlideCaptureStart(e, i, slideElements[i].querySelector('.slide-inner'))}
                 >
                     <div
                         class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left slide-inner {captureMode ? 'cursor-crosshair' : ''}"

@@ -1214,9 +1214,12 @@
     {/if}
 
     {#if selectedNode && !readonly && workflow}
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
             class="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 shadow-lg z-30 max-h-[250px] overflow-y-auto"
             transition:slide={{ duration: 200 }}
+            on:click|stopPropagation
+            on:mousedown|stopPropagation
         >
             <div class="flex items-center justify-between mb-3">
                 <h3
@@ -1255,7 +1258,7 @@
                             캡처 영역 ({selectedNode.captures?.length || 0}개)
                         </label>
                         <p class="text-[10px] text-gray-400 mb-2">
-                            캔버스에서 마우스 우클릭+드래그로 캡처 영역을 지정하세요
+                            캔버스에서 마우스 좌클릭+드래그로 캡처 영역을 지정하세요
                         </p>
                         {#if selectedNode.captures && selectedNode.captures.length > 0}
                             <div class="space-y-1.5 max-h-[100px] overflow-y-auto pr-1">
@@ -1411,13 +1414,26 @@
     {/if}
 </div>
 
-{#if contextMenu.show}
+{#if contextMenu.show && workflow}
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
     <div class="fixed inset-0 z-40" on:click={closeContextMenu}></div>
     <div
         class="fixed z-50 bg-white rounded shadow-lg border border-gray-200 py-1 min-w-[150px]"
         style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     >
-        {#if workflow.nodes[contextMenu.nodeId].type !== "Action"}
+        {#if workflow.nodes[contextMenu.nodeId]?.type === "Phenomenon"}
+            <button
+                class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
+                on:click={() => {
+                    dispatch('requestCaptureMode');
+                    closeContextMenu();
+                }}
+            >
+                <span>📷</span> 현상 캡처하기
+            </button>
+        {/if}
+        {#if workflow.nodes[contextMenu.nodeId]?.type !== "Action"}
             <button
                 class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 flex items-center gap-2"
                 on:click={() => openAddModal(contextMenu.nodeId)}

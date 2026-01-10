@@ -1,3 +1,52 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* SvelteFlow custom styles */
+.svelte-flow {
+    background-color: #f9fafb;
+}
+
+.svelte-flow .svelte-flow__node {
+    padding: 0 !important;
+    border-radius: 8px;
+    font-size: 12px;
+    background: transparent !important;
+    border: none !important;
+}
+
+.svelte-flow .svelte-flow__node.selected {
+    box-shadow: none !important;
+}
+
+.svelte-flow .svelte-flow__handle {
+    width: 8px;
+    height: 8px;
+    background-color: #9ca3af;
+    border: 2px solid #6b7280;
+}
+
+.svelte-flow .svelte-flow__edge-path {
+    stroke: #9ca3af;
+    stroke-width: 2;
+}
+
+.svelte-flow .svelte-flow__minimap {
+    background-color: #f3f4f6;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.svelte-flow .svelte-flow__controls {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+.svelte-flow .svelte-flow__controls-button {
+    background-color: white;
+    border: 1px solid #e5e7eb;
+}
+
+.svelte-flow .svelte-flow__controls-button:hover {
+    background-color: #f3f4f6;
+}
