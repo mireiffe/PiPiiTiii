@@ -129,6 +129,16 @@
             s.type_code !== 13,
     );
 
+    // Update capture overlays whenever workflow changes
+    $: if (workflowData) {
+        // Use tick to ensure workflowTreeRef is ready
+        tick().then(() => {
+            if (workflowTreeRef) {
+                updateCaptureOverlays();
+            }
+        });
+    }
+
     onMount(async () => {
         // Set rightPane width to 35% of window width (min 600px, max 800px)
         const calculatedWidth = Math.min(800, Math.max(600, window.innerWidth * 0.35));
@@ -278,8 +288,9 @@
     }
 
     function updateCaptureOverlays() {
-        if (workflowTreeRef && workflowTreeRef.isPhenomenonSelected()) {
-            captureOverlays = workflowTreeRef.getSelectedPhenomenonCaptures();
+        if (workflowTreeRef && workflowTreeRef.getPhenomenonCaptures) {
+            // Always show phenomenon captures if they exist
+            captureOverlays = workflowTreeRef.getPhenomenonCaptures();
         } else {
             captureOverlays = [];
         }

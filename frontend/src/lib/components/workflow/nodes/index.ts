@@ -5,12 +5,14 @@ export { default as SelectorNode } from "./SelectorNode.svelte";
 export { default as SequenceNode } from "./SequenceNode.svelte";
 export { default as ConditionNode } from "./ConditionNode.svelte";
 export { default as ActionNode } from "./ActionNode.svelte";
+export { default as CoreNodeCard } from "./CoreNodeCard.svelte";
 
 import PhenomenonNode from "./PhenomenonNode.svelte";
 import SelectorNode from "./SelectorNode.svelte";
 import SequenceNode from "./SequenceNode.svelte";
 import ConditionNode from "./ConditionNode.svelte";
 import ActionNode from "./ActionNode.svelte";
+import CoreNodeCard from "./CoreNodeCard.svelte";
 
 // Node types mapping for SvelteFlow
 export const nodeTypes = {
@@ -19,4 +21,5 @@ export const nodeTypes = {
     Sequence: SequenceNode,
     Condition: ConditionNode,
     Action: ActionNode,
+    CoreNode: CoreNodeCard,  // Core node type for horizontal layout
 };

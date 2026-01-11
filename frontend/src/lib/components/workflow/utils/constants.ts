@@ -59,6 +59,21 @@ export const PHENOMENON_MAX_HEIGHT = 300;
 export const H_SPACING = 40;
 export const V_SPACING = 80;
 
+// Core node layout
+export const CORE_NODE_H_SPACING = 250;  // 수평 간격 (core node 간)
+export const CORE_NODE_WIDTH = 200;
+export const CORE_NODE_HEIGHT = 120;
+
+// Core node IDs (fixed)
+export const CORE_NODE_IDS = {
+    PHENOMENON: "phenomenon",
+    CANDIDATE_SEARCH: "candidate_search",
+    CAUSE_DERIVATION: "cause_derivation"
+} as const;
+
+// Core node types for identification
+export type CoreNodeType = 'phenomenon' | 'candidateSearch' | 'causeDerivation';
+
 // History
 export const MAX_HISTORY = 50;
 

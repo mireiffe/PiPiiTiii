@@ -191,12 +191,20 @@ export interface WorkflowNode {
     // Phenomenon node specific fields
     captures?: SlideCapture[];
     description?: string;
+    // Capture reference node specific (Sequence with captureRef)
+    captureRef?: number;  // Index into phenomenon.captures[]
+    // Analysis node specific (references candidate node)
+    candidateRef?: string;  // ID of the candidate node being analyzed
 }
 
 export interface WorkflowData {
     rootId: string;
     nodes: Record<string, WorkflowNode>;
-    meta?: Record<string, any>;
+    meta?: {
+        coreNodes?: string[];  // Core node IDs: [phenomenon, candidate_search, cause_derivation]
+        version?: number;
+        [key: string]: any;
+    };
 }
 
 export interface WorkflowActionParam {

@@ -19,8 +19,10 @@
     import { CAPTURE_COLORS } from "$lib/api/project";
 
     import { nodeTypes } from "./nodes";
-    import { NODE_TYPE_NAMES, MAX_HISTORY } from "./utils/constants";
+    import { NODE_TYPE_NAMES, MAX_HISTORY, CORE_NODE_IDS } from "./utils/constants";
     import { workflowToNodes, workflowToEdges, generateNodeId } from "./utils/workflowAdapter";
+    import { isCoreNodeWorkflow } from "./utils/layoutTree";
+    import CoreNodeEditor from "./CoreNodeEditor.svelte";
 
     // Props
     export let workflow: WorkflowData | null = null;
@@ -39,6 +41,10 @@
     // State
     let selectedNodeId: string | null = null;
     let contextMenu = { show: false, x: 0, y: 0, nodeId: "" };
+
+    // Core node editing state
+    let editingCoreNode: string | null = null;
+    export let captureMode: boolean = false;
 
     // History
     let historyStack: WorkflowData[] = [];
@@ -133,9 +139,64 @@
         dispatch("change", newWorkflow);
     }
 
+    // Check if workflow uses core node layout
+    $: useCoreLayout = isCoreNodeWorkflow(workflow);
+
+    // Check if phenomenon is filled (has captures or description)
+    function isPhenomenonFilled(): boolean {
+        if (!workflow) return false;
+        const phenomenonId = workflow.meta?.coreNodes?.[0] || CORE_NODE_IDS.PHENOMENON;
+        const phenomenonNode = workflow.nodes[phenomenonId];
+        if (!phenomenonNode) return false;
+        return (phenomenonNode.captures && phenomenonNode.captures.length > 0) ||
+               !!phenomenonNode.description;
+    }
+
+    // Check if a node is a core node
+    function isCoreNode(nodeId: string): boolean {
+        if (!workflow?.meta?.coreNodes) {
+            return nodeId === CORE_NODE_IDS.PHENOMENON ||
+                   nodeId === CORE_NODE_IDS.CANDIDATE_SEARCH ||
+                   nodeId === CORE_NODE_IDS.CAUSE_DERIVATION;
+        }
+        return workflow.meta.coreNodes.includes(nodeId);
+    }
+
+    // Get core node type
+    function getCoreNodeType(nodeId: string): 'phenomenon' | 'candidateSearch' | 'causeDerivation' | null {
+        const coreNodes = workflow?.meta?.coreNodes || [
+            CORE_NODE_IDS.PHENOMENON,
+            CORE_NODE_IDS.CANDIDATE_SEARCH,
+            CORE_NODE_IDS.CAUSE_DERIVATION
+        ];
+
+        if (nodeId === coreNodes[0]) return 'phenomenon';
+        if (nodeId === coreNodes[1]) return 'candidateSearch';
+        if (nodeId === coreNodes[2]) return 'causeDerivation';
+        return null;
+    }
+
     // Event Handlers (xyflow/svelte uses props-based handlers)
     function handleNodeClick({ node, event }: { node: Node; event: MouseEvent | TouchEvent }) {
         console.log("handleNodeClick", node.id);
+
+        // If this is a core node in core layout mode, open editor
+        if (useCoreLayout && isCoreNode(node.id)) {
+            const coreType = getCoreNodeType(node.id);
+
+            // Check if phenomenon is filled before allowing other nodes
+            if (coreType !== 'phenomenon' && !isPhenomenonFilled()) {
+                // Could show a toast here
+                console.log("Please fill phenomenon first");
+                return;
+            }
+
+            // IMPORTANT: Set selectedNodeId first so nodeSelect event fires
+            selectedNodeId = node.id;
+            editingCoreNode = node.id;
+            return;
+        }
+
         selectedNodeId = node.id;
         closeContextMenu();
     }
@@ -242,23 +303,26 @@
             nodes: {
                 "phenomenon": {
                     type: "Phenomenon",
-                    name: "발생 현상",
+                    name: "발생현상",
                     description: "",
                     captures: [],
-                    children: ["candidate_analysis", "root_cause_selector"]
-                },
-                "candidate_analysis": {
-                    type: "Sequence",
-                    name: "원인 후보 분석",
                     children: []
                 },
-                "root_cause_selector": {
+                "candidate_search": {
+                    type: "Sequence",
+                    name: "원인후보탐색",
+                    children: []
+                },
+                "cause_derivation": {
                     type: "Selector",
-                    name: "원인 도출",
+                    name: "원인도출",
                     children: []
                 }
             },
-            meta: { version: 1 },
+            meta: {
+                coreNodes: ["phenomenon", "candidate_search", "cause_derivation"],
+                version: 2
+            },
         });
         selectedNodeId = "phenomenon";
     }
@@ -405,6 +469,18 @@
         }));
     }
 
+    export function getPhenomenonCaptures(): Array<SlideCapture & { colorIndex: number }> {
+        if (!workflow) return [];
+        const phenomenonId = getPhenomenonNodeId();
+        if (!phenomenonId) return [];
+        const node = workflow.nodes[phenomenonId];
+        if (!node || node.type !== "Phenomenon" || !node.captures) return [];
+        return node.captures.map((capture, idx) => ({
+            ...capture,
+            colorIndex: idx
+        }));
+    }
+
     export function isPhenomenonSelected(): boolean {
         if (!selectedNodeId || !workflow) return false;
         const node = workflow.nodes[selectedNodeId];
@@ -444,6 +520,18 @@
                 </button>
             {/if}
         </div>
+    {:else if editingCoreNode && useCoreLayout}
+        <!-- Core Node Editor (Full Screen) -->
+        <CoreNodeEditor
+            nodeId={editingCoreNode}
+            {workflow}
+            {workflowActions}
+            {captureMode}
+            on:close={() => editingCoreNode = null}
+            on:change={(e) => updateWorkflow(e.detail)}
+            on:requestCaptureMode={() => dispatch('requestCaptureMode')}
+            on:captureSelect={(e) => dispatch('captureSelect', e.detail)}
+        />
     {:else}
         <!-- Toolbar -->
         {#if !readonly}

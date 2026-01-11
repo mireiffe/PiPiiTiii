@@ -1,7 +1,17 @@
 // Tree layout calculation utilities for SvelteFlow
 
 import type { WorkflowData, WorkflowNode } from "$lib/api/project";
-import { NODE_WIDTH, NODE_HEIGHT, PHENOMENON_MIN_HEIGHT, H_SPACING, V_SPACING } from "./constants";
+import {
+    NODE_WIDTH,
+    NODE_HEIGHT,
+    PHENOMENON_MIN_HEIGHT,
+    H_SPACING,
+    V_SPACING,
+    CORE_NODE_H_SPACING,
+    CORE_NODE_WIDTH,
+    CORE_NODE_HEIGHT,
+    CORE_NODE_IDS
+} from "./constants";
 
 export interface LayoutNode {
     id: string;
@@ -12,6 +22,13 @@ export interface LayoutNode {
     height: number;
     children: LayoutNode[];
     parent: LayoutNode | null;
+    isCoreNode?: boolean;  // core node 여부
+}
+
+export interface CoreNodeInfo {
+    id: string;
+    type: 'phenomenon' | 'candidateSearch' | 'causeDerivation';
+    node: WorkflowNode;
 }
 
 export interface TreeBounds {
@@ -178,4 +195,170 @@ export function calculateTreeLayout(workflow: WorkflowData | null): {
     const allNodes = flattenTree(layoutRoot);
 
     return { layoutRoot, allNodes, bounds };
+}
+
+// ========== Core Node Layout Functions ==========
+
+/**
+ * Check if workflow uses core node structure (has meta.coreNodes)
+ */
+export function isCoreNodeWorkflow(workflow: WorkflowData | null): boolean {
+    return !!(workflow?.meta?.coreNodes && workflow.meta.coreNodes.length === 3);
+}
+
+/**
+ * Identify core nodes from workflow
+ */
+export function identifyCoreNodes(workflow: WorkflowData): CoreNodeInfo[] {
+    const coreNodes: CoreNodeInfo[] = [];
+    const coreNodeIds = workflow.meta?.coreNodes || [
+        CORE_NODE_IDS.PHENOMENON,
+        CORE_NODE_IDS.CANDIDATE_SEARCH,
+        CORE_NODE_IDS.CAUSE_DERIVATION
+    ];
+
+    for (const id of coreNodeIds) {
+        const node = workflow.nodes[id];
+        if (!node) continue;
+
+        let type: CoreNodeInfo['type'];
+        if (id === CORE_NODE_IDS.PHENOMENON || node.type === "Phenomenon") {
+            type = 'phenomenon';
+        } else if (id === CORE_NODE_IDS.CANDIDATE_SEARCH || (node.type === "Sequence" && node.name === "원인후보탐색")) {
+            type = 'candidateSearch';
+        } else if (id === CORE_NODE_IDS.CAUSE_DERIVATION || node.type === "Selector") {
+            type = 'causeDerivation';
+        } else {
+            continue;
+        }
+
+        coreNodes.push({ id, type, node });
+    }
+
+    return coreNodes;
+}
+
+/**
+ * Build layout tree for a single core node and its children
+ */
+function buildCoreNodeSubtree(
+    workflow: WorkflowData,
+    coreNodeId: string,
+    coreNodeType: CoreNodeInfo['type']
+): LayoutNode | null {
+    const node = workflow.nodes[coreNodeId];
+    if (!node) return null;
+
+    const layoutNode: LayoutNode = {
+        id: coreNodeId,
+        node,
+        x: 0,
+        y: 0,
+        width: CORE_NODE_WIDTH,
+        height: CORE_NODE_HEIGHT,
+        children: [],
+        parent: null,
+        isCoreNode: true
+    };
+
+    // Build children subtrees
+    if (node.children) {
+        for (const childId of node.children) {
+            const child = buildLayoutTree(workflow, childId, layoutNode);
+            if (child) {
+                layoutNode.children.push(child);
+            }
+        }
+    }
+
+    return layoutNode;
+}
+
+/**
+ * Position children of a core node vertically below it
+ */
+function positionCoreNodeChildren(
+    coreNode: LayoutNode,
+    startY: number
+): void {
+    if (coreNode.children.length === 0) return;
+
+    const childrenStartY = startY + coreNode.height + V_SPACING;
+
+    // Calculate total width needed for children
+    const childWidths = coreNode.children.map(c => calculateSubtreeWidth(c));
+    const totalChildrenWidth = childWidths.reduce((a, b) => a + b, 0) +
+        (coreNode.children.length - 1) * H_SPACING;
+
+    // Center children under the core node
+    let childX = coreNode.x + (coreNode.width - totalChildrenWidth) / 2;
+
+    for (let i = 0; i < coreNode.children.length; i++) {
+        const childWidth = childWidths[i];
+        positionNodes(coreNode.children[i], childrenStartY, childWidth, childX);
+        childX += childWidth + H_SPACING;
+    }
+}
+
+/**
+ * Calculate core node layout - horizontal arrangement of core nodes with vertical children
+ */
+export function calculateCoreNodeLayout(workflow: WorkflowData | null): {
+    coreNodes: LayoutNode[];
+    allNodes: LayoutNode[];
+    bounds: TreeBounds | null;
+} {
+    if (!workflow || !workflow.nodes) {
+        return { coreNodes: [], allNodes: [], bounds: null };
+    }
+
+    const coreNodeInfos = identifyCoreNodes(workflow);
+    if (coreNodeInfos.length === 0) {
+        return { coreNodes: [], allNodes: [], bounds: null };
+    }
+
+    const coreNodes: LayoutNode[] = [];
+    const startY = 50;
+    let currentX = 50;
+
+    // Build and position each core node
+    for (const info of coreNodeInfos) {
+        const layoutNode = buildCoreNodeSubtree(workflow, info.id, info.type);
+        if (!layoutNode) continue;
+
+        layoutNode.x = currentX;
+        layoutNode.y = startY;
+
+        // Position children below core node
+        positionCoreNodeChildren(layoutNode, startY);
+
+        coreNodes.push(layoutNode);
+        currentX += CORE_NODE_WIDTH + CORE_NODE_H_SPACING;
+    }
+
+    // Flatten all nodes
+    const allNodes: LayoutNode[] = [];
+    for (const coreNode of coreNodes) {
+        allNodes.push(coreNode);
+        allNodes.push(...flattenTree(coreNode).filter(n => n.id !== coreNode.id));
+    }
+
+    // Calculate bounds
+    if (allNodes.length === 0) {
+        return { coreNodes, allNodes, bounds: null };
+    }
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const node of allNodes) {
+        minX = Math.min(minX, node.x);
+        maxX = Math.max(maxX, node.x + node.width);
+        minY = Math.min(minY, node.y);
+        maxY = Math.max(maxY, node.y + node.height);
+    }
+
+    return {
+        coreNodes,
+        allNodes,
+        bounds: { minX, maxX, minY, maxY }
+    };
 }

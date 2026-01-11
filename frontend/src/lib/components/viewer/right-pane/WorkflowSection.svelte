@@ -111,49 +111,6 @@
                         워크플로우가 없습니다
                     </span>
                 {/if}
-                <div class="relative">
-                    <textarea
-                        bind:this={workflowTextarea}
-                        class="w-full text-xs p-2.5 pr-10 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-gray-50 focus:bg-white transition-colors overflow-hidden"
-                        rows="1"
-                        placeholder="예: 검사 노드 추가해줘, 분석 파라미터를 필수로 변경해줘..."
-                        on:input={autoResizeTextarea}
-                        on:keydown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                if (handleWorkflowGenerate(e.currentTarget.value)) {
-                                    e.currentTarget.value = "";
-                                    autoResizeTextarea();
-                                }
-                            }
-                        }}
-                    ></textarea>
-                    <button
-                        class="absolute right-2 bottom-2 text-blue-500 hover:text-blue-600 disabled:opacity-50"
-                        title="전송"
-                        on:click={(e) => {
-                            const textarea = e.currentTarget.previousElementSibling;
-                            if (handleWorkflowGenerate(textarea.value)) {
-                                textarea.value = "";
-                                autoResizeTextarea();
-                            }
-                        }}
-                    >
-                        <svg
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                            />
-                        </svg>
-                    </button>
-                </div>
             </div>
         </div>
     {/if}

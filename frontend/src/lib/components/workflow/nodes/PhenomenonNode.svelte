@@ -23,8 +23,9 @@
     $: node = data.workflowNode;
     $: colors = NODE_TYPE_COLORS.Phenomenon;
     $: typeName = NODE_TYPE_NAMES.Phenomenon;
-    $: captures = node.captures || [];
-    $: description = node.description || "";
+    // Force re-assignment on data change for reactivity
+    $: captures = data.workflowNode?.captures || [];
+    $: description = data.workflowNode?.description || "";
 
     // Update node height when content changes
     $: if (contentDiv && (captures || description)) {

@@ -13,6 +13,15 @@
     export let currentSlideIndex;
     export let captureMode = false; // Enable capture mode
     export let captureOverlays = []; // Capture regions to display when phenomenon node is selected
+    export let highlightedCaptureIndex = null; // Index of currently highlighted capture (for candidate search)
+
+    // Create a map of slideIndex -> overlays for reactive updates
+    $: overlaysBySlide = captureOverlays.reduce((acc, overlay) => {
+        const idx = overlay.slideIndex;
+        if (!acc[idx]) acc[idx] = [];
+        acc[idx].push(overlay);
+        return acc;
+    }, {});
 
     const dispatch = createEventDispatcher();
     let slideElements = {};
@@ -149,7 +158,7 @@
 
         // Dispatch capture event (coordinates only, no thumbnail)
         dispatch('capture', {
-            slideIndex: captureSlideIndex + 1, // Convert to 1-based index
+            slideIndex: captureSlideIndex, // Keep as 0-based index
             x: Math.round(x),
             y: Math.round(y),
             width: Math.round(width),
@@ -161,9 +170,9 @@
         captureSlideElement = null;
     }
 
-    // Get capture overlays for a specific slide
+    // Get capture overlays for a specific slide (no longer used, kept for potential future use)
     function getCaptureOverlaysForSlide(slideIndex) {
-        return captureOverlays.filter(c => c.slideIndex === slideIndex + 1);
+        return captureOverlays.filter(c => c.slideIndex === slideIndex);
     }
 
     // Calculate capture selection rectangle for display
@@ -276,25 +285,37 @@
                         {/if}
 
                         <!-- Capture overlay rectangles (when phenomenon node is selected) -->
-                        {#each getCaptureOverlaysForSlide(i) as overlay, idx}
+                        {#each (overlaysBySlide[i] || []) as overlay, idx}
                             {@const color = CAPTURE_COLORS[overlay.colorIndex % CAPTURE_COLORS.length]}
+                            {@const isHighlighted = highlightedCaptureIndex === overlay.colorIndex}
                             <div
-                                class="absolute pointer-events-none border-2"
+                                class="absolute pointer-events-none border-2 transition-all duration-200
+                                       {isHighlighted ? 'z-50 ring-4 ring-blue-500 ring-opacity-50' : ''}"
                                 style={`
                                     left: ${overlay.x}px;
                                     top: ${overlay.y}px;
                                     width: ${overlay.width}px;
                                     height: ${overlay.height}px;
-                                    background-color: ${color.bg};
+                                    background-color: ${isHighlighted ? color.bg.replace('0.2', '0.4') : color.bg};
                                     border-color: ${color.border};
+                                    border-width: ${isHighlighted ? '3px' : '2px'};
+                                    ${isHighlighted ? 'box-shadow: 0 0 20px ' + color.border + '80;' : ''}
                                 `}
                             >
                                 <div
-                                    class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t"
+                                    class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t
+                                           {isHighlighted ? 'scale-110' : ''}"
                                     style="background-color: {color.border};"
                                 >
                                     #{overlay.colorIndex + 1}
                                 </div>
+                                {#if isHighlighted}
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <div class="bg-black/50 text-white px-2 py-1 rounded text-xs font-medium">
+                                            선택됨
+                                        </div>
+                                    </div>
+                                {/if}
                             </div>
                         {/each}
                     </div>

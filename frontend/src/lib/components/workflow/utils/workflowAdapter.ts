@@ -2,8 +2,13 @@
 
 import type { Node, Edge } from "@xyflow/svelte";
 import type { WorkflowData, WorkflowNode } from "$lib/api/project";
-import { calculateTreeLayout, type LayoutNode } from "./layoutTree";
-import { NODE_TYPE_COLORS, NODE_WIDTH } from "./constants";
+import {
+    calculateTreeLayout,
+    calculateCoreNodeLayout,
+    isCoreNodeWorkflow,
+    type LayoutNode
+} from "./layoutTree";
+import { NODE_TYPE_COLORS, NODE_WIDTH, CORE_NODE_IDS } from "./constants";
 
 // Custom node data type
 export interface WorkflowNodeData extends Record<string, unknown> {
@@ -11,11 +16,35 @@ export interface WorkflowNodeData extends Record<string, unknown> {
     workflowNode: WorkflowNode;
     label: string;
     isRoot?: boolean;
+    isCoreNode?: boolean;
+    coreNodeType?: 'phenomenon' | 'candidateSearch' | 'causeDerivation';
 }
 
 // Custom edge data type
 export interface WorkflowEdgeData extends Record<string, unknown> {
     isLoopback?: boolean;
+}
+
+/**
+ * Get core node type for a given node ID
+ */
+function getCoreNodeType(nodeId: string, workflow: WorkflowData): WorkflowNodeData['coreNodeType'] | undefined {
+    const coreNodes = workflow.meta?.coreNodes || [
+        CORE_NODE_IDS.PHENOMENON,
+        CORE_NODE_IDS.CANDIDATE_SEARCH,
+        CORE_NODE_IDS.CAUSE_DERIVATION
+    ];
+
+    if (nodeId === CORE_NODE_IDS.PHENOMENON || (coreNodes[0] === nodeId)) {
+        return 'phenomenon';
+    }
+    if (nodeId === CORE_NODE_IDS.CANDIDATE_SEARCH || (coreNodes[1] === nodeId)) {
+        return 'candidateSearch';
+    }
+    if (nodeId === CORE_NODE_IDS.CAUSE_DERIVATION || (coreNodes[2] === nodeId)) {
+        return 'causeDerivation';
+    }
+    return undefined;
 }
 
 /**
@@ -26,19 +55,27 @@ export function workflowToNodes(workflow: WorkflowData | null): Node<WorkflowNod
         return [];
     }
 
-    const { allNodes } = calculateTreeLayout(workflow);
+    // Use core node layout if workflow has meta.coreNodes
+    const useCoreLayout = isCoreNodeWorkflow(workflow);
+    const { allNodes } = useCoreLayout
+        ? calculateCoreNodeLayout(workflow)
+        : calculateTreeLayout(workflow);
 
     return allNodes.map((layoutNode) => {
         const nodeType = layoutNode.node.type;
+        const isCoreNode = layoutNode.isCoreNode || false;
+        const coreNodeType = isCoreNode ? getCoreNodeType(layoutNode.id, workflow) : undefined;
 
         return {
             id: layoutNode.id,
-            type: nodeType, // Will map to custom node components
+            type: isCoreNode ? "CoreNode" : nodeType, // Use CoreNode type for core nodes
             position: { x: layoutNode.x, y: layoutNode.y },
             data: {
                 nodeId: layoutNode.id,
                 workflowNode: layoutNode.node,
                 label: layoutNode.node.name || nodeType,
+                isCoreNode,
+                coreNodeType,
             },
             draggable: false, // Auto-layout only
             selectable: true,
@@ -57,16 +94,56 @@ export function workflowToEdges(workflow: WorkflowData | null): Edge<WorkflowEdg
     }
 
     const edges: Edge<WorkflowEdgeData>[] = [];
+    const useCoreLayout = isCoreNodeWorkflow(workflow);
 
-    // Normal parent-child edges
+    // Add core node horizontal connections if using core layout
+    if (useCoreLayout) {
+        const coreNodeIds = workflow.meta?.coreNodes || [
+            CORE_NODE_IDS.PHENOMENON,
+            CORE_NODE_IDS.CANDIDATE_SEARCH,
+            CORE_NODE_IDS.CAUSE_DERIVATION
+        ];
+
+        // Connect core nodes horizontally: phenomenon -> candidate_search -> cause_derivation
+        for (let i = 0; i < coreNodeIds.length - 1; i++) {
+            const sourceId = coreNodeIds[i];
+            const targetId = coreNodeIds[i + 1];
+
+            if (workflow.nodes[sourceId] && workflow.nodes[targetId]) {
+                edges.push({
+                    id: `core-${sourceId}-${targetId}`,
+                    source: sourceId,
+                    target: targetId,
+                    type: "smoothstep",
+                    sourceHandle: "right",
+                    targetHandle: "left",
+                    animated: false,
+                    style: "stroke: #374151; stroke-width: 3px;", // Thicker line for core connections
+                    data: { isCoreConnection: true },
+                });
+            }
+        }
+    }
+
+    // Normal parent-child edges (for non-core nodes)
     for (const [nodeId, node] of Object.entries(workflow.nodes)) {
         if (node.children) {
+            // Skip core node children connections as they go vertically
+            const isCoreNode = useCoreLayout && (
+                nodeId === CORE_NODE_IDS.PHENOMENON ||
+                nodeId === CORE_NODE_IDS.CANDIDATE_SEARCH ||
+                nodeId === CORE_NODE_IDS.CAUSE_DERIVATION ||
+                workflow.meta?.coreNodes?.includes(nodeId)
+            );
+
             for (const childId of node.children) {
                 edges.push({
                     id: `${nodeId}-${childId}`,
                     source: nodeId,
                     target: childId,
                     type: "smoothstep",
+                    sourceHandle: isCoreNode ? "bottom" : undefined,
+                    targetHandle: isCoreNode ? "top" : undefined,
                     animated: false,
                     style: "stroke: #94a3b8; stroke-width: 2px;",
                 });
