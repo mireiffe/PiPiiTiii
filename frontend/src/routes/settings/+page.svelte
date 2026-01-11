@@ -1,6 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { fetchSettings, updateSettings } from "$lib/api/project";
+  import { fetchSettings, updateSettings, fetchAllAttributes } from "$lib/api/project";
+
+  interface AttributeDefinition {
+    key: string;
+    display_name: string;
+    attr_type: {
+      variant: string;
+    };
+  }
 
   interface SummaryField {
     id: string;
@@ -38,10 +46,12 @@
     summary_fields: SummaryField[];
     use_thumbnails: boolean;
     workflow_actions: WorkflowAction[];
+    phenomenon_attributes: string[];
   }
 
   let loading = true;
   let saving = false;
+  let availableAttributes: AttributeDefinition[] = [];
   let settings: Settings = {
     llm: {
       api_type: "openai",
@@ -60,6 +70,7 @@
     summary_fields: [],
     use_thumbnails: true,
     workflow_actions: [],
+    phenomenon_attributes: [],
   };
 
   // Expanded field for editing prompts
@@ -69,9 +80,18 @@
 
   onMount(async () => {
     try {
-      const res = await fetchSettings();
-      if (res.ok) {
-        const data = await res.json();
+      // Load settings and available attributes in parallel
+      const [settingsRes, attrsRes] = await Promise.all([
+        fetchSettings(),
+        fetchAllAttributes()
+      ]);
+
+      if (attrsRes.ok) {
+        availableAttributes = await attrsRes.json();
+      }
+
+      if (settingsRes.ok) {
+        const data = await settingsRes.json();
         // Ensure llm has all required fields with defaults
         settings = {
           llm: {
@@ -112,6 +132,7 @@
               required: p.required || false,
             })),
           })),
+          phenomenon_attributes: data.phenomenon_attributes || [],
         };
       }
     } catch (e) {
@@ -248,6 +269,16 @@
       actionIndex
     ].params.filter((_, i) => i !== paramIndex);
     settings.workflow_actions = [...settings.workflow_actions];
+  }
+
+  // ========== Phenomenon Attributes Management ==========
+
+  function togglePhenomenonAttribute(key: string) {
+    if (settings.phenomenon_attributes.includes(key)) {
+      settings.phenomenon_attributes = settings.phenomenon_attributes.filter(k => k !== key);
+    } else {
+      settings.phenomenon_attributes = [...settings.phenomenon_attributes, key];
+    }
   }
 </script>
 
@@ -547,6 +578,46 @@
                     </div>
                   {/if}
                 </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+
+        <!-- 발생현상 속성 설정 -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div class="mb-4">
+            <h2 class="text-xl font-bold text-gray-800">발생현상 속성</h2>
+            <p class="text-sm text-gray-500 mt-1">
+              발생현상 수집 시 자동으로 포함될 PPT 속성을 선택합니다.
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            {#if availableAttributes.length === 0}
+              <div class="text-center text-gray-400 py-8">
+                정의된 속성이 없습니다.
+              </div>
+            {:else}
+              {#each availableAttributes as attr (attr.key)}
+                <label
+                  class="flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors {settings.phenomenon_attributes.includes(attr.key)
+                    ? 'bg-blue-50 border-blue-300'
+                    : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}"
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.phenomenon_attributes.includes(attr.key)}
+                    on:change={() => togglePhenomenonAttribute(attr.key)}
+                    class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <div class="flex-1">
+                    <div class="font-medium text-gray-800">{attr.display_name}</div>
+                    <div class="text-xs text-gray-500">{attr.key}</div>
+                  </div>
+                  <span class="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded">
+                    {attr.attr_type.variant}
+                  </span>
+                </label>
               {/each}
             {/if}
           </div>

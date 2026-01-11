@@ -7,12 +7,12 @@
     export let rightPaneFullscreen = false;
     export let rightPaneWidth = 300;
     export let expandedSection = null;
-    export let workflowData;
+    export let phenomenonData;
     export let settings;
     export let allowEdit;
     export let savingWorkflow;
     export let captureMode = false;
-    export let workflowTreeRef = null;
+    export let workflowSectionRef = null;
     export let summaryData;
     export let summaryDataLLM;
     export let savingSummary;
@@ -25,6 +25,7 @@
     export let selectedShapeId = null;
     export let editingDescription = "";
     export let project;
+    export let phenomenonAttributes = [];
 
     const dispatch = createEventDispatcher();
 
@@ -85,19 +86,18 @@
     </div>
 
     <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
-        <!-- Workflow Section -->
+        <!-- Workflow Section (Phenomenon Collection) -->
         <WorkflowSection
             isExpanded={expandedSection === "workflow"}
-            {workflowData}
-            {settings}
+            {phenomenonData}
             {savingWorkflow}
             {captureMode}
-            bind:workflowTreeRef
+            {phenomenonAttributes}
+            bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
-            on:workflowChange
-            on:generateWorkflow
+            on:phenomenonChange
             on:toggleCaptureMode
-            on:nodeSelect
+            on:evidenceHover
         />
 
         <!-- Summary Section -->

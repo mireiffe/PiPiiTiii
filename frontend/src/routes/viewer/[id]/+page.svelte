@@ -1,14 +1,12 @@
 ﻿<script>
     import { page } from "$app/stores";
     import { onMount, tick } from "svelte";
-    import { slide } from "svelte/transition";
     import { marked } from "marked";
-    import WorkflowTree from "$lib/components/WorkflowTree.svelte";
-    import Button from "$lib/components/ui/Button.svelte";
     import ViewerToolbar from "$lib/components/viewer/ViewerToolbar.svelte";
     import ViewerSidebar from "$lib/components/viewer/ViewerSidebar.svelte";
     import ViewerCanvas from "$lib/components/viewer/ViewerCanvas.svelte";
     import ViewerRightPane from "$lib/components/viewer/ViewerRightPane.svelte";
+    import { createEmptyPhenomenon } from "$lib/types/phenomenon";
 
     import {
         fetchProject,
@@ -24,8 +22,9 @@
         generateSummaryStream,
         updateProjectSummaryLLM,
         updateProjectPromptVersion,
-        fetchProjectWorkflow,
-        updateProjectWorkflow,
+        fetchProjectPhenomenon,
+        updateProjectPhenomenon,
+        fetchProjectAttributes,
     } from "$lib/api/project";
 
     // Configure marked options
@@ -75,17 +74,24 @@
     let isResizing = false;
 
     // Settings and summary
-    let settings = { summary_fields: [], workflow_actions: [] };
+    let settings = { summary_fields: [], workflow_actions: [], phenomenon_attributes: [] };
     let summaryData = {}; // User version (displayed/edited)
     let summaryDataLLM = {}; // LLM-generated version (original)
     let savingSummary = false;
 
-    // Workflow state
-    let workflowData = null;
-    let savingWorkflow = false;
-    let captureMode = false; // Capture mode for phenomenon node
-    let workflowTreeRef; // Reference to WorkflowTree component
+    // Phenomenon state
+    let phenomenonData = createEmptyPhenomenon();
+    let savingPhenomenon = false;
+    let captureMode = false;
+    let workflowSectionRef; // Reference to WorkflowSection component
     let captureOverlays = []; // Capture regions to display on canvas
+    let highlightedEvidenceId = null; // Currently hovered evidence
+    let availableAttributes = []; // Project attributes from database
+
+    // Filter attributes based on settings
+    $: phenomenonAttributes = availableAttributes.filter(
+        attr => settings.phenomenon_attributes?.includes(attr.key)
+    );
 
     // Accordion state for right pane sections
     let expandedSection = "workflow"; // 'workflow' | 'summary' | 'objects' - default is workflow
@@ -129,11 +135,11 @@
             s.type_code !== 13,
     );
 
-    // Update capture overlays whenever workflow changes
-    $: if (workflowData) {
-        // Use tick to ensure workflowTreeRef is ready
+    // Update capture overlays whenever phenomenon changes
+    $: if (phenomenonData) {
+        // Use tick to ensure workflowSectionRef is ready
         tick().then(() => {
-            if (workflowTreeRef) {
+            if (workflowSectionRef) {
                 updateCaptureOverlays();
             }
         });
@@ -147,7 +153,8 @@
         await loadProject();
         await loadSettings();
         await loadSummary();
-        await loadWorkflow();
+        await loadPhenomenon();
+        await loadAttributes();
         window.addEventListener("resize", updateScale);
         window.addEventListener("keydown", handleKeyDown);
         return () => {
@@ -241,45 +248,54 @@
         }
     }
 
-    async function loadWorkflow() {
+    async function loadPhenomenon() {
         try {
-            const res = await fetchProjectWorkflow(projectId);
+            const res = await fetchProjectPhenomenon(projectId);
             if (res.ok) {
                 const data = await res.json();
-                workflowData = data.workflow || null;
+                phenomenonData = data.phenomenon || createEmptyPhenomenon();
             }
         } catch (e) {
-            console.error("Failed to load workflow", e);
+            console.error("Failed to load phenomenon", e);
         }
     }
 
-    async function saveWorkflow(newWorkflow) {
-        savingWorkflow = true;
+    async function loadAttributes() {
         try {
-            workflowData = newWorkflow;
-            await updateProjectWorkflow(projectId, newWorkflow);
+            const res = await fetchProjectAttributes(projectId);
+            if (res.ok) {
+                const data = await res.json();
+                availableAttributes = data.attributes || [];
+            }
         } catch (e) {
-            console.error("Failed to save workflow", e);
-        } finally {
-            savingWorkflow = false;
+            console.error("Failed to load attributes", e);
         }
     }
 
-    async function handleWorkflowChange(event) {
-        const newWorkflow = event.detail;
-        saveWorkflow(newWorkflow);
-        // Update capture overlays after workflow change
+    async function savePhenomenon(newPhenomenon) {
+        savingPhenomenon = true;
+        try {
+            phenomenonData = newPhenomenon;
+            await updateProjectPhenomenon(projectId, newPhenomenon);
+        } catch (e) {
+            console.error("Failed to save phenomenon", e);
+        } finally {
+            savingPhenomenon = false;
+        }
+    }
+
+    function handlePhenomenonChange(event) {
+        const newPhenomenon = event.detail;
+        savePhenomenon(newPhenomenon);
+        // Update capture overlays after phenomenon change
         updateCaptureOverlays();
     }
 
     function handleCapture(event) {
         const capture = event.detail;
-        // Add capture to the phenomenon node
-        if (workflowData && workflowTreeRef) {
-            const phenomenonNodeId = workflowTreeRef.getPhenomenonNodeId();
-            if (phenomenonNodeId) {
-                workflowTreeRef.addCaptureToNode(phenomenonNodeId, capture);
-            }
+        // Add capture to the phenomenon collector
+        if (workflowSectionRef) {
+            workflowSectionRef.addCapture(capture);
         }
     }
 
@@ -288,52 +304,15 @@
     }
 
     function updateCaptureOverlays() {
-        if (workflowTreeRef && workflowTreeRef.getPhenomenonCaptures) {
-            // Always show phenomenon captures if they exist
-            captureOverlays = workflowTreeRef.getPhenomenonCaptures();
+        if (workflowSectionRef && workflowSectionRef.getCaptureOverlays) {
+            captureOverlays = workflowSectionRef.getCaptureOverlays();
         } else {
             captureOverlays = [];
         }
     }
 
-    async function handleGenerateWorkflow(event) {
-        const query = event.detail;
-        if (!query) return;
-
-        savingWorkflow = true;
-        try {
-            const { generateWorkflowLLM } = await import("$lib/api/project");
-            const res = await generateWorkflowLLM(projectId, query);
-
-            if (res.ok) {
-                const data = await res.json();
-                if (data.status === "success" && data.workflow) {
-                    workflowData = data.workflow;
-                    // Workflow is already updated in DB backend-side, but let's refresh local state just in case
-                    alert("워크플로우가 수정되었습니다.");
-                } else if (data.status === "confirmation_required") {
-                    const message = `정의되지 않은 액션이 사용되었습니다:\n\n${data.undefined_actions.join("\n")}\n\n그래도 수정하시겠습니까?`;
-                    if (confirm(message)) {
-                        workflowData = data.workflow;
-                        await saveWorkflow(workflowData);
-                        alert(
-                            "워크플로우가 수정되었습니다 (정의되지 않은 액션 포함).",
-                        );
-                    }
-                } else {
-                    alert(
-                        `워크플로우 수정 실패: ${data.message || "알 수 없는 오류"}`,
-                    );
-                }
-            } else {
-                alert("워크플로우 수정 요청 실패");
-            }
-        } catch (e) {
-            console.error("Failed to generate workflow", e);
-            alert(`오류 발생: ${e.message}`);
-        } finally {
-            savingWorkflow = false;
-        }
+    function handleEvidenceHover(event) {
+        highlightedEvidenceId = event.detail.evidenceId;
     }
 
     async function saveSummary() {
@@ -934,13 +913,14 @@
     <ViewerRightPane
         bind:rightPaneFullscreen
         bind:rightPaneWidth
-        bind:workflowTreeRef
+        bind:workflowSectionRef
         {expandedSection}
-        {workflowData}
+        {phenomenonData}
         {settings}
         {allowEdit}
-        {savingWorkflow}
+        savingWorkflow={savingPhenomenon}
         {captureMode}
+        phenomenonAttributes={phenomenonAttributes}
         bind:summaryData
         bind:summaryDataLLM
         {savingSummary}
@@ -953,10 +933,9 @@
         {selectedShapeId}
         bind:editingDescription
         {project}
-        on:workflowChange={handleWorkflowChange}
-        on:generateWorkflow={handleGenerateWorkflow}
+        on:phenomenonChange={handlePhenomenonChange}
         on:toggleCaptureMode={toggleCaptureMode}
-        on:nodeSelect={updateCaptureOverlays}
+        on:evidenceHover={handleEvidenceHover}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
             toggleSlideSelection(e.detail.slideIndex)}

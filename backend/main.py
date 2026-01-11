@@ -267,6 +267,7 @@ class Settings(BaseModel):
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
     workflow_actions: List[WorkflowAction] = []
+    phenomenon_attributes: List[str] = []  # List of attribute keys to include in phenomenon
 
 
 class WorkflowData(BaseModel):
@@ -905,6 +906,12 @@ def update_settings(settings: Settings):
         raise HTTPException(
             status_code=500, detail=f"Failed to save settings: {str(e)}"
         )
+
+
+@app.get("/api/attributes")
+def get_all_attributes():
+    """Get all available attribute definitions."""
+    return attr_manager.get_active_attributes()
 
 
 # ========== Workflow API ==========
@@ -1565,6 +1572,70 @@ async def batch_generate_summary(request: BatchGenerateSummaryRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ========== Phenomenon API ==========
+
+
+class PhenomenonUpdateRequest(BaseModel):
+    phenomenon: Optional[Dict[str, Any]] = None
+
+
+@app.get("/api/project/{project_id}/phenomenon")
+def get_project_phenomenon(project_id: str):
+    """Get phenomenon data for a project."""
+    try:
+        phenomenon = db.get_project_phenomenon(project_id)
+        return {"phenomenon": phenomenon}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load phenomenon: {str(e)}"
+        )
+
+
+@app.post("/api/project/{project_id}/phenomenon")
+def update_project_phenomenon(project_id: str, request: PhenomenonUpdateRequest):
+    """Update phenomenon data for a project."""
+    try:
+        db.update_project_phenomenon(project_id, request.phenomenon)
+        return {"status": "success", "message": "Phenomenon updated successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save phenomenon: {str(e)}"
+        )
+
+
+@app.get("/api/project/{project_id}/attributes")
+def get_project_attributes(project_id: str):
+    """Get project attributes from database."""
+    try:
+        project = db.get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Get active attribute definitions
+        active_attrs = attr_manager.get_active_attributes()
+
+        # Build attributes list with values
+        attributes = []
+        for attr in active_attrs:
+            key = attr["key"]
+            value = project.get(key)
+            if value is not None and value != "":
+                attributes.append({
+                    "key": key,
+                    "name": attr["display_name"],
+                    "value": str(value),
+                    "source": "project"
+                })
+
+        return {"attributes": attributes}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load attributes: {str(e)}"
+        )
 
 
 if __name__ == "__main__":

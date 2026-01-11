@@ -1,7 +1,7 @@
 <script>
     import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
     import { createEventDispatcher, onMount, tick } from "svelte";
-    import { CAPTURE_COLORS } from "$lib/api/project";
+    import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
 
     export let project;
     export let currentSlide;
@@ -285,8 +285,8 @@
                         {/if}
 
                         <!-- Capture overlay rectangles (when phenomenon node is selected) -->
-                        {#each (overlaysBySlide[i] || []) as overlay, idx}
-                            {@const color = CAPTURE_COLORS[overlay.colorIndex % CAPTURE_COLORS.length]}
+                        {#each (overlaysBySlide[i] || []) as overlay}
+                            {@const color = EVIDENCE_COLORS[overlay.colorIndex % EVIDENCE_COLORS.length]}
                             {@const isHighlighted = highlightedCaptureIndex === overlay.colorIndex}
                             <div
                                 class="absolute pointer-events-none border-2 transition-all duration-200
