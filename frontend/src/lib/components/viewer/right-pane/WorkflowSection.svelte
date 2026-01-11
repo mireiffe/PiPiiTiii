@@ -178,8 +178,8 @@
             </svelte:fragment>
         </AccordionHeader>
 
-        <!-- 스텝 네비게이션 (확장되었을 때만 표시) -->
-        {#if isExpanded}
+        <!-- 스텝 네비게이션 (확장되었고 리스트 뷰일 때만 표시) -->
+        {#if isExpanded && viewMode === "list"}
             <div class="flex bg-white px-2 py-1">
                 {#each STEPS as step}
                     <button
@@ -211,7 +211,6 @@
             transition:slide={{ duration: 200, axis: "y" }}
             class="bg-gray-50/30 flex-1 flex flex-col min-h-[350px] overflow-hidden relative"
         >
-            >
             {#if viewMode === "graph"}
                 <WorkflowGraph phenomenon={phenomenonData} />
             {:else if currentStep === 0}
