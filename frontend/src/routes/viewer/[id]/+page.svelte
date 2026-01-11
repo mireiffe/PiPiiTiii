@@ -74,7 +74,11 @@
     let isResizing = false;
 
     // Settings and summary
-    let settings = { summary_fields: [], workflow_actions: [], phenomenon_attributes: [] };
+    let settings = {
+        summary_fields: [],
+        workflow_actions: [],
+        phenomenon_attributes: [],
+    };
     let summaryData = {}; // User version (displayed/edited)
     let summaryDataLLM = {}; // LLM-generated version (original)
     let savingSummary = false;
@@ -88,9 +92,14 @@
     let highlightedEvidenceId = null; // Currently hovered evidence
     let availableAttributes = []; // Project attributes from database
 
+    // Candidate Cause Linking State
+    let isCandidateLinkingMode = false;
+    let linkingCauseId = null;
+    let linkedEvidenceIds = [];
+
     // Filter attributes based on settings
-    $: phenomenonAttributes = availableAttributes.filter(
-        attr => settings.phenomenon_attributes?.includes(attr.key)
+    $: phenomenonAttributes = availableAttributes.filter((attr) =>
+        settings.phenomenon_attributes?.includes(attr.key),
     );
 
     // Accordion state for right pane sections
@@ -147,7 +156,10 @@
 
     onMount(async () => {
         // Set rightPane width to 35% of window width (min 600px, max 800px)
-        const calculatedWidth = Math.min(800, Math.max(600, window.innerWidth * 0.35));
+        const calculatedWidth = Math.min(
+            800,
+            Math.max(600, window.innerWidth * 0.35),
+        );
         rightPaneWidth = calculatedWidth;
 
         await loadProject();
@@ -313,6 +325,20 @@
 
     function handleEvidenceHover(event) {
         highlightedEvidenceId = event.detail.evidenceId;
+    }
+
+    function handleLinkingModeChange(event) {
+        const { isLinking, causeId, linkedEvidenceIds: ids } = event.detail;
+        isCandidateLinkingMode = isLinking;
+        linkingCauseId = causeId;
+        linkedEvidenceIds = ids || [];
+    }
+
+    function handleEvidenceClick(event) {
+        const evidenceId = event.detail.evidenceId;
+        if (isCandidateLinkingMode && workflowSectionRef) {
+            workflowSectionRef.handleEvidenceClick(evidenceId);
+        }
     }
 
     async function saveSummary() {
@@ -875,12 +901,20 @@
                 {selectedShapeId}
                 {captureMode}
                 {captureOverlays}
+                highlightedCaptureIndex={highlightedEvidenceId?.startsWith(
+                    "ev_",
+                )
+                    ? null
+                    : null}
+                {isCandidateLinkingMode}
+                {linkedEvidenceIds}
                 on:wheel={handleWheel}
-                on:slideInView={handleSlideInView}
+                on:canvasMouseDown={handleCanvasMouseDown}
                 on:shapeMouseDown={(e) =>
                     handleMouseDown(e.detail.event, e.detail.shape)}
-                on:canvasMouseDown={() => (selectedShapeId = null)}
+                on:slideInView={handleSlideInView}
                 on:capture={handleCapture}
+                on:evidenceClick={handleEvidenceClick}
             />
         </div>
 
@@ -920,7 +954,7 @@
         {allowEdit}
         savingWorkflow={savingPhenomenon}
         {captureMode}
-        phenomenonAttributes={phenomenonAttributes}
+        {phenomenonAttributes}
         bind:summaryData
         bind:summaryDataLLM
         {savingSummary}
@@ -936,6 +970,7 @@
         on:phenomenonChange={handlePhenomenonChange}
         on:toggleCaptureMode={toggleCaptureMode}
         on:evidenceHover={handleEvidenceHover}
+        on:linkingModeChange={handleLinkingModeChange}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
             toggleSlideSelection(e.detail.slideIndex)}

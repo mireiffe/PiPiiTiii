@@ -36,6 +36,7 @@ export type Evidence = CaptureEvidence | AttributeEvidence;
 export interface PhenomenonData {
     evidences: Evidence[];
     description: string;  // 사용자 텍스트 설명
+    candidateCauses: CandidateCause[]; // 원인 후보 목록
     createdAt?: string;
     updatedAt?: string;
 }
@@ -95,11 +96,40 @@ export function createAttributeEvidence(
     };
 }
 
-// 빈 발생현상 데이터 생성
+// 원인 후보 데이터
+export interface EvidenceLink {
+    evidenceId: string;
+    description: string;    // 근거와 원인 간의 관계 설명
+}
+
+// Deduction Todo Item
+export type TodoType = 'action' | 'condition';
+
+export interface TodoItem {
+    id: string;
+    type: TodoType;
+    text: string;
+    isCompleted?: boolean;
+}
+
+export interface CandidateCause {
+    id: string;
+    text: string;           // 원인 후보 설명
+    evidenceIds: string[];  // @deprecated Use evidenceLinks instead. Kept for backward compatibility.
+    evidenceLinks?: EvidenceLink[]; //
+    notes?: string;         // 원인 후보에 대한 사용자 노트
+    createdAt: string;
+
+    // Cause Deduction
+    todoList?: TodoItem[];
+}
+
+// 빈 발생현상 데이터 생성 (워크플로우 초기값)
 export function createEmptyPhenomenon(): PhenomenonData {
     return {
         evidences: [],
         description: '',
+        candidateCauses: [],
         createdAt: new Date().toISOString()
     };
 }

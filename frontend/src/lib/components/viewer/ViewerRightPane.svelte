@@ -98,6 +98,7 @@
             on:phenomenonChange
             on:toggleCaptureMode
             on:evidenceHover
+            on:linkingModeChange
         />
 
         <!-- Summary Section -->

@@ -1,14 +1,21 @@
 <script>
+    import { createEventDispatcher } from "svelte";
+
     export let icon = "";
     export let title = "";
     export let isExpanded = false;
     export let badge = null;
     export let savingIndicator = false;
+
+    const dispatch = createEventDispatcher();
 </script>
 
-<button
-    class="w-full flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-50 transition-all font-medium text-gray-700 hover:text-blue-600 focus:outline-none"
+<div
+    class="w-full flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-50 transition-all font-medium text-gray-700 hover:text-blue-600 select-none"
     on:click
+    role="button"
+    tabindex="0"
+    on:keydown={(e) => e.key === "Enter" && dispatch("click")}
 >
     <div class="flex items-center gap-2.5">
         <span class="text-lg">{icon}</span>
@@ -28,19 +35,24 @@
             </span>
         {/if}
     </div>
-    <svg
-        class="w-4 h-4 text-gray-400 transition-transform duration-300 ease-in-out {isExpanded
-            ? 'rotate-180 text-blue-500'
-            : ''}"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-    >
-        <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 9l-7 7-7-7"
-        />
-    </svg>
-</button>
+
+    <div class="flex items-center gap-2">
+        <slot name="actions" />
+
+        <svg
+            class="w-4 h-4 text-gray-400 transition-transform duration-300 ease-in-out {isExpanded
+                ? 'rotate-180 text-blue-500'
+                : ''}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+        >
+            <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 9l-7 7-7-7"
+            />
+        </svg>
+    </div>
+</div>

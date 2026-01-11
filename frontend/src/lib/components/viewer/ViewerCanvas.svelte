@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
     import ShapeRenderer from "$lib/components/ShapeRenderer.svelte";
     import { createEventDispatcher, onMount, tick } from "svelte";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
@@ -14,6 +14,10 @@
     export let captureMode = false; // Enable capture mode
     export let captureOverlays = []; // Capture regions to display when phenomenon node is selected
     export let highlightedCaptureIndex = null; // Index of currently highlighted capture (for candidate search)
+
+    // Candidate Cause Linking Props
+    export let isCandidateLinkingMode = false;
+    export let linkedEvidenceIds: string[] = [];
 
     // Create a map of slideIndex -> overlays for reactive updates
     $: overlaysBySlide = captureOverlays.reduce((acc, overlay) => {
@@ -71,9 +75,11 @@
 
     // Helper function to get shapes for a specific slide
     function getShapesForSlide(slide) {
-        return slide?.shapes.sort(
-            (a, b) => (a.z_order_position || 0) - (b.z_order_position || 0),
-        ) || [];
+        return (
+            slide?.shapes.sort(
+                (a, b) => (a.z_order_position || 0) - (b.z_order_position || 0),
+            ) || []
+        );
     }
 
     function handleWheel(e) {
@@ -119,12 +125,12 @@
         // Convert to slide coordinates (unscaled)
         captureStart = {
             x: (e.clientX - rect.left) / scale,
-            y: (e.clientY - rect.top) / scale
+            y: (e.clientY - rect.top) / scale,
         };
         captureEnd = { ...captureStart };
 
-        window.addEventListener('mousemove', handleCaptureMove);
-        window.addEventListener('mouseup', handleCaptureEnd);
+        window.addEventListener("mousemove", handleCaptureMove);
+        window.addEventListener("mouseup", handleCaptureEnd);
     }
 
     function handleCaptureMove(e) {
@@ -132,14 +138,20 @@
 
         const rect = captureSlideElement.getBoundingClientRect();
         captureEnd = {
-            x: Math.max(0, Math.min(project.slide_width, (e.clientX - rect.left) / scale)),
-            y: Math.max(0, Math.min(project.slide_height, (e.clientY - rect.top) / scale))
+            x: Math.max(
+                0,
+                Math.min(project.slide_width, (e.clientX - rect.left) / scale),
+            ),
+            y: Math.max(
+                0,
+                Math.min(project.slide_height, (e.clientY - rect.top) / scale),
+            ),
         };
     }
 
     function handleCaptureEnd(e) {
-        window.removeEventListener('mousemove', handleCaptureMove);
-        window.removeEventListener('mouseup', handleCaptureEnd);
+        window.removeEventListener("mousemove", handleCaptureMove);
+        window.removeEventListener("mouseup", handleCaptureEnd);
 
         if (!isCapturing) return;
 
@@ -157,12 +169,12 @@
         }
 
         // Dispatch capture event (coordinates only, no thumbnail)
-        dispatch('capture', {
+        dispatch("capture", {
             slideIndex: captureSlideIndex, // Keep as 0-based index
             x: Math.round(x),
             y: Math.round(y),
             width: Math.round(width),
-            height: Math.round(height)
+            height: Math.round(height),
         });
 
         isCapturing = false;
@@ -172,29 +184,45 @@
 
     // Get capture overlays for a specific slide (no longer used, kept for potential future use)
     function getCaptureOverlaysForSlide(slideIndex) {
-        return captureOverlays.filter(c => c.slideIndex === slideIndex);
+        return captureOverlays.filter((c) => c.slideIndex === slideIndex);
     }
 
     // Calculate capture selection rectangle for display
-    $: captureRect = isCapturing ? {
-        left: Math.min(captureStart.x, captureEnd.x),
-        top: Math.min(captureStart.y, captureEnd.y),
-        width: Math.abs(captureEnd.x - captureStart.x),
-        height: Math.abs(captureEnd.y - captureStart.y)
-    } : null;
+    $: captureRect = isCapturing
+        ? {
+              left: Math.min(captureStart.x, captureEnd.x),
+              top: Math.min(captureStart.y, captureEnd.y),
+              width: Math.abs(captureEnd.x - captureStart.x),
+              height: Math.abs(captureEnd.y - captureStart.y),
+          }
+        : null;
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
-    class="flex-1 overflow-auto bg-gray-100 p-8 slides-container {captureMode ? 'capture-mode' : ''}"
+    class="flex-1 overflow-auto bg-gray-100 p-8 slides-container {captureMode
+        ? 'capture-mode'
+        : ''}"
     on:wheel={handleWheel}
     on:mousedown={handleCanvasMouseDown}
 >
     {#if captureMode}
-        <div class="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2">
-            <svg class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        <div
+            class="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2"
+        >
+            <svg
+                class="w-4 h-4 animate-pulse"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
             </svg>
             캡처 모드: 마우스 좌클릭+드래그로 영역을 선택하세요
         </div>
@@ -213,10 +241,17 @@
                         width: ${project.slide_width * scale}px;
                         height: ${project.slide_height * scale}px;
                     `}
-                    on:mousedown={(e) => handleSlideCaptureStart(e, i, slideElements[i].querySelector('.slide-inner'))}
+                    on:mousedown={(e) =>
+                        handleSlideCaptureStart(
+                            e,
+                            i,
+                            slideElements[i].querySelector(".slide-inner"),
+                        )}
                 >
                     <div
-                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left slide-inner {captureMode ? 'cursor-crosshair' : ''}"
+                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left slide-inner {captureMode
+                            ? 'cursor-crosshair'
+                            : ''}"
                         style={`
                             width: ${project.slide_width}px;
                             height: ${project.slide_height}px;
@@ -285,22 +320,41 @@
                         {/if}
 
                         <!-- Capture overlay rectangles (when phenomenon node is selected) -->
-                        {#each (overlaysBySlide[i] || []) as overlay}
-                            {@const color = EVIDENCE_COLORS[overlay.colorIndex % EVIDENCE_COLORS.length]}
-                            {@const isHighlighted = highlightedCaptureIndex === overlay.colorIndex}
+                        {#each overlaysBySlide[i] || [] as overlay}
+                            {@const color =
+                                EVIDENCE_COLORS[
+                                    overlay.colorIndex % EVIDENCE_COLORS.length
+                                ]}
+                            {@const isHighlighted =
+                                highlightedCaptureIndex === overlay.colorIndex}
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <!-- svelte-ignore a11y-no-static-element-interactions -->
                             <div
                                 class="absolute pointer-events-none border-2 transition-all duration-200
-                                       {isHighlighted ? 'z-50 ring-4 ring-blue-500 ring-opacity-50' : ''}"
+                                       {isHighlighted
+                                    ? 'z-50 ring-4 ring-blue-500 ring-opacity-50'
+                                    : ''}
+                                       {isCandidateLinkingMode
+                                    ? 'hover:brightness-110 z-40'
+                                    : ''}"
                                 style={`
                                     left: ${overlay.x}px;
                                     top: ${overlay.y}px;
                                     width: ${overlay.width}px;
                                     height: ${overlay.height}px;
-                                    background-color: ${isHighlighted ? color.bg.replace('0.2', '0.4') : color.bg};
+                                    background-color: ${isHighlighted ? color.bg.replace("0.2", "0.4") : isCandidateLinkingMode && linkedEvidenceIds.includes(overlay.id) ? color.bg.replace("0.2", "0.4") : color.bg};
                                     border-color: ${color.border};
-                                    border-width: ${isHighlighted ? '3px' : '2px'};
-                                    ${isHighlighted ? 'box-shadow: 0 0 20px ' + color.border + '80;' : ''}
+                                    border-width: ${isHighlighted || (isCandidateLinkingMode && linkedEvidenceIds.includes(overlay.id)) ? "3px" : "2px"};
+                                    ${isHighlighted || (isCandidateLinkingMode && linkedEvidenceIds.includes(overlay.id)) ? "box-shadow: 0 0 20px " + color.border + "80;" : ""}
+                                    ${isCandidateLinkingMode && !captureMode ? "cursor: pointer; pointer-events: auto !important;" : ""}
                                 `}
+                                on:click|stopPropagation={() => {
+                                    if (isCandidateLinkingMode) {
+                                        dispatch("evidenceClick", {
+                                            evidenceId: overlay.id,
+                                        });
+                                    }
+                                }}
                             >
                                 <div
                                     class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t
@@ -310,9 +364,36 @@
                                     #{overlay.colorIndex + 1}
                                 </div>
                                 {#if isHighlighted}
-                                    <div class="absolute inset-0 flex items-center justify-center">
-                                        <div class="bg-black/50 text-white px-2 py-1 rounded text-xs font-medium">
+                                    <div
+                                        class="absolute inset-0 flex items-center justify-center"
+                                    >
+                                        <div
+                                            class="bg-black/50 text-white px-2 py-1 rounded text-xs font-medium"
+                                        >
                                             선택됨
+                                        </div>
+                                    </div>
+                                {/if}
+                                {#if isCandidateLinkingMode && linkedEvidenceIds.includes(overlay.id)}
+                                    <div
+                                        class="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                    >
+                                        <div
+                                            class="bg-blue-600 text-white px-2 py-1 rounded-full shadow-lg transform scale-110"
+                                        >
+                                            <svg
+                                                class="w-4 h-4"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="3"
+                                                    d="M5 13l4 4L19 7"
+                                                />
+                                            </svg>
                                         </div>
                                     </div>
                                 {/if}
