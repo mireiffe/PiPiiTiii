@@ -236,7 +236,7 @@
                 <div
                     bind:this={slideElements[i]}
                     data-slide-index={i}
-                    class="slide-container relative flex items-center justify-center"
+                    class="slide-container relative overflow-hidden"
                     style={`
                         width: ${project.slide_width * scale}px;
                         height: ${project.slide_height * scale}px;
