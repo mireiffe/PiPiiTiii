@@ -226,6 +226,9 @@
     function selectPredefinedItem(item: { id: string; name: string }) {
         newTodoText = item.name;
     }
+
+    // Reactive: get predefined items based on current todo type
+    $: predefinedItems = newTodoType === "condition" ? workflowConditions : workflowActions;
 </script>
 
 <div class="flex flex-col h-full bg-gray-50/50">
@@ -494,7 +497,6 @@
                                             </div>
 
                                             <!-- Predefined options from settings -->
-                                            {@const predefinedItems = newTodoType === "condition" ? workflowConditions : workflowActions}
                                             {#if predefinedItems.length > 0}
                                                 <div class="mb-2">
                                                     <div class="text-[10px] text-gray-500 mb-1">미리 정의된 항목:</div>
