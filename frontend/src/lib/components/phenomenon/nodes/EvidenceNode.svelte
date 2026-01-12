@@ -27,10 +27,12 @@
                 {data.index + 1}
             </div>
             <div class="content">
-                <span class="label">{data.label}</span>
-                {#if data.slideIndex !== undefined}
-                    <span class="meta">슬라이드 {data.slideIndex + 1}</span>
-                {/if}
+                <span class="label">
+                    {data.label}
+                    {#if data.slideIndex !== undefined}
+                        <span class="meta">(슬라이드 {data.slideIndex + 1})</span>
+                    {/if}
+                </span>
                 {#if data.description}
                     <span class="description">{data.description}</span>
                 {/if}
@@ -104,8 +106,7 @@
     .capture-node .meta {
         font-size: 10px;
         color: #6b7280;
-        display: block;
-        margin-top: 2px;
+        font-weight: normal;
     }
     .capture-node .description {
         font-size: 10px;

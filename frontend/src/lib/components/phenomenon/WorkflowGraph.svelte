@@ -32,8 +32,9 @@
     const GROUP_PADDING_BOTTOM = 40;
     const GROUP_PADDING_X = 20;
     // Different gap for different node types
-    const CAPTURE_NODE_GAP = 70;    // Capture nodes are taller (~50px)
-    const ATTR_NODE_GAP = 36;        // Attribute nodes are compact (~28px)
+    const CAPTURE_NODE_GAP = 55;                // Capture nodes without description
+    const CAPTURE_NODE_WITH_DESC_GAP = 95;      // Capture nodes with description (2 lines)
+    const ATTR_NODE_GAP = 36;                   // Attribute nodes are compact (~28px)
     const CAUSE_NODE_BASE_HEIGHT = 90;   // Base height for cause node
     const CAUSE_NODE_TODO_HEIGHT = 50;   // Additional height per todo item (with params)
     const CAUSE_NODE_GAP = 16;           // Gap between cause nodes
@@ -58,7 +59,11 @@
         let evidenceTotalHeight = 0;
         if (data.evidences) {
             data.evidences.forEach((ev) => {
-                evidenceTotalHeight += ev.type === "capture" ? CAPTURE_NODE_GAP : ATTR_NODE_GAP;
+                if (ev.type === "capture") {
+                    evidenceTotalHeight += ev.description ? CAPTURE_NODE_WITH_DESC_GAP : CAPTURE_NODE_GAP;
+                } else {
+                    evidenceTotalHeight += ATTR_NODE_GAP;
+                }
             });
         }
         evidenceTotalHeight = Math.max(evidenceTotalHeight, 100);
@@ -173,8 +178,12 @@
                     targetPosition: Position.Left,
                 });
 
-                // Use different gap based on node type
-                evidenceYOffset += evidence.type === "capture" ? CAPTURE_NODE_GAP : ATTR_NODE_GAP;
+                // Use different gap based on node type and whether it has description
+                if (evidence.type === "capture") {
+                    evidenceYOffset += evidence.description ? CAPTURE_NODE_WITH_DESC_GAP : CAPTURE_NODE_GAP;
+                } else {
+                    evidenceYOffset += ATTR_NODE_GAP;
+                }
             });
         }
 
