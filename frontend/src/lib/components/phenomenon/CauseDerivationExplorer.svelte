@@ -18,6 +18,8 @@
     let isAddingTodo = false;
     let newTodoText = "";
     let newTodoType: TodoType = "action";
+    let selectedPredefinedItem: { id: string; name: string; params: any[] } | null = null;
+    let paramValues: Record<string, string> = {};
 
     // Inline editing state
     let editingTodoId: string | null = null;
@@ -27,8 +29,13 @@
     let draggingTodoId: string | null = null;
     let dragOverTodoId: string | null = null;
 
+    // Drag-and-drop state for cause candidates
+    let draggingCauseId: string | null = null;
+    let dragOverCauseId: string | null = null;
+
     const dispatch = createEventDispatcher<{
         change: PhenomenonData;
+        workflowComplete: { finalCauseId: string };
     }>();
 
     // Ensure todoList exists for all causes
@@ -74,11 +81,15 @@
         newTodoType = type;
         isAddingTodo = true;
         newTodoText = "";
+        selectedPredefinedItem = null;
+        paramValues = {};
     }
 
     function cancelAddTodo() {
         isAddingTodo = false;
         newTodoText = "";
+        selectedPredefinedItem = null;
+        paramValues = {};
     }
 
     function saveNewTodo() {
@@ -96,11 +107,18 @@
             isCompleted: false,
         };
 
+        // Add parameter values if any were collected
+        if (Object.keys(paramValues).length > 0) {
+            newTodo.paramValues = { ...paramValues };
+        }
+
         cause.todoList = [...(cause.todoList || []), newTodo];
         phenomenon.candidateCauses = [...phenomenon.candidateCauses];
         dispatch("change", phenomenon);
 
         newTodoText = "";
+        selectedPredefinedItem = null;
+        paramValues = {};
         isAddingTodo = false;
     }
 
@@ -223,9 +241,65 @@
         dragOverTodoId = null;
     }
 
+    // ===== Drag-and-drop functions for cause candidates =====
+    function handleCauseDragStart(e: DragEvent, causeId: string) {
+        draggingCauseId = causeId;
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", causeId);
+        }
+    }
+
+    function handleCauseDragOver(e: DragEvent, causeId: string) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = "move";
+        }
+        dragOverCauseId = causeId;
+    }
+
+    function handleCauseDragLeave(e: DragEvent) {
+        dragOverCauseId = null;
+    }
+
+    function handleCauseDrop(e: DragEvent, targetCauseId: string) {
+        e.preventDefault();
+        dragOverCauseId = null;
+
+        if (!draggingCauseId || draggingCauseId === targetCauseId) return;
+
+        const causes = [...phenomenon.candidateCauses];
+        const dragIndex = causes.findIndex((c) => c.id === draggingCauseId);
+        const targetIndex = causes.findIndex((c) => c.id === targetCauseId);
+
+        if (dragIndex === -1 || targetIndex === -1) return;
+
+        const [draggedCause] = causes.splice(dragIndex, 1);
+        causes.splice(targetIndex, 0, draggedCause);
+
+        phenomenon.candidateCauses = causes;
+        dispatch("change", phenomenon);
+
+        draggingCauseId = null;
+    }
+
+    function handleCauseDragEnd() {
+        draggingCauseId = null;
+        dragOverCauseId = null;
+    }
+
     // ===== Predefined action/condition selection =====
-    function selectPredefinedItem(item: { id: string; name: string }) {
+    function selectPredefinedItem(item: { id: string; name: string; params: any[] }) {
+        selectedPredefinedItem = item;
         newTodoText = item.name;
+
+        // Initialize param values with empty strings
+        paramValues = {};
+        if (item.params) {
+            item.params.forEach(param => {
+                paramValues[param.id] = "";
+            });
+        }
     }
 
     // ===== Condition status toggle =====
@@ -261,6 +335,36 @@
         if (allActive) return 'active';
 
         return 'pending';
+    }
+
+    // 우선순위를 고려한 효과적인 상태 계산
+    // 상위 원인후보가 제외되면 자동으로 다음 후보가 active로 표시됨
+    function getEffectiveCauseStatus(cause: CandidateCause, index: number): 'active' | 'inactive' | 'pending' {
+        const baseStatus = getCauseStatus(cause);
+
+        // 이미 inactive면 그대로 유지
+        if (baseStatus === 'inactive') return 'inactive';
+
+        // 상위 모든 원인후보가 inactive인지 확인
+        const allPreviousInactive = phenomenon.candidateCauses
+            .slice(0, index)
+            .every(c => getCauseStatus(c) === 'inactive');
+
+        // 상위가 모두 inactive이고, 현재 cause가 첫 번째 non-inactive면 active로 표시
+        if (allPreviousInactive && baseStatus === 'pending') {
+            return 'active';
+        }
+
+        return baseStatus;
+    }
+
+    // ===== Workflow finalization =====
+    function finalizeCause(causeId: string) {
+        phenomenon.finalCauseId = causeId;
+        phenomenon.workflowCompleted = true;
+        phenomenon.candidateCauses = [...phenomenon.candidateCauses];
+        dispatch("change", phenomenon);
+        dispatch("workflowComplete", { finalCauseId: causeId });
     }
 
     // Reactive: get predefined items based on current todo type
@@ -301,7 +405,8 @@
                 <div class="space-y-2">
                     {#each phenomenon.candidateCauses as cause, index (cause.id)}
                         {@const isActive = activeCauseId === cause.id}
-                        {@const causeStatus = getCauseStatus(cause)}
+                        {@const causeStatus = getEffectiveCauseStatus(cause, index)}
+                        {@const isDragOver = dragOverCauseId === cause.id}
                         <!-- svelte-ignore a11y-click-events-have-key-events -->
                         <!-- svelte-ignore a11y-no-static-element-interactions -->
                         <div
@@ -312,10 +417,23 @@
                                     ? 'border-gray-300 bg-gray-50 opacity-60'
                                     : causeStatus === 'active'
                                         ? 'border-green-300 bg-green-50/30'
-                                        : 'border-gray-200 hover:border-gray-300'}"
+                                        : 'border-gray-200 hover:border-gray-300'}
+                                   {isDragOver ? 'border-blue-400 border-2 ring-2 ring-blue-200' : ''}"
+                            draggable="true"
+                            on:dragstart={(e) => handleCauseDragStart(e, cause.id)}
+                            on:dragover={(e) => handleCauseDragOver(e, cause.id)}
+                            on:dragleave={handleCauseDragLeave}
+                            on:drop={(e) => handleCauseDrop(e, cause.id)}
+                            on:dragend={handleCauseDragEnd}
                         >
                             <!-- Cause Header Item -->
                             <div class="flex items-center p-2 gap-2">
+                                <!-- Drag Handle -->
+                                <div class="flex-shrink-0 cursor-move opacity-40 hover:opacity-100 transition-opacity">
+                                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
+                                    </svg>
+                                </div>
                                 <!-- Rank Badge -->
                                 <div
                                     class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border
@@ -490,6 +608,19 @@
                                                                 >
                                                                     {todo.text}
                                                                 </div>
+                                                                <!-- Display parameter values if they exist -->
+                                                                {#if todo.paramValues && Object.keys(todo.paramValues).length > 0}
+                                                                    <div class="mt-1 space-y-0.5 pl-1 border-l-2 border-gray-200">
+                                                                        {#each Object.entries(todo.paramValues) as [paramId, paramValue]}
+                                                                            {#if paramValue}
+                                                                                <div class="text-[10px] text-gray-600">
+                                                                                    <span class="font-medium">{paramId}:</span>
+                                                                                    <span class="text-gray-800">{paramValue}</span>
+                                                                                </div>
+                                                                            {/if}
+                                                                        {/each}
+                                                                    </div>
+                                                                {/if}
                                                             {/if}
                                                             {#if todo.type === "condition"}
                                                                 <div class="mt-1.5 flex items-center gap-2">
@@ -595,8 +726,43 @@
                                                 </div>
                                             {/if}
 
+                                            <!-- Parameter inputs for selected predefined item -->
+                                            {#if selectedPredefinedItem && selectedPredefinedItem.params && selectedPredefinedItem.params.length > 0}
+                                                <div class="mb-2 space-y-2 border-t border-gray-200 pt-2">
+                                                    <div class="text-[10px] text-gray-500 font-medium">파라미터:</div>
+                                                    {#each selectedPredefinedItem.params as param}
+                                                        <div class="space-y-1">
+                                                            <label class="text-[10px] text-gray-600 flex items-center gap-1">
+                                                                {param.name}
+                                                                {#if param.required}
+                                                                    <span class="text-red-500">*</span>
+                                                                {/if}
+                                                            </label>
+                                                            {#if param.param_type === 'selection' && param.selection_values && param.selection_values.length > 0}
+                                                                <select
+                                                                    bind:value={paramValues[param.id]}
+                                                                    class="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:border-purple-500 focus:outline-none"
+                                                                >
+                                                                    <option value="">선택하세요...</option>
+                                                                    {#each param.selection_values as value}
+                                                                        <option value={value}>{value}</option>
+                                                                    {/each}
+                                                                </select>
+                                                            {:else}
+                                                                <input
+                                                                    type="text"
+                                                                    bind:value={paramValues[param.id]}
+                                                                    class="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:border-purple-500 focus:outline-none"
+                                                                    placeholder="값을 입력하세요..."
+                                                                />
+                                                            {/if}
+                                                        </div>
+                                                    {/each}
+                                                </div>
+                                            {/if}
+
                                             <div class="text-[10px] text-gray-500 mb-1">
-                                                {predefinedItems.length > 0 ? "또는 직접 입력:" : ""}
+                                                {predefinedItems.length > 0 && !selectedPredefinedItem ? "또는 직접 입력:" : selectedPredefinedItem ? "이름 (수정 가능):" : ""}
                                             </div>
                                             <input
                                                 type="text"
@@ -641,6 +807,31 @@
                                                 <span class="font-bold">+</span>
                                                 Condition
                                             </button>
+                                        </div>
+                                    {/if}
+
+                                    <!-- Finalize Cause Button (only for active causes) -->
+                                    {#if causeStatus === 'active' && !phenomenon.workflowCompleted}
+                                        <div class="mt-4 pt-3 border-t border-gray-200">
+                                            <button
+                                                class="w-full py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors shadow-sm"
+                                                on:click={() => finalizeCause(cause.id)}
+                                            >
+                                                🎯 원인 지목 (최종 선택)
+                                            </button>
+                                            <p class="text-[10px] text-gray-500 text-center mt-1">
+                                                이 원인을 최종 결과로 확정합니다
+                                            </p>
+                                        </div>
+                                    {/if}
+
+                                    <!-- Workflow Completed Badge -->
+                                    {#if phenomenon.workflowCompleted && phenomenon.finalCauseId === cause.id}
+                                        <div class="mt-4 pt-3 border-t border-gray-200">
+                                            <div class="p-3 bg-green-100 border border-green-300 rounded-lg text-center">
+                                                <div class="text-sm font-bold text-green-800">✅ 최종 원인으로 선택됨</div>
+                                                <div class="text-xs text-green-700 mt-1">워크플로우가 완료되었습니다</div>
+                                            </div>
                                         </div>
                                     {/if}
                                 </div>

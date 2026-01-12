@@ -44,6 +44,13 @@
         dispatch("phenomenonChange", event.detail);
     }
 
+    // 워크플로우 완료 핸들러
+    function handleWorkflowComplete(event: CustomEvent<{ finalCauseId: string }>) {
+        // Switch to graph view when workflow is completed
+        viewMode = "graph";
+        dispatch("phenomenonChange", phenomenonData);
+    }
+
     // 캡처 모드 토글
     function handleToggleCaptureMode() {
         dispatch("toggleCaptureMode");
@@ -240,6 +247,7 @@
                     {workflowActions}
                     {workflowConditions}
                     on:change={handlePhenomenonChange}
+                    on:workflowComplete={handleWorkflowComplete}
                 />
             {/if}
         </div>
