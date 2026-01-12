@@ -12,10 +12,13 @@
     import "@xyflow/svelte/dist/style.css";
     import type { PhenomenonData } from "$lib/types/phenomenon";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
+    import type { WorkflowAction, WorkflowCondition } from "$lib/types/workflow";
     import EvidenceNode from "./nodes/EvidenceNode.svelte";
     import CandidateCauseNode from "./nodes/CandidateCauseNode.svelte";
 
     export let phenomenon: PhenomenonData;
+    export let workflowActions: WorkflowAction[] = [];
+    export let workflowConditions: WorkflowCondition[] = [];
 
     let nodes = writable<Node[]>([]);
     let edges = writable<Edge[]>([]);
@@ -151,6 +154,8 @@
                         todoList: cause.todoList || [],
                         linkedEvidenceCount:
                             cause.evidenceLinks?.length || 0,
+                        workflowActions,
+                        workflowConditions,
                     },
                     position: {
                         x: GROUP_PADDING_X,

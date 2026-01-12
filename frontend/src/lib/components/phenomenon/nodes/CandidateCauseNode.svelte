@@ -1,12 +1,38 @@
 <script lang="ts">
     import { Handle, Position } from "@xyflow/svelte";
     import type { TodoItem } from "$lib/types/phenomenon";
+    import type { WorkflowAction, WorkflowCondition } from "$lib/types/workflow";
 
     export let data: {
         label: string;
-        todoList: (TodoItem & { parameters?: Record<string, unknown> })[];
+        todoList: TodoItem[];
         linkedEvidenceCount: number;
+        workflowActions?: WorkflowAction[];
+        workflowConditions?: WorkflowCondition[];
     };
+
+    // Get parameter display info (name and value) for a todo item
+    function getParamDisplayItems(todo: TodoItem): { name: string; value: string }[] {
+        if (!todo.paramValues) return [];
+
+        // Find the action or condition definition based on todo.text (which matches action/condition name)
+        const definitions = todo.type === 'action'
+            ? data.workflowActions || []
+            : data.workflowConditions || [];
+
+        const definition = definitions.find(d => d.name === todo.text);
+
+        return Object.entries(todo.paramValues)
+            .filter(([_, value]) => value) // Only show non-empty values
+            .map(([paramId, value]) => {
+                // Find param name from definition
+                const param = definition?.params.find(p => p.id === paramId);
+                return {
+                    name: param?.name || paramId,
+                    value: value
+                };
+            });
+    }
 </script>
 
 <div class="cause-node">
@@ -36,12 +62,13 @@
                         {/if}
                     </div>
 
-                    {#if todo.parameters && Object.keys(todo.parameters).length > 0}
+                    {@const paramItems = getParamDisplayItems(todo)}
+                    {#if paramItems.length > 0}
                         <div class="todo-params">
-                            {#each Object.entries(todo.parameters) as [key, value]}
+                            {#each paramItems as param}
                                 <div class="param-row">
-                                    <span class="param-key">{key}:</span>
-                                    <span class="param-value">{value}</span>
+                                    <span class="param-key">{param.name}:</span>
+                                    <span class="param-value">{param.value}</span>
                                 </div>
                             {/each}
                         </div>

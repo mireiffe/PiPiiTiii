@@ -221,7 +221,11 @@
             class="bg-gray-50/30 flex-1 flex flex-col min-h-[350px] overflow-hidden relative"
         >
             {#if viewMode === "graph"}
-                <WorkflowGraph phenomenon={phenomenonData} />
+                <WorkflowGraph
+                    phenomenon={phenomenonData}
+                    {workflowActions}
+                    {workflowConditions}
+                />
             {:else if currentStep === 0}
                 <PhenomenonCollector
                     bind:this={phenomenonCollectorRef}
