@@ -228,7 +228,7 @@
         </div>
     {/if}
 
-    <div class="flex flex-col items-center gap-8">
+    <div class="flex flex-col gap-8">
         {#if project?.slides}
             {#each project.slides as slide, i (slide.slide_index)}
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -236,7 +236,7 @@
                 <div
                     bind:this={slideElements[i]}
                     data-slide-index={i}
-                    class="slide-container relative overflow-hidden"
+                    class="slide-container relative overflow-hidden mx-auto"
                     style={`
                         width: ${project.slide_width * scale}px;
                         height: ${project.slide_height * scale}px;
