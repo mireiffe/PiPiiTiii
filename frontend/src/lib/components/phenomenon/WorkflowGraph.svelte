@@ -215,6 +215,16 @@
         position: relative;
     }
 
+    /* Force background color for SvelteFlow viewport */
+    :global(.workflow-graph-container .svelte-flow__viewport) {
+        background: rgba(219, 234, 254, 0.7) !important;
+    }
+
+    /* Alternative: set background on the pane */
+    :global(.workflow-graph-container .svelte-flow__pane) {
+        background: rgba(219, 234, 254, 0.7) !important;
+    }
+
     :global(.workflow-graph-container .svelte-flow__controls) {
         margin: 8px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
