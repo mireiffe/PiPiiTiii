@@ -255,6 +255,12 @@ class WorkflowAction(BaseModel):
     params: List[WorkflowActionParam] = []
 
 
+class WorkflowCondition(BaseModel):
+    id: str
+    name: str
+    params: List[WorkflowActionParam] = []
+
+
 class WorkflowPrompts(BaseModel):
     system_prompt: str = ""
     user_prompt: str = ""
@@ -267,6 +273,7 @@ class Settings(BaseModel):
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
     workflow_actions: List[WorkflowAction] = []
+    workflow_conditions: List[WorkflowCondition] = []
     phenomenon_attributes: List[str] = []  # List of attribute keys to include in phenomenon
 
 
@@ -827,6 +834,9 @@ def load_settings() -> dict:
             # Ensure workflow_actions exists (migration for existing settings)
             if "workflow_actions" not in settings:
                 settings["workflow_actions"] = get_default_workflow_actions()
+            # Ensure workflow_conditions exists (migration for existing settings)
+            if "workflow_conditions" not in settings:
+                settings["workflow_conditions"] = []
             return settings
     else:
         return {
@@ -857,6 +867,7 @@ def load_settings() -> dict:
             ],
             "use_thumbnails": True,
             "workflow_actions": get_default_workflow_actions(),
+            "workflow_conditions": [],
         }
 
 
