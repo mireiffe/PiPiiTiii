@@ -9,6 +9,7 @@
     import {
         createEmptyPhenomenon,
         createCaptureEvidence,
+        type AttributeEvidence,
     } from "$lib/types/phenomenon";
 
     export let isExpanded = false;
@@ -38,6 +39,33 @@
         { id: 1, title: "원인후보" },
         { id: 2, title: "원인도출" },
     ];
+
+    // Create a synced phenomenon data with attribute evidences included
+    // This is a derived state that combines phenomenonData with phenomenonAttributes
+    $: syncedPhenomenonData = (() => {
+        if (!phenomenonAttributes || !phenomenonData) {
+            return phenomenonData;
+        }
+
+        // Get current capture evidences (preserve them)
+        const captureEvidences = (phenomenonData.evidences || []).filter(e => e.type === 'capture');
+
+        // Create attribute evidences from phenomenonAttributes with consistent IDs
+        const attributeEvidences: AttributeEvidence[] = phenomenonAttributes.map(attr => ({
+            type: 'attribute',
+            id: `attr:${attr.key}`,  // Use consistent ID format that matches CandidateCauseExplorer
+            key: attr.key,
+            name: attr.name,
+            value: attr.value,
+            source: attr.source
+        }));
+
+        // Combine capture evidences with attribute evidences
+        return {
+            ...phenomenonData,
+            evidences: [...captureEvidences, ...attributeEvidences]
+        };
+    })();
 
     // 발생현상 데이터 변경 핸들러
     function handlePhenomenonChange(event: CustomEvent<PhenomenonData>) {
@@ -222,7 +250,7 @@
         >
             {#if viewMode === "graph"}
                 <WorkflowGraph
-                    phenomenon={phenomenonData}
+                    phenomenon={syncedPhenomenonData}
                     {workflowActions}
                     {workflowConditions}
                 />
