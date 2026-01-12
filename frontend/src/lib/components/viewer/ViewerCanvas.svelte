@@ -262,7 +262,7 @@
                             <img
                                 src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, "0")}_thumb.png`}
                                 alt={`Slide ${slide.slide_index} thumbnail`}
-                                class="w-full h-full object-contain pointer-events-none"
+                                class="w-full h-full object-fill pointer-events-none"
                                 on:error={(e) => {
                                     console.warn(
                                         `Thumbnail not found for slide ${slide.slide_index}, falling back to rendering`,
@@ -299,7 +299,7 @@
                             <img
                                 src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, "0")}_thumb.png`}
                                 alt={`Slide ${slide.slide_index} thumbnail`}
-                                class="w-full h-full object-contain pointer-events-none"
+                                class="w-full h-full object-fill pointer-events-none"
                                 on:error={(e) => {
                                     e.target.style.display = "none";
                                 }}
