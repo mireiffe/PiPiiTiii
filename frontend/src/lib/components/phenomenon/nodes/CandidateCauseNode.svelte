@@ -4,7 +4,7 @@
 
     export let data: {
         label: string;
-        todoList: TodoItem[];
+        todoList: (TodoItem & { parameters?: Record<string, unknown> })[];
         linkedEvidenceCount: number;
     };
 </script>
@@ -23,15 +23,28 @@
         <div class="todo-list">
             <div class="todo-header">행동 정의</div>
             {#each data.todoList.slice(0, 3) as todo}
-                <div class="todo-item {todo.type} {todo.type === 'condition' && todo.conditionStatus === 'false' ? 'inactive' : ''}">
-                    <span class="todo-type">
-                        {todo.type === "condition" ? "C" : "A"}
-                    </span>
-                    <span class="todo-text">{todo.text}</span>
-                    {#if todo.type === "condition" && todo.conditionStatus}
-                        <span class="condition-status {todo.conditionStatus === 'true' ? 'active' : 'inactive'}">
-                            {todo.conditionStatus === 'true' ? 'T' : 'F'}
+                <div class="todo-wrapper">
+                    <div class="todo-item {todo.type} {todo.type === 'condition' && todo.conditionStatus === 'false' ? 'inactive' : ''}">
+                        <span class="todo-type">
+                            {todo.type === "condition" ? "C" : "A"}
                         </span>
+                        <span class="todo-text">{todo.text}</span>
+                        {#if todo.type === "condition" && todo.conditionStatus}
+                            <span class="condition-status {todo.conditionStatus === 'true' ? 'active' : 'inactive'}">
+                                {todo.conditionStatus === 'true' ? 'T' : 'F'}
+                            </span>
+                        {/if}
+                    </div>
+
+                    {#if todo.parameters && Object.keys(todo.parameters).length > 0}
+                        <div class="parameters {todo.type === 'condition' && todo.conditionStatus === 'false' ? 'inactive' : ''}">
+                            {#each Object.entries(todo.parameters) as [key, value]}
+                                <div class="param-row">
+                                    <span class="param-key">{key}:</span>
+                                    <span class="param-value">{value}</span>
+                                </div>
+                            {/each}
+                        </div>
                     {/if}
                 </div>
             {/each}
@@ -44,19 +57,21 @@
 
 <style>
     .cause-node {
-        min-width: 200px;
-        max-width: 250px;
+        min-width: 260px;
+        max-width: 300px;
         padding: 12px;
         border-radius: 8px;
         border: 2px solid #3b82f6;
         background: #eff6ff;
         font-size: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
     .header {
         display: flex;
         align-items: baseline;
         gap: 8px;
         flex-wrap: wrap;
+        margin-bottom: 4px;
     }
     .title {
         font-weight: 600;
@@ -72,7 +87,7 @@
     .todo-list {
         border-top: 1px solid #bfdbfe;
         padding-top: 8px;
-        margin-top: 8px;
+        margin-top: 4px;
     }
     .todo-header {
         font-size: 10px;
@@ -80,11 +95,17 @@
         color: #6b7280;
         margin-bottom: 6px;
     }
+
+    .todo-wrapper {
+        margin-bottom: 8px;
+        display: flex;
+        flex-direction: column;
+    }
+
     .todo-item {
         display: flex;
         align-items: flex-start;
         gap: 6px;
-        margin-bottom: 4px;
         font-size: 11px;
     }
     .todo-type {
@@ -115,13 +136,36 @@
     .todo-text {
         color: #374151;
         line-height: 1.3;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
+        font-weight: 500;
         flex: 1;
     }
+
+    .parameters {
+        margin-left: 22px;
+        margin-top: 2px;
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 4px;
+        padding: 2px 4px;
+    }
+    .parameters.inactive {
+        opacity: 0.5;
+    }
+    .param-row {
+        font-size: 10px;
+        color: #4b5563;
+        display: flex;
+        gap: 4px;
+        line-height: 1.4;
+    }
+    .param-key {
+        color: #6b7280;
+    }
+    .param-value {
+        font-family: monospace;
+        color: #0369a1;
+        font-weight: 500;
+    }
+
     .condition-status {
         flex-shrink: 0;
         width: 14px;
@@ -146,5 +190,6 @@
         color: #9ca3af;
         font-style: italic;
         margin-top: 4px;
+        text-align: center;
     }
 </style>
