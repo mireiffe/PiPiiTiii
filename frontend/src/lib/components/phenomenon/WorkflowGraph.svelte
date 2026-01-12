@@ -31,7 +31,12 @@
     const GROUP_PADDING_TOP = 60;
     const GROUP_PADDING_BOTTOM = 40;
     const GROUP_PADDING_X = 20;
-    const NODE_GAP_Y = 160;
+    // Different gap for different node types
+    const CAPTURE_NODE_GAP = 70;    // Capture nodes are taller (~50px)
+    const ATTR_NODE_GAP = 36;        // Attribute nodes are compact (~28px)
+    const CAUSE_NODE_BASE_HEIGHT = 90;   // Base height for cause node
+    const CAUSE_NODE_TODO_HEIGHT = 50;   // Additional height per todo item (with params)
+    const CAUSE_NODE_GAP = 16;           // Gap between cause nodes
     const EVIDENCE_GROUP_WIDTH = 300;
     const CAUSE_GROUP_WIDTH = 340;
 
@@ -39,17 +44,36 @@
         updateGraph(phenomenon);
     }
 
+    // Calculate height for a cause node based on todoList
+    function calcCauseNodeHeight(todoList: any[]): number {
+        const visibleTodos = Math.min(todoList?.length || 0, 3);
+        return CAUSE_NODE_BASE_HEIGHT + visibleTodos * CAUSE_NODE_TODO_HEIGHT;
+    }
+
     function updateGraph(data: PhenomenonData) {
         const newNodes: Node[] = [];
         const newEdges: Edge[] = [];
 
-        const evidenceCount = data.evidences?.length || 0;
-        const causeCount = data.candidateCauses?.length || 0;
+        // Calculate evidence nodes total height
+        let evidenceTotalHeight = 0;
+        if (data.evidences) {
+            data.evidences.forEach((ev) => {
+                evidenceTotalHeight += ev.type === "capture" ? CAPTURE_NODE_GAP : ATTR_NODE_GAP;
+            });
+        }
+        evidenceTotalHeight = Math.max(evidenceTotalHeight, 100);
 
-        const maxItems = Math.max(evidenceCount, causeCount, 2);
-        const contentHeight = maxItems * NODE_GAP_Y;
-        const groupHeight =
-            contentHeight + GROUP_PADDING_TOP + GROUP_PADDING_BOTTOM;
+        // Calculate cause nodes total height dynamically
+        let causeTotalHeight = 0;
+        if (data.candidateCauses) {
+            data.candidateCauses.forEach((cause) => {
+                causeTotalHeight += calcCauseNodeHeight(cause.todoList || []) + CAUSE_NODE_GAP;
+            });
+        }
+        causeTotalHeight = Math.max(causeTotalHeight, 100);
+
+        const maxContentHeight = Math.max(evidenceTotalHeight, causeTotalHeight);
+        const groupHeight = maxContentHeight + GROUP_PADDING_TOP + GROUP_PADDING_BOTTOM;
 
         newNodes.push({
             id: "group-evidence",
@@ -110,6 +134,7 @@
         });
 
         if (data.evidences) {
+            let evidenceYOffset = GROUP_PADDING_TOP;
             data.evidences.forEach((evidence, index) => {
                 const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length];
                 let label =
@@ -138,16 +163,23 @@
                     },
                     position: {
                         x: GROUP_PADDING_X,
-                        y: GROUP_PADDING_TOP + index * NODE_GAP_Y,
+                        y: evidenceYOffset,
                     },
                     sourcePosition: Position.Right,
                     targetPosition: Position.Left,
                 });
+
+                // Use different gap based on node type
+                evidenceYOffset += evidence.type === "capture" ? CAPTURE_NODE_GAP : ATTR_NODE_GAP;
             });
         }
 
         if (data.candidateCauses) {
-            data.candidateCauses.forEach((cause, index) => {
+            let causeYOffset = GROUP_PADDING_TOP;
+            data.candidateCauses.forEach((cause) => {
+                const todoList = cause.todoList || [];
+                const nodeHeight = calcCauseNodeHeight(todoList);
+
                 newNodes.push({
                     id: cause.id,
                     type: "candidateCause",
@@ -155,7 +187,7 @@
                     extent: "parent",
                     data: {
                         label: cause.text,
-                        todoList: cause.todoList || [],
+                        todoList,
                         linkedEvidenceCount:
                             cause.evidenceLinks?.length || 0,
                         workflowActions,
@@ -163,11 +195,14 @@
                     },
                     position: {
                         x: GROUP_PADDING_X,
-                        y: GROUP_PADDING_TOP + index * NODE_GAP_Y,
+                        y: causeYOffset,
                     },
                     sourcePosition: Position.Right,
                     targetPosition: Position.Left,
                 });
+
+                // Move to next position based on actual node height
+                causeYOffset += nodeHeight + CAUSE_NODE_GAP;
 
                 if (cause.evidenceLinks) {
                     cause.evidenceLinks.forEach((link) => {
