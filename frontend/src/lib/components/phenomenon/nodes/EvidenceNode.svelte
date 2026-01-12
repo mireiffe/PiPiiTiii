@@ -8,6 +8,7 @@
         evidenceType: "capture" | "attribute";
         slideIndex?: number;
         attributeValue?: string;
+        description?: string;
     };
 
     // Capture: use colorful palette, Attribute: unified slate color
@@ -29,6 +30,9 @@
                 <span class="label">{data.label}</span>
                 {#if data.slideIndex !== undefined}
                     <span class="meta">슬라이드 {data.slideIndex + 1}</span>
+                {/if}
+                {#if data.description}
+                    <span class="description">{data.description}</span>
                 {/if}
             </div>
         </div>
@@ -102,6 +106,20 @@
         color: #6b7280;
         display: block;
         margin-top: 2px;
+    }
+    .capture-node .description {
+        font-size: 10px;
+        color: #4b5563;
+        display: block;
+        margin-top: 4px;
+        padding-top: 4px;
+        border-top: 1px dashed #d1d5db;
+        line-height: 1.3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
     }
 
     /* Attribute Node: Compact list-style */

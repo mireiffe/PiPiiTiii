@@ -9,6 +9,7 @@
     const dispatch = createEventDispatcher<{
         delete: void;
         updateLabel: string;
+        updateDescription: string;
         mouseenter: void;
         mouseleave: void;
     }>();
@@ -16,6 +17,10 @@
     let isEditingLabel = false;
     let labelInput: HTMLInputElement;
     let editingLabelValue = '';
+
+    let isEditingDescription = false;
+    let descriptionInput: HTMLTextAreaElement;
+    let editingDescriptionValue = '';
 
     function startEditLabel() {
         if (evidence.type === 'capture') {
@@ -39,6 +44,32 @@
             saveLabel();
         } else if (e.key === 'Escape') {
             cancelEdit();
+        }
+    }
+
+    function startEditDescription() {
+        if (evidence.type === 'capture') {
+            editingDescriptionValue = evidence.description || '';
+            isEditingDescription = true;
+            setTimeout(() => descriptionInput?.focus(), 0);
+        }
+    }
+
+    function saveDescription() {
+        dispatch('updateDescription', editingDescriptionValue);
+        isEditingDescription = false;
+    }
+
+    function cancelEditDescription() {
+        isEditingDescription = false;
+    }
+
+    function handleDescriptionKeydown(e: KeyboardEvent) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            saveDescription();
+        } else if (e.key === 'Escape') {
+            cancelEditDescription();
         }
     }
 
@@ -98,6 +129,32 @@
                     <span>슬라이드 {evidence.slideIndex + 1}</span>
                     <span>{Math.round(evidence.width)} x {Math.round(evidence.height)}</span>
                     <span>({Math.round(evidence.x)}, {Math.round(evidence.y)})</span>
+                </div>
+
+                <!-- 설명 입력란 -->
+                <div class="mt-2">
+                    {#if isEditingDescription}
+                        <textarea
+                            bind:this={descriptionInput}
+                            bind:value={editingDescriptionValue}
+                            on:blur={saveDescription}
+                            on:keydown={handleDescriptionKeydown}
+                            class="w-full px-2 py-1 text-xs border border-blue-400 rounded resize-none focus:outline-none"
+                            placeholder="설명 입력..."
+                            rows="2"
+                        ></textarea>
+                    {:else}
+                        <button
+                            class="w-full text-left text-xs text-gray-500 hover:text-blue-600 cursor-pointer px-2 py-1 rounded hover:bg-gray-50"
+                            on:click={startEditDescription}
+                        >
+                            {#if evidence.description}
+                                <span class="text-gray-600">{evidence.description}</span>
+                            {:else}
+                                <span class="italic text-gray-400">+ 설명 추가</span>
+                            {/if}
+                        </button>
+                    {/if}
                 </div>
             </div>
 

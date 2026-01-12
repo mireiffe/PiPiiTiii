@@ -17,6 +17,7 @@ export interface CaptureEvidence {
     width: number;
     height: number;
     label?: string;  // 사용자가 부여한 라벨
+    description?: string;  // 캡처에 대한 설명
 }
 
 // 속성 증거 - PPT에서 추출된 속성 (DB에 저장된 프로젝트 속성)
@@ -67,7 +68,8 @@ export function createCaptureEvidence(
     y: number,
     width: number,
     height: number,
-    label?: string
+    label?: string,
+    description?: string
 ): CaptureEvidence {
     return {
         type: 'capture',
@@ -77,7 +79,8 @@ export function createCaptureEvidence(
         y,
         width,
         height,
-        label
+        label,
+        description
     };
 }
 
