@@ -31,6 +31,8 @@
     let isAddingCause = false;
     let activeCauseId: string | null = null;
     let editingDescriptionId: string | null = null; // Evidence ID being described
+    let editingCauseId: string | null = null; // Cause ID being renamed
+    let editingCauseText: string = ""; // Temporary text during edit
 
     // Helper to get evidence IDs from a cause (handling both legacy and new structure)
     function getCauseEvidenceIds(cause: CandidateCause): string[] {
@@ -227,6 +229,35 @@
     function saveChanges() {
         dispatch("change", phenomenon);
     }
+
+    function startEditCauseName(id: string, currentText: string) {
+        editingCauseId = id;
+        editingCauseText = currentText;
+    }
+
+    function cancelEditCauseName() {
+        editingCauseId = null;
+        editingCauseText = "";
+    }
+
+    function saveEditCauseName() {
+        if (!editingCauseId || !editingCauseText.trim()) {
+            cancelEditCauseName();
+            return;
+        }
+
+        updateCauseText(editingCauseId, editingCauseText.trim());
+        cancelEditCauseName();
+    }
+
+    function handleCauseNameKeyDown(e: KeyboardEvent) {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            saveEditCauseName();
+        } else if (e.key === "Escape") {
+            cancelEditCauseName();
+        }
+    }
 </script>
 
 <div class="flex flex-col h-full bg-gray-50/50">
@@ -285,11 +316,32 @@
                                 </div>
 
                                 <div class="flex-1 min-w-0">
-                                    <div
-                                        class="font-medium text-sm text-gray-800 break-words mb-1"
-                                    >
-                                        {cause.text}
-                                    </div>
+                                    {#if editingCauseId === cause.id}
+                                        <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                        <input
+                                            type="text"
+                                            bind:value={editingCauseText}
+                                            class="w-full font-medium text-sm text-gray-800 border border-blue-500 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 mb-1"
+                                            on:keydown={handleCauseNameKeyDown}
+                                            on:blur={saveEditCauseName}
+                                            on:click|stopPropagation
+                                            autofocus
+                                        />
+                                    {:else}
+                                        <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                        <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                        <div
+                                            class="font-medium text-sm text-gray-800 break-words mb-1 hover:bg-gray-50 rounded px-1 py-0.5 -mx-1 cursor-text transition-colors"
+                                            on:click|stopPropagation={() =>
+                                                startEditCauseName(
+                                                    cause.id,
+                                                    cause.text,
+                                                )}
+                                            title="클릭하여 수정"
+                                        >
+                                            {cause.text}
+                                        </div>
+                                    {/if}
                                     <div class="text-[10px] text-gray-400">
                                         {#if links.length === 0}
                                             연결된 근거 없음 (클릭하여 선택 후
