@@ -367,6 +367,14 @@
         dispatch("workflowComplete", { finalCauseId: causeId });
     }
 
+    // [추가됨] 원인 지목 철회 함수
+    function revokeFinalCause() {
+        phenomenon.finalCauseId = null;
+        phenomenon.workflowCompleted = false;
+        phenomenon.candidateCauses = [...phenomenon.candidateCauses];
+        dispatch("change", phenomenon);
+    }
+
     // Reactive: get predefined items based on current todo type
     $: predefinedItems = newTodoType === "condition" ? workflowConditions : workflowActions;
 </script>
@@ -529,17 +537,6 @@
                                         class="mb-2 text-xs font-bold text-gray-500 uppercase flex justify-between items-center"
                                     >
                                         <span>검증 계획 (Todo List)</span>
-                                        {#if causeStatus === 'active' && !phenomenon.workflowCompleted}
-                                            <button
-                                                class="px-2 py-0.5 bg-green-600 text-white text-[10px] font-medium rounded hover:bg-green-700 transition-colors shadow-sm flex items-center gap-1"
-                                                on:click|stopPropagation={() =>
-                                                    finalizeCause(cause.id)}
-                                                title="이 원인을 최종 결과로 확정합니다"
-                                            >
-                                                <span>🎯</span>
-                                                <span>원인 지목</span>
-                                            </button>
-                                        {/if}
                                     </div>
 
                                     <!-- Todo List -->
@@ -821,15 +818,41 @@
                                         </div>
                                     {/if}
 
-                                    <!-- Workflow Completed Badge -->
-                                    {#if phenomenon.workflowCompleted && phenomenon.finalCauseId === cause.id}
-                                        <div class="mt-4 pt-3 border-t border-gray-200">
-                                            <div class="p-3 bg-green-100 border border-green-300 rounded-lg text-center">
-                                                <div class="text-sm font-bold text-green-800">✅ 최종 원인으로 선택됨</div>
-                                                <div class="text-xs text-green-700 mt-1">워크플로우가 완료되었습니다</div>
+                                    <div class="mt-4 pt-3 border-t border-gray-200 flex items-center justify-end">
+                                        {#if phenomenon.workflowCompleted && phenomenon.finalCauseId === cause.id}
+                                            <div class="w-full flex items-center justify-between bg-green-50 border border-green-200 rounded px-3 py-2">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="flex items-center justify-center w-5 h-5 rounded-full bg-green-500 text-white shadow-sm">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    </div>
+                                                    <div>
+                                                        <div class="text-xs font-bold text-green-800">최종 원인 확정됨</div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    class="text-[10px] text-gray-500 hover:text-red-600 underline decoration-gray-300 hover:decoration-red-400 transition-colors"
+                                                    on:click={revokeFinalCause}
+                                                >
+                                                    선택 철회
+                                                </button>
                                             </div>
-                                        </div>
-                                    {/if}
+                                        {:else if causeStatus === 'active' && !phenomenon.workflowCompleted}
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[10px] text-gray-400">모든 검증이 완료되었다면:</span>
+                                                <button
+                                                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:border-green-500 hover:text-green-700 hover:bg-green-50 text-gray-600 text-xs font-medium rounded transition-all shadow-sm"
+                                                    on:click={() => finalizeCause(cause.id)}
+                                                >
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    최종 원인으로 지목
+                                                </button>
+                                            </div>
+                                        {/if}
+                                    </div>
                                 </div>
                             {/if}
                         </div>
