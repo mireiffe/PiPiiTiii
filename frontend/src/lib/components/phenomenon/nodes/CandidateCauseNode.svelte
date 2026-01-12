@@ -4,7 +4,7 @@
 
     export let data: {
         label: string;
-        todoList: TodoItem[];
+        todoList: (TodoItem & { parameters?: Record<string, unknown> })[];
         linkedEvidenceCount: number;
     };
 </script>
@@ -15,7 +15,7 @@
     <div class="header">
         <span class="title">{data.label}</span>
         {#if data.linkedEvidenceCount > 0}
-            <span class="link-count">{data.linkedEvidenceCount}개 근거</span>
+            <span class="link-count badge">{data.linkedEvidenceCount}개 근거</span>
         {/if}
     </div>
 
@@ -23,18 +23,32 @@
         <div class="todo-list">
             <div class="todo-header">행동 정의</div>
             {#each data.todoList.slice(0, 3) as todo}
-                <div class="todo-item {todo.type} {todo.type === 'condition' && todo.conditionStatus === 'false' ? 'inactive' : ''}">
-                    <span class="todo-type">
-                        {todo.type === "condition" ? "C" : "A"}
-                    </span>
-                    <span class="todo-text">{todo.text}</span>
-                    {#if todo.type === "condition" && todo.conditionStatus}
-                        <span class="condition-status {todo.conditionStatus === 'true' ? 'active' : 'inactive'}">
-                            {todo.conditionStatus === 'true' ? 'T' : 'F'}
+                <div class="todo-block">
+                    <div class="todo-item {todo.type} {todo.type === 'condition' && todo.conditionStatus === 'false' ? 'inactive' : ''}">
+                        <span class="todo-type">
+                            {todo.type === "condition" ? "C" : "A"}
                         </span>
+                        <span class="todo-text" title={todo.text}>{todo.text}</span>
+                        {#if todo.type === "condition" && todo.conditionStatus}
+                            <span class="condition-status {todo.conditionStatus === 'true' ? 'active' : 'inactive'}">
+                                {todo.conditionStatus === 'true' ? 'T' : 'F'}
+                            </span>
+                        {/if}
+                    </div>
+
+                    {#if todo.parameters && Object.keys(todo.parameters).length > 0}
+                        <div class="todo-params">
+                            {#each Object.entries(todo.parameters) as [key, value]}
+                                <div class="param-row">
+                                    <span class="param-key">{key}:</span>
+                                    <span class="param-value">{value}</span>
+                                </div>
+                            {/each}
+                        </div>
                     {/if}
                 </div>
             {/each}
+
             {#if data.todoList.length > 3}
                 <div class="more">+{data.todoList.length - 3}개 더</div>
             {/if}
@@ -44,59 +58,73 @@
 
 <style>
     .cause-node {
-        min-width: 200px;
-        max-width: 250px;
+        width: 280px;
         padding: 12px;
         border-radius: 8px;
         border: 2px solid #3b82f6;
-        background: #eff6ff;
+        background: #ffffff;
         font-size: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
     .header {
         display: flex;
-        align-items: baseline;
+        align-items: center;
+        justify-content: space-between;
         gap: 8px;
-        flex-wrap: wrap;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #e5e7eb;
     }
     .title {
-        font-weight: 600;
+        font-weight: 700;
         color: #1e40af;
         line-height: 1.3;
+        font-size: 13px;
     }
-    .link-count {
+    .badge {
         font-size: 10px;
-        color: #6b7280;
+        background: #eff6ff;
+        color: #3b82f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 600;
         white-space: nowrap;
     }
 
     .todo-list {
-        border-top: 1px solid #bfdbfe;
-        padding-top: 8px;
-        margin-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
     }
     .todo-header {
         font-size: 10px;
         font-weight: bold;
-        color: #6b7280;
-        margin-bottom: 6px;
+        color: #64748b;
+        margin-bottom: 2px;
     }
+
+    .todo-block {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
     .todo-item {
         display: flex;
         align-items: flex-start;
         gap: 6px;
-        margin-bottom: 4px;
         font-size: 11px;
     }
     .todo-type {
         flex-shrink: 0;
         width: 16px;
         height: 16px;
-        border-radius: 3px;
+        border-radius: 4px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 9px;
-        font-weight: bold;
+        font-weight: 800;
     }
     .todo-item.action .todo-type {
         background: #dbeafe;
@@ -113,15 +141,38 @@
         text-decoration: line-through;
     }
     .todo-text {
-        color: #374151;
-        line-height: 1.3;
+        color: #334155;
+        font-weight: 500;
+        line-height: 1.4;
+        flex: 1;
         overflow: hidden;
         text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        flex: 1;
+        white-space: nowrap;
     }
+
+    .todo-params {
+        margin-left: 22px;
+        padding: 4px;
+        background: #f8fafc;
+        border-radius: 4px;
+        border: 1px solid #f1f5f9;
+    }
+    .param-row {
+        display: flex;
+        gap: 4px;
+        font-size: 10px;
+        line-height: 1.4;
+        color: #475569;
+    }
+    .param-key {
+        color: #64748b;
+        font-weight: 500;
+    }
+    .param-value {
+        color: #0369a1;
+        font-family: monospace;
+    }
+
     .condition-status {
         flex-shrink: 0;
         width: 14px;
@@ -143,8 +194,9 @@
     }
     .more {
         font-size: 10px;
-        color: #9ca3af;
+        color: #94a3b8;
         font-style: italic;
+        text-align: center;
         margin-top: 4px;
     }
 </style>

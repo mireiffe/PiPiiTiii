@@ -25,11 +25,12 @@
         candidateCause: CandidateCauseNode,
     };
 
-    const EVIDENCE_X = 50;
-    const CAUSE_X = 350;
-    const HEADER_Y = 10;
-    const NODE_START_Y = 50;
-    const GAP_Y = 120;
+    const GROUP_PADDING_TOP = 60;
+    const GROUP_PADDING_BOTTOM = 40;
+    const GROUP_PADDING_X = 20;
+    const NODE_GAP_Y = 160;
+    const EVIDENCE_GROUP_WIDTH = 300;
+    const CAUSE_GROUP_WIDTH = 340;
 
     $: {
         updateGraph(phenomenon);
@@ -39,44 +40,85 @@
         const newNodes: Node[] = [];
         const newEdges: Edge[] = [];
 
-        // Section Headers
+        const evidenceCount = data.evidences?.length || 0;
+        const causeCount = data.candidateCauses?.length || 0;
+
+        const maxItems = Math.max(evidenceCount, causeCount, 2);
+        const contentHeight = maxItems * NODE_GAP_Y;
+        const groupHeight =
+            contentHeight + GROUP_PADDING_TOP + GROUP_PADDING_BOTTOM;
+
+        newNodes.push({
+            id: "group-evidence",
+            type: "group",
+            data: { label: "발생현상" },
+            position: { x: 50, y: 50 },
+            style: `
+                width: ${EVIDENCE_GROUP_WIDTH}px; 
+                height: ${groupHeight}px; 
+                background-color: #f8fafc; 
+                border: 2px solid #cbd5e1; 
+                border-radius: 12px;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            `,
+            draggable: false,
+        });
+
+        newNodes.push({
+            id: "group-causes",
+            type: "group",
+            data: { label: "원인후보" },
+            position: { x: 450, y: 50 },
+            style: `
+                width: ${CAUSE_GROUP_WIDTH}px; 
+                height: ${groupHeight}px; 
+                background-color: #eff6ff; 
+                border: 2px solid #bfdbfe; 
+                border-radius: 12px;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            `,
+            draggable: false,
+        });
+
         newNodes.push({
             id: "header-evidence",
             type: "default",
+            parentId: "group-evidence",
+            extent: "parent",
             data: { label: "발생현상" },
-            position: { x: EVIDENCE_X, y: HEADER_Y },
+            position: { x: 20, y: 20 },
             draggable: false,
             selectable: false,
             connectable: false,
-            style: "font-weight: 600; font-size: 13px; color: #374151; background: transparent; border: none; padding: 4px 8px;",
+            style: "width: auto; font-weight: 700; font-size: 16px; color: #334155; background: transparent; border: none; text-align: left; padding: 0;",
         });
 
         newNodes.push({
             id: "header-causes",
             type: "default",
+            parentId: "group-causes",
+            extent: "parent",
             data: { label: "원인후보" },
-            position: { x: CAUSE_X, y: HEADER_Y },
+            position: { x: 20, y: 20 },
             draggable: false,
             selectable: false,
             connectable: false,
-            style: "font-weight: 600; font-size: 13px; color: #1e40af; background: transparent; border: none; padding: 4px 8px;",
+            style: "width: auto; font-weight: 700; font-size: 16px; color: #1e40af; background: transparent; border: none; text-align: left; padding: 0;",
         });
 
-        // 1. Evidence Nodes
         if (data.evidences) {
             data.evidences.forEach((evidence, index) => {
                 const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length];
-                let label = "";
-                if (evidence.type === "capture") {
-                    label =
-                        evidence.label || `캡처 #${evidence.slideIndex + 1}`;
-                } else {
-                    label = evidence.name || evidence.key;
-                }
+                let label =
+                    evidence.type === "capture"
+                        ? evidence.label || `캡처 #${evidence.slideIndex + 1}`
+                        : evidence.name || evidence.key;
 
                 newNodes.push({
                     id: evidence.id,
                     type: "evidence",
+                    parentId: "group-evidence",
+                    extent: "parent",
                     data: {
                         label,
                         index,
@@ -87,30 +129,37 @@
                                 ? evidence.slideIndex
                                 : undefined,
                     },
-                    position: { x: EVIDENCE_X, y: NODE_START_Y + index * GAP_Y },
+                    position: {
+                        x: GROUP_PADDING_X,
+                        y: GROUP_PADDING_TOP + index * NODE_GAP_Y,
+                    },
                     sourcePosition: Position.Right,
                     targetPosition: Position.Left,
                 });
             });
         }
 
-        // 2. Candidate Cause Nodes
         if (data.candidateCauses) {
             data.candidateCauses.forEach((cause, index) => {
                 newNodes.push({
                     id: cause.id,
                     type: "candidateCause",
+                    parentId: "group-causes",
+                    extent: "parent",
                     data: {
                         label: cause.text,
                         todoList: cause.todoList || [],
-                        linkedEvidenceCount: cause.evidenceLinks?.length || 0,
+                        linkedEvidenceCount:
+                            cause.evidenceLinks?.length || 0,
                     },
-                    position: { x: CAUSE_X, y: NODE_START_Y + index * GAP_Y },
+                    position: {
+                        x: GROUP_PADDING_X,
+                        y: GROUP_PADDING_TOP + index * NODE_GAP_Y,
+                    },
                     sourcePosition: Position.Right,
                     targetPosition: Position.Left,
                 });
 
-                // Edges
                 if (cause.evidenceLinks) {
                     cause.evidenceLinks.forEach((link) => {
                         newEdges.push({
@@ -119,9 +168,9 @@
                             target: cause.id,
                             markerEnd: {
                                 type: MarkerType.ArrowClosed,
-                                color: "#9ca3af",
+                                color: "#94a3b8",
                             },
-                            style: "stroke: #9ca3af; stroke-width: 1.5px;",
+                            style: "stroke: #94a3b8; stroke-width: 2px;",
                         });
                     });
                 }
@@ -143,7 +192,7 @@
         attributionPosition="bottom-right"
         proOptions={{ hideAttribution: true }}
     >
-        <Background gap={20} size={1} />
+        <Background gap={20} size={1} color="#e2e8f0" />
         <Controls position="bottom-left" showLock={false} />
     </SvelteFlow>
 </div>
@@ -152,8 +201,8 @@
     .workflow-graph-container {
         width: 100%;
         height: 100%;
-        min-height: 400px;
-        background: #f9fafb;
+        min-height: 500px;
+        background: #f1f5f9;
         position: relative;
     }
 
@@ -162,11 +211,13 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         border-radius: 6px;
         overflow: hidden;
+        background: white;
     }
 
     :global(.workflow-graph-container .svelte-flow__controls button) {
-        width: 26px;
-        height: 26px;
+        width: 28px;
+        height: 28px;
         border: none;
+        border-bottom: 1px solid #eee;
     }
 </style>
