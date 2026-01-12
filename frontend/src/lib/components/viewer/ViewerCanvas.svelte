@@ -236,7 +236,7 @@
                 <div
                     bind:this={slideElements[i]}
                     data-slide-index={i}
-                    class="slide-container relative"
+                    class="slide-container relative flex items-center justify-center"
                     style={`
                         width: ${project.slide_width * scale}px;
                         height: ${project.slide_height * scale}px;
@@ -249,7 +249,7 @@
                         )}
                 >
                     <div
-                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left slide-inner {captureMode
+                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-center slide-inner {captureMode
                             ? 'cursor-crosshair'
                             : ''}"
                         style={`
