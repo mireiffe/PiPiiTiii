@@ -342,6 +342,25 @@
         }
     }
 
+    async function handleDeleteWorkflow() {
+        // Reset phenomenon data to empty state
+        const emptyPhenomenon = createEmptyPhenomenon();
+        await savePhenomenon(emptyPhenomenon);
+
+        // Turn off capture mode if it's active
+        if (captureMode) {
+            captureMode = false;
+        }
+
+        // Clear capture overlays
+        captureOverlays = [];
+
+        // Reset linking mode
+        isCandidateLinkingMode = false;
+        linkingCauseId = null;
+        linkedEvidenceIds = [];
+    }
+
     async function saveSummary() {
         savingSummary = true;
         try {
@@ -972,6 +991,7 @@
         on:toggleCaptureMode={toggleCaptureMode}
         on:evidenceHover={handleEvidenceHover}
         on:linkingModeChange={handleLinkingModeChange}
+        on:deleteWorkflow={handleDeleteWorkflow}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
             toggleSlideSelection(e.detail.slideIndex)}

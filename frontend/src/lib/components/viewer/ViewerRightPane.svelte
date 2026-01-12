@@ -101,6 +101,7 @@
             on:toggleCaptureMode
             on:evidenceHover
             on:linkingModeChange
+            on:deleteWorkflow
         />
 
         <!-- Summary Section -->
