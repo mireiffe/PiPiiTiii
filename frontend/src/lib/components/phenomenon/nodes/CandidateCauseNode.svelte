@@ -198,5 +198,6 @@
         font-style: italic;
         text-align: center;
         margin-top: 4px;
+        text-align: center;
     }
 </style>
