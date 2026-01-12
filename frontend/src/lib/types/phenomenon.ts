@@ -37,6 +37,8 @@ export interface PhenomenonData {
     evidences: Evidence[];
     description: string;  // 사용자 텍스트 설명
     candidateCauses: CandidateCause[]; // 원인 후보 목록
+    finalCauseId?: string;  // 사용자가 지목한 최종 원인 ID
+    workflowCompleted?: boolean;  // 워크플로우 완료 여부
     createdAt?: string;
     updatedAt?: string;
 }
@@ -113,6 +115,7 @@ export interface TodoItem {
     text: string;
     isCompleted?: boolean;
     conditionStatus?: ConditionStatus;  // condition 타입일 때만 사용
+    paramValues?: Record<string, string>;  // parameter ID -> value mapping
 }
 
 export interface CandidateCause {

@@ -28,6 +28,8 @@
     id: string;
     name: string;
     required: boolean;
+    param_type?: string;  // "selection" or "description"
+    selection_values?: string[];  // For selection type
   }
 
   interface WorkflowAction {
@@ -278,7 +280,13 @@
     const newId = `param_${Date.now()}`;
     settings.workflow_actions[actionIndex].params = [
       ...settings.workflow_actions[actionIndex].params,
-      { id: newId, name: "새 파라미터", required: false },
+      {
+        id: newId,
+        name: "새 파라미터",
+        required: false,
+        param_type: "description",
+        selection_values: []
+      },
     ];
     settings.workflow_actions = [...settings.workflow_actions];
   }
@@ -329,7 +337,13 @@
     const newId = `param_${Date.now()}`;
     settings.workflow_conditions[conditionIndex].params = [
       ...settings.workflow_conditions[conditionIndex].params,
-      { id: newId, name: "새 파라미터", required: false },
+      {
+        id: newId,
+        name: "새 파라미터",
+        required: false,
+        param_type: "description",
+        selection_values: []
+      },
     ];
     settings.workflow_conditions = [...settings.workflow_conditions];
   }
@@ -339,6 +353,38 @@
       conditionIndex
     ].params.filter((_, i) => i !== paramIndex);
     settings.workflow_conditions = [...settings.workflow_conditions];
+  }
+
+  // Selection value management for action params
+  function addActionParamSelectionValue(actionIndex: number, paramIndex: number) {
+    const param = settings.workflow_actions[actionIndex].params[paramIndex];
+    if (!param.selection_values) param.selection_values = [];
+    param.selection_values = [...param.selection_values, "새 값"];
+    settings.workflow_actions = [...settings.workflow_actions];
+  }
+
+  function removeActionParamSelectionValue(actionIndex: number, paramIndex: number, valueIndex: number) {
+    const param = settings.workflow_actions[actionIndex].params[paramIndex];
+    if (param.selection_values) {
+      param.selection_values = param.selection_values.filter((_, i) => i !== valueIndex);
+      settings.workflow_actions = [...settings.workflow_actions];
+    }
+  }
+
+  // Selection value management for condition params
+  function addConditionParamSelectionValue(conditionIndex: number, paramIndex: number) {
+    const param = settings.workflow_conditions[conditionIndex].params[paramIndex];
+    if (!param.selection_values) param.selection_values = [];
+    param.selection_values = [...param.selection_values, "새 값"];
+    settings.workflow_conditions = [...settings.workflow_conditions];
+  }
+
+  function removeConditionParamSelectionValue(conditionIndex: number, paramIndex: number, valueIndex: number) {
+    const param = settings.workflow_conditions[conditionIndex].params[paramIndex];
+    if (param.selection_values) {
+      param.selection_values = param.selection_values.filter((_, i) => i !== valueIndex);
+      settings.workflow_conditions = [...settings.workflow_conditions];
+    }
   }
 
   // ========== Phenomenon Attributes Management ==========
@@ -791,46 +837,104 @@
                         <div class="space-y-2">
                           {#each action.params as param, paramIndex (param.id)}
                             <div
-                              class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                              class="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3"
                             >
-                              <div class="flex-1">
-                                <input
-                                  type="text"
-                                  bind:value={param.name}
-                                  class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  placeholder="파라미터 이름"
-                                />
-                              </div>
-                              <label
-                                class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"
-                              >
-                                <input
-                                  type="checkbox"
-                                  bind:checked={param.required}
-                                  class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                                />
-                                필수
-                              </label>
-                              <button
-                                class="text-red-500 hover:text-red-600 p-1"
-                                on:click={() =>
-                                  removeActionParam(index, paramIndex)}
-                                title="파라미터 삭제"
-                              >
-                                <svg
-                                  class="w-4 h-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12"
+                              <div class="flex items-center gap-3">
+                                <div class="flex-1">
+                                  <input
+                                    type="text"
+                                    bind:value={param.name}
+                                    class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="파라미터 이름"
                                   />
-                                </svg>
-                              </button>
+                                </div>
+                                <label
+                                  class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    bind:checked={param.required}
+                                    class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                  />
+                                  필수
+                                </label>
+                                <button
+                                  class="text-red-500 hover:text-red-600 p-1"
+                                  on:click={() =>
+                                    removeActionParam(index, paramIndex)}
+                                  title="파라미터 삭제"
+                                >
+                                  <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="2"
+                                      d="M6 18L18 6M6 6l12 12"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+
+                              <!-- Parameter Type Selector -->
+                              <div>
+                                <label class="text-xs font-medium text-gray-600 mb-1 block">타입</label>
+                                <select
+                                  bind:value={param.param_type}
+                                  class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                  <option value="description">Description (텍스트 입력)</option>
+                                  <option value="selection">Selection (선택)</option>
+                                </select>
+                              </div>
+
+                              <!-- Selection Values (only for selection type) -->
+                              {#if param.param_type === 'selection'}
+                                <div>
+                                  <div class="flex justify-between items-center mb-2">
+                                    <label class="text-xs font-medium text-gray-600">선택 가능한 값</label>
+                                    <button
+                                      type="button"
+                                      class="text-blue-600 hover:text-blue-700 text-xs font-medium"
+                                      on:click={() => addActionParamSelectionValue(index, paramIndex)}
+                                    >
+                                      + 값 추가
+                                    </button>
+                                  </div>
+                                  {#if !param.selection_values || param.selection_values.length === 0}
+                                    <div class="text-xs text-gray-400 text-center py-2">
+                                      선택 가능한 값이 없습니다.
+                                    </div>
+                                  {:else}
+                                    <div class="space-y-1">
+                                      {#each param.selection_values as value, valueIndex}
+                                        <div class="flex items-center gap-2">
+                                          <input
+                                            type="text"
+                                            bind:value={param.selection_values[valueIndex]}
+                                            class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                            placeholder="값"
+                                          />
+                                          <button
+                                            type="button"
+                                            class="text-red-500 hover:text-red-600 p-1"
+                                            on:click={() => removeActionParamSelectionValue(index, paramIndex, valueIndex)}
+                                            title="값 삭제"
+                                          >
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      {/each}
+                                    </div>
+                                  {/if}
+                                </div>
+                              {/if}
                             </div>
                           {/each}
                         </div>
@@ -941,46 +1045,104 @@
                         <div class="space-y-2">
                           {#each condition.params as param, paramIndex (param.id)}
                             <div
-                              class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                              class="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3"
                             >
-                              <div class="flex-1">
-                                <input
-                                  type="text"
-                                  bind:value={param.name}
-                                  class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                  placeholder="파라미터 이름"
-                                />
-                              </div>
-                              <label
-                                class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"
-                              >
-                                <input
-                                  type="checkbox"
-                                  bind:checked={param.required}
-                                  class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
-                                />
-                                필수
-                              </label>
-                              <button
-                                class="text-red-500 hover:text-red-600 p-1"
-                                on:click={() =>
-                                  removeConditionParam(index, paramIndex)}
-                                title="파라미터 삭제"
-                              >
-                                <svg
-                                  class="w-4 h-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12"
+                              <div class="flex items-center gap-3">
+                                <div class="flex-1">
+                                  <input
+                                    type="text"
+                                    bind:value={param.name}
+                                    class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                    placeholder="파라미터 이름"
                                   />
-                                </svg>
-                              </button>
+                                </div>
+                                <label
+                                  class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    bind:checked={param.required}
+                                    class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                                  />
+                                  필수
+                                </label>
+                                <button
+                                  class="text-red-500 hover:text-red-600 p-1"
+                                  on:click={() =>
+                                    removeConditionParam(index, paramIndex)}
+                                  title="파라미터 삭제"
+                                >
+                                  <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      stroke-width="2"
+                                      d="M6 18L18 6M6 6l12 12"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+
+                              <!-- Parameter Type Selector -->
+                              <div>
+                                <label class="text-xs font-medium text-gray-600 mb-1 block">타입</label>
+                                <select
+                                  bind:value={param.param_type}
+                                  class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                >
+                                  <option value="description">Description (텍스트 입력)</option>
+                                  <option value="selection">Selection (선택)</option>
+                                </select>
+                              </div>
+
+                              <!-- Selection Values (only for selection type) -->
+                              {#if param.param_type === 'selection'}
+                                <div>
+                                  <div class="flex justify-between items-center mb-2">
+                                    <label class="text-xs font-medium text-gray-600">선택 가능한 값</label>
+                                    <button
+                                      type="button"
+                                      class="text-orange-600 hover:text-orange-700 text-xs font-medium"
+                                      on:click={() => addConditionParamSelectionValue(index, paramIndex)}
+                                    >
+                                      + 값 추가
+                                    </button>
+                                  </div>
+                                  {#if !param.selection_values || param.selection_values.length === 0}
+                                    <div class="text-xs text-gray-400 text-center py-2">
+                                      선택 가능한 값이 없습니다.
+                                    </div>
+                                  {:else}
+                                    <div class="space-y-1">
+                                      {#each param.selection_values as value, valueIndex}
+                                        <div class="flex items-center gap-2">
+                                          <input
+                                            type="text"
+                                            bind:value={param.selection_values[valueIndex]}
+                                            class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                            placeholder="값"
+                                          />
+                                          <button
+                                            type="button"
+                                            class="text-red-500 hover:text-red-600 p-1"
+                                            on:click={() => removeConditionParamSelectionValue(index, paramIndex, valueIndex)}
+                                            title="값 삭제"
+                                          >
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      {/each}
+                                    </div>
+                                  {/if}
+                                </div>
+                              {/if}
                             </div>
                           {/each}
                         </div>

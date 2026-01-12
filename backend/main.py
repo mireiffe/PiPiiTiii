@@ -247,6 +247,8 @@ class WorkflowActionParam(BaseModel):
     id: str
     name: str
     required: bool = False
+    param_type: str = "description"  # "selection" or "description"
+    selection_values: List[str] = []  # For selection type, predefined values
 
 
 class WorkflowAction(BaseModel):
