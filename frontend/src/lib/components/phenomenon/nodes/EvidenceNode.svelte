@@ -7,6 +7,7 @@
         color: { bg: string; border: string; name: string };
         evidenceType: "capture" | "attribute";
         slideIndex?: number;
+        attributeValue?: string;
     };
 </script>
 
@@ -22,6 +23,8 @@
             <span class="label">{data.label}</span>
             {#if data.evidenceType === "capture" && data.slideIndex !== undefined}
                 <span class="meta">슬라이드 {data.slideIndex + 1}</span>
+            {:else if data.evidenceType === "attribute" && data.attributeValue}
+                <span class="attr-value">{data.attributeValue}</span>
             {/if}
         </div>
     </div>
@@ -67,5 +70,16 @@
         color: #9ca3af;
         display: block;
         margin-top: 2px;
+    }
+    .attr-value {
+        font-size: 11px;
+        color: #0369a1;
+        font-family: monospace;
+        display: block;
+        margin-top: 2px;
+        background: rgba(255, 255, 255, 0.6);
+        padding: 2px 4px;
+        border-radius: 3px;
+        word-break: break-all;
     }
 </style>

@@ -57,12 +57,12 @@
             data: { label: "발생현상" },
             position: { x: 50, y: 50 },
             style: `
-                width: ${EVIDENCE_GROUP_WIDTH}px; 
-                height: ${groupHeight}px; 
-                background-color: #f8fafc; 
-                border: 2px solid #cbd5e1; 
+                width: ${EVIDENCE_GROUP_WIDTH}px;
+                height: ${groupHeight}px;
+                background-color: rgba(254, 226, 226, 0.7);
+                border: 3px solid #f87171;
                 border-radius: 12px;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 4px 12px -2px rgba(239, 68, 68, 0.25);
             `,
             draggable: false,
         });
@@ -73,12 +73,12 @@
             data: { label: "원인후보" },
             position: { x: 450, y: 50 },
             style: `
-                width: ${CAUSE_GROUP_WIDTH}px; 
-                height: ${groupHeight}px; 
-                background-color: #eff6ff; 
-                border: 2px solid #bfdbfe; 
+                width: ${CAUSE_GROUP_WIDTH}px;
+                height: ${groupHeight}px;
+                background-color: rgba(219, 234, 254, 0.7);
+                border: 3px solid #60a5fa;
                 border-radius: 12px;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.25);
             `,
             draggable: false,
         });
@@ -93,7 +93,7 @@
             draggable: false,
             selectable: false,
             connectable: false,
-            style: "width: auto; font-weight: 700; font-size: 16px; color: #334155; background: transparent; border: none; text-align: left; padding: 0;",
+            style: "width: auto; font-weight: 700; font-size: 16px; color: #dc2626; background: transparent; border: none; text-align: left; padding: 0;",
         });
 
         newNodes.push({
@@ -106,7 +106,7 @@
             draggable: false,
             selectable: false,
             connectable: false,
-            style: "width: auto; font-weight: 700; font-size: 16px; color: #1e40af; background: transparent; border: none; text-align: left; padding: 0;",
+            style: "width: auto; font-weight: 700; font-size: 16px; color: #2563eb; background: transparent; border: none; text-align: left; padding: 0;",
         });
 
         if (data.evidences) {
@@ -130,6 +130,10 @@
                         slideIndex:
                             evidence.type === "capture"
                                 ? evidence.slideIndex
+                                : undefined,
+                        attributeValue:
+                            evidence.type === "attribute"
+                                ? evidence.value
                                 : undefined,
                     },
                     position: {
