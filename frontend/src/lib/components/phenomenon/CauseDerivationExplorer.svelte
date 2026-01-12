@@ -529,6 +529,17 @@
                                         class="mb-2 text-xs font-bold text-gray-500 uppercase flex justify-between items-center"
                                     >
                                         <span>검증 계획 (Todo List)</span>
+                                        {#if causeStatus === 'active' && !phenomenon.workflowCompleted}
+                                            <button
+                                                class="px-2 py-0.5 bg-green-600 text-white text-[10px] font-medium rounded hover:bg-green-700 transition-colors shadow-sm flex items-center gap-1"
+                                                on:click|stopPropagation={() =>
+                                                    finalizeCause(cause.id)}
+                                                title="이 원인을 최종 결과로 확정합니다"
+                                            >
+                                                <span>🎯</span>
+                                                <span>원인 지목</span>
+                                            </button>
+                                        {/if}
                                     </div>
 
                                     <!-- Todo List -->
@@ -807,21 +818,6 @@
                                                 <span class="font-bold">+</span>
                                                 Condition
                                             </button>
-                                        </div>
-                                    {/if}
-
-                                    <!-- Finalize Cause Button (only for active causes) -->
-                                    {#if causeStatus === 'active' && !phenomenon.workflowCompleted}
-                                        <div class="mt-4 pt-3 border-t border-gray-200">
-                                            <button
-                                                class="w-full py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors shadow-sm"
-                                                on:click={() => finalizeCause(cause.id)}
-                                            >
-                                                🎯 원인 지목 (최종 선택)
-                                            </button>
-                                            <p class="text-[10px] text-gray-500 text-center mt-1">
-                                                이 원인을 최종 결과로 확정합니다
-                                            </p>
                                         </div>
                                     {/if}
 
