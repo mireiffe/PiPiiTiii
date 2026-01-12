@@ -249,7 +249,7 @@
                         )}
                 >
                     <div
-                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-center slide-inner {captureMode
+                        class="bg-white shadow-lg relative transition-transform duration-200 ease-out origin-top-left slide-inner {captureMode
                             ? 'cursor-crosshair'
                             : ''}"
                         style={`
