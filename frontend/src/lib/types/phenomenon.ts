@@ -105,11 +105,14 @@ export interface EvidenceLink {
 // Deduction Todo Item
 export type TodoType = 'action' | 'condition';
 
+export type ConditionStatus = 'true' | 'false' | null;  // true=active(탐색중), false=inactive(탐색종료), null=미설정
+
 export interface TodoItem {
     id: string;
     type: TodoType;
     text: string;
     isCompleted?: boolean;
+    conditionStatus?: ConditionStatus;  // condition 타입일 때만 사용
 }
 
 export interface CandidateCause {
