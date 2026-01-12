@@ -49,6 +49,7 @@
         <div class="todo-list">
             <div class="todo-header">행동 정의</div>
             {#each data.todoList.slice(0, 3) as todo}
+                {@const paramItems = getParamDisplayItems(todo)}
                 <div class="todo-block">
                     <div class="todo-item {todo.type} {todo.type === 'condition' && todo.conditionStatus === 'false' ? 'inactive' : ''}">
                         <span class="todo-type">
@@ -62,7 +63,6 @@
                         {/if}
                     </div>
 
-                    {@const paramItems = getParamDisplayItems(todo)}
                     {#if paramItems.length > 0}
                         <div class="todo-params">
                             {#each paramItems as param}
