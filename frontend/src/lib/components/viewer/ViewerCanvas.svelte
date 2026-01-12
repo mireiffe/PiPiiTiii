@@ -270,8 +270,7 @@
                                     e.target.style.display = "none";
                                 }}
                             />
-                        {:else if i === currentSlideIndex}
-                            <!-- Only render shapes for the current slide to improve performance -->
+                        {:else}
                             {#each getShapesForSlide(slide) as shape (shape.shape_index)}
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
@@ -294,16 +293,6 @@
                                     />
                                 </div>
                             {/each}
-                        {:else}
-                            <!-- For non-current slides in render mode, show thumbnail as placeholder -->
-                            <img
-                                src={`/api/results/${projectId}/thumbnails/slide_${slide.slide_index.toString().padStart(3, "0")}_thumb.png`}
-                                alt={`Slide ${slide.slide_index} thumbnail`}
-                                class="w-full h-full object-fill pointer-events-none"
-                                on:error={(e) => {
-                                    e.target.style.display = "none";
-                                }}
-                            />
                         {/if}
 
                         <!-- Capture selection rectangle (during capture) -->
