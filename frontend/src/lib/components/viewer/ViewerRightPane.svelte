@@ -93,6 +93,8 @@
             {savingWorkflow}
             {captureMode}
             {phenomenonAttributes}
+            workflowActions={settings?.workflow_actions || []}
+            workflowConditions={settings?.workflow_conditions || []}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
             on:phenomenonChange

@@ -36,6 +36,12 @@
     params: WorkflowActionParam[];
   }
 
+  interface WorkflowCondition {
+    id: string;
+    name: string;
+    params: WorkflowActionParam[];
+  }
+
   interface Settings {
     llm: LLMConfig;
     workflow_llm?: LLMConfig;
@@ -46,6 +52,7 @@
     summary_fields: SummaryField[];
     use_thumbnails: boolean;
     workflow_actions: WorkflowAction[];
+    workflow_conditions: WorkflowCondition[];
     phenomenon_attributes: string[];
   }
 
@@ -70,6 +77,7 @@
     summary_fields: [],
     use_thumbnails: true,
     workflow_actions: [],
+    workflow_conditions: [],
     phenomenon_attributes: [],
   };
 
@@ -77,6 +85,8 @@
   let expandedFieldId: string | null = null;
   // Expanded action for editing params
   let expandedActionId: string | null = null;
+  // Expanded condition for editing params
+  let expandedConditionId: string | null = null;
 
   onMount(async () => {
     try {
@@ -127,6 +137,15 @@
             id: a.id,
             name: a.name,
             params: (a.params || []).map((p) => ({
+              id: p.id,
+              name: p.name,
+              required: p.required || false,
+            })),
+          })),
+          workflow_conditions: (data.workflow_conditions || []).map((c) => ({
+            id: c.id,
+            name: c.name,
+            params: (c.params || []).map((p) => ({
               id: p.id,
               name: p.name,
               required: p.required || false,
@@ -269,6 +288,57 @@
       actionIndex
     ].params.filter((_, i) => i !== paramIndex);
     settings.workflow_actions = [...settings.workflow_actions];
+  }
+
+  // ========== Workflow Conditions Management ==========
+
+  function addWorkflowCondition() {
+    const newId = `condition_${Date.now()}`;
+    settings.workflow_conditions = [
+      ...settings.workflow_conditions,
+      {
+        id: newId,
+        name: "새 조건",
+        params: [],
+      },
+    ];
+    expandedConditionId = newId;
+  }
+
+  function removeWorkflowCondition(index: number) {
+    if (
+      confirm(
+        "이 조건을 삭제하시겠습니까? 이미 사용 중인 워크플로우에서 오류가 발생할 수 있습니다.",
+      )
+    ) {
+      settings.workflow_conditions = settings.workflow_conditions.filter(
+        (_, i) => i !== index,
+      );
+    }
+  }
+
+  function toggleConditionExpand(conditionId: string) {
+    if (expandedConditionId === conditionId) {
+      expandedConditionId = null;
+    } else {
+      expandedConditionId = conditionId;
+    }
+  }
+
+  function addConditionParam(conditionIndex: number) {
+    const newId = `param_${Date.now()}`;
+    settings.workflow_conditions[conditionIndex].params = [
+      ...settings.workflow_conditions[conditionIndex].params,
+      { id: newId, name: "새 파라미터", required: false },
+    ];
+    settings.workflow_conditions = [...settings.workflow_conditions];
+  }
+
+  function removeConditionParam(conditionIndex: number, paramIndex: number) {
+    settings.workflow_conditions[conditionIndex].params = settings.workflow_conditions[
+      conditionIndex
+    ].params.filter((_, i) => i !== paramIndex);
+    settings.workflow_conditions = [...settings.workflow_conditions];
   }
 
   // ========== Phenomenon Attributes Management ==========
@@ -745,6 +815,156 @@
                                 class="text-red-500 hover:text-red-600 p-1"
                                 on:click={() =>
                                   removeActionParam(index, paramIndex)}
+                                title="파라미터 삭제"
+                              >
+                                <svg
+                                  class="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+
+        <!-- Workflow Conditions 설정 -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div class="flex justify-between items-center mb-4">
+            <div>
+              <h2 class="text-xl font-bold text-gray-800">워크플로우 조건</h2>
+              <p class="text-sm text-gray-500 mt-1">
+                워크플로우에서 사용할 수 있는 조건들을 정의합니다. 각 조건에
+                필요한 파라미터도 설정할 수 있습니다.
+              </p>
+            </div>
+            <button
+              class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm font-medium"
+              on:click={addWorkflowCondition}
+            >
+              + 조건 추가
+            </button>
+          </div>
+
+          <div class="space-y-3">
+            {#if settings.workflow_conditions.length === 0}
+              <div class="text-center text-gray-400 py-8">
+                정의된 조건이 없습니다. 조건을 추가해주세요.
+              </div>
+            {:else}
+              {#each settings.workflow_conditions as condition, index (condition.id)}
+                <div
+                  class="border border-orange-200 rounded-lg bg-orange-50/30 overflow-hidden"
+                >
+                  <!-- Condition Header -->
+                  <div class="flex items-center gap-3 p-4">
+                    <div class="flex-1 flex items-center gap-3">
+                      <div class="flex-1">
+                        <label class="block text-xs text-gray-500 mb-1"
+                          >조건명</label
+                        >
+                        <input
+                          type="text"
+                          bind:value={condition.name}
+                          class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="조건 이름"
+                        />
+                      </div>
+                      <div class="w-48">
+                        <label class="block text-xs text-gray-500 mb-1"
+                          >ID (읽기전용)</label
+                        >
+                        <input
+                          type="text"
+                          value={condition.id}
+                          readonly
+                          class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      class="text-gray-500 hover:text-orange-600 px-3 py-2 rounded transition text-sm"
+                      on:click={() => toggleConditionExpand(condition.id)}
+                      title="파라미터 설정"
+                    >
+                      {expandedConditionId === condition.id
+                        ? "▼ 접기"
+                        : "▶ 파라미터"} ({condition.params.length})
+                    </button>
+
+                    <button
+                      class="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 transition text-sm font-medium"
+                      on:click={() => removeWorkflowCondition(index)}
+                    >
+                      삭제
+                    </button>
+                  </div>
+
+                  <!-- Expanded Params Section -->
+                  {#if expandedConditionId === condition.id}
+                    <div
+                      class="border-t border-orange-200 p-4 bg-white space-y-4"
+                    >
+                      <div class="flex justify-between items-center">
+                        <label class="text-sm font-medium text-gray-700"
+                          >파라미터 목록</label
+                        >
+                        <button
+                          class="text-orange-600 hover:text-orange-700 text-sm font-medium"
+                          on:click={() => addConditionParam(index)}
+                        >
+                          + 파라미터 추가
+                        </button>
+                      </div>
+
+                      {#if condition.params.length === 0}
+                        <div class="text-center text-gray-400 py-4 text-sm">
+                          파라미터가 없습니다.
+                        </div>
+                      {:else}
+                        <div class="space-y-2">
+                          {#each condition.params as param, paramIndex (param.id)}
+                            <div
+                              class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                            >
+                              <div class="flex-1">
+                                <input
+                                  type="text"
+                                  bind:value={param.name}
+                                  class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                  placeholder="파라미터 이름"
+                                />
+                              </div>
+                              <label
+                                class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  bind:checked={param.required}
+                                  class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                                />
+                                필수
+                              </label>
+                              <button
+                                class="text-red-500 hover:text-red-600 p-1"
+                                on:click={() =>
+                                  removeConditionParam(index, paramIndex)}
                                 title="파라미터 삭제"
                               >
                                 <svg
