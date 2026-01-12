@@ -84,6 +84,13 @@
         dispatch("toggleCaptureMode");
     }
 
+    // 워크플로우 삭제
+    function handleDeleteWorkflow() {
+        if (confirm("워크플로우를 삭제하시겠습니까? 모든 발생현상, 원인후보, 원인도출 데이터가 삭제됩니다.")) {
+            dispatch("deleteWorkflow");
+        }
+    }
+
     // 증거 호버 이벤트 전달
     function handleEvidenceHover(
         event: CustomEvent<{ evidenceId: string | null }>,
@@ -211,6 +218,13 @@
                             <span class="text-[10px]">☊</span>
                         </button>
                     </div>
+                    <button
+                        class="px-2 py-1 text-xs font-medium rounded transition-colors mr-2 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700"
+                        on:click|stopPropagation={handleDeleteWorkflow}
+                        title="워크플로우 삭제"
+                    >
+                        <span class="text-[10px]">🗑️</span>
+                    </button>
                 {/if}
             </svelte:fragment>
         </AccordionHeader>
