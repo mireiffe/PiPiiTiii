@@ -59,7 +59,7 @@
             style: `
                 width: ${EVIDENCE_GROUP_WIDTH}px;
                 height: ${groupHeight}px;
-                background-color: rgba(254, 226, 226, 0.7);
+                background: rgba(254, 226, 226, 0.7) !important;
                 border: 3px solid #f87171;
                 border-radius: 12px;
                 box-shadow: 0 4px 12px -2px rgba(239, 68, 68, 0.25);
@@ -75,7 +75,7 @@
             style: `
                 width: ${CAUSE_GROUP_WIDTH}px;
                 height: ${groupHeight}px;
-                background-color: rgba(219, 234, 254, 0.7);
+                background: rgba(219, 234, 254, 0.7) !important;
                 border: 3px solid #60a5fa;
                 border-radius: 12px;
                 box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.25);
@@ -211,18 +211,8 @@
         width: 100%;
         height: 100%;
         min-height: 500px;
-        background: #f1f5f9;
+        background: #ffffff;
         position: relative;
-    }
-
-    /* Force background color for SvelteFlow viewport */
-    :global(.workflow-graph-container .svelte-flow__viewport) {
-        background: rgba(219, 234, 254, 0.7) !important;
-    }
-
-    /* Alternative: set background on the pane */
-    :global(.workflow-graph-container .svelte-flow__pane) {
-        background: rgba(219, 234, 254, 0.7) !important;
     }
 
     :global(.workflow-graph-container .svelte-flow__controls) {
