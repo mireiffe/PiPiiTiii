@@ -6,6 +6,7 @@
         CandidateCause,
         TodoItem,
         TodoType,
+        ConditionStatus,
     } from "$lib/types/phenomenon";
 
     export let phenomenon: PhenomenonData;
@@ -227,6 +228,41 @@
         newTodoText = item.name;
     }
 
+    // ===== Condition status toggle =====
+    function toggleConditionStatus(todoId: string, newStatus: ConditionStatus) {
+        if (!activeCauseId) return;
+        const cause = phenomenon.candidateCauses.find(
+            (c) => c.id === activeCauseId,
+        );
+        if (!cause || !cause.todoList) return;
+
+        const todo = cause.todoList.find((t) => t.id === todoId);
+        if (todo && todo.type === 'condition') {
+            // Toggle: if already same status, set to null (미설정)
+            todo.conditionStatus = todo.conditionStatus === newStatus ? null : newStatus;
+            phenomenon.candidateCauses = [...phenomenon.candidateCauses];
+            dispatch("change", phenomenon);
+        }
+    }
+
+    // 원인후보의 전체 상태를 계산 (모든 condition이 설정되었는지, active인지)
+    function getCauseStatus(cause: CandidateCause): 'active' | 'inactive' | 'pending' {
+        if (!cause.todoList) return 'pending';
+
+        const conditions = cause.todoList.filter(t => t.type === 'condition');
+        if (conditions.length === 0) return 'pending';
+
+        // 하나라도 false(inactive)가 있으면 전체가 inactive
+        const hasInactive = conditions.some(c => c.conditionStatus === 'false');
+        if (hasInactive) return 'inactive';
+
+        // 모든 condition이 true면 active
+        const allActive = conditions.every(c => c.conditionStatus === 'true');
+        if (allActive) return 'active';
+
+        return 'pending';
+    }
+
     // Reactive: get predefined items based on current todo type
     $: predefinedItems = newTodoType === "condition" ? workflowConditions : workflowActions;
 </script>
@@ -265,28 +301,52 @@
                 <div class="space-y-2">
                     {#each phenomenon.candidateCauses as cause, index (cause.id)}
                         {@const isActive = activeCauseId === cause.id}
+                        {@const causeStatus = getCauseStatus(cause)}
                         <!-- svelte-ignore a11y-click-events-have-key-events -->
                         <!-- svelte-ignore a11y-no-static-element-interactions -->
                         <div
                             class="bg-white border rounded-lg shadow-sm transition-all duration-200
                                    {isActive
                                 ? 'border-purple-500 ring-1 ring-purple-500 shadow-md transform scale-[1.01]'
-                                : 'border-gray-200 hover:border-gray-300'}"
+                                : causeStatus === 'inactive'
+                                    ? 'border-gray-300 bg-gray-50 opacity-60'
+                                    : causeStatus === 'active'
+                                        ? 'border-green-300 bg-green-50/30'
+                                        : 'border-gray-200 hover:border-gray-300'}"
                         >
                             <!-- Cause Header Item -->
                             <div class="flex items-center p-2 gap-2">
                                 <!-- Rank Badge -->
                                 <div
-                                    class="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 border border-gray-200"
+                                    class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border
+                                           {causeStatus === 'inactive'
+                                        ? 'bg-gray-200 text-gray-500 border-gray-300'
+                                        : causeStatus === 'active'
+                                            ? 'bg-green-100 text-green-700 border-green-300'
+                                            : 'bg-gray-100 text-gray-600 border-gray-200'}"
                                 >
                                     {index + 1}
                                 </div>
 
+                                <!-- Status Badge -->
+                                {#if causeStatus === 'active'}
+                                    <span class="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-bold rounded bg-green-100 text-green-700 border border-green-300">
+                                        탐색중
+                                    </span>
+                                {:else if causeStatus === 'inactive'}
+                                    <span class="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-bold rounded bg-gray-200 text-gray-500 border border-gray-300 line-through">
+                                        제외됨
+                                    </span>
+                                {/if}
+
                                 <!-- Title -->
                                 <div
-                                    class="flex-1 min-w-0 text-sm cursor-pointer hover:text-purple-700 font-medium {isActive
+                                    class="flex-1 min-w-0 text-sm cursor-pointer hover:text-purple-700 font-medium
+                                           {isActive
                                         ? 'text-gray-900'
-                                        : 'text-gray-700'}"
+                                        : causeStatus === 'inactive'
+                                            ? 'text-gray-400 line-through'
+                                            : 'text-gray-700'}"
                                     on:click={() => toggleActiveCause(cause.id)}
                                 >
                                     {cause.text}
@@ -432,24 +492,40 @@
                                                                 </div>
                                                             {/if}
                                                             {#if todo.type === "condition"}
-                                                                <div
-                                                                    class="mt-1 text-[10px] text-gray-400 flex items-center gap-1"
-                                                                >
-                                                                    <span
-                                                                        >↳ True:
-                                                                        다음
-                                                                        단계</span
-                                                                    >
-                                                                    <span
-                                                                        class="mx-1"
-                                                                        >|</span
-                                                                    >
-                                                                    <span
-                                                                        >False:
-                                                                        🛑 중단
-                                                                        및 다음
-                                                                        후보로</span
-                                                                    >
+                                                                <div class="mt-1.5 flex items-center gap-2">
+                                                                    <!-- True/False Toggle Buttons -->
+                                                                    <div class="flex items-center gap-1 bg-gray-100 rounded-full p-0.5">
+                                                                        <button
+                                                                            type="button"
+                                                                            class="px-2 py-0.5 text-[10px] font-bold rounded-full transition-all
+                                                                                   {todo.conditionStatus === 'true'
+                                                                                ? 'bg-green-500 text-white shadow-sm'
+                                                                                : 'text-gray-500 hover:text-green-600 hover:bg-green-50'}"
+                                                                            on:click|stopPropagation={() => toggleConditionStatus(todo.id, 'true')}
+                                                                            title="True: 탐색 계속 (Active)"
+                                                                        >
+                                                                            True
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            class="px-2 py-0.5 text-[10px] font-bold rounded-full transition-all
+                                                                                   {todo.conditionStatus === 'false'
+                                                                                ? 'bg-red-500 text-white shadow-sm'
+                                                                                : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}"
+                                                                            on:click|stopPropagation={() => toggleConditionStatus(todo.id, 'false')}
+                                                                            title="False: 탐색 종료 (Inactive)"
+                                                                        >
+                                                                            False
+                                                                        </button>
+                                                                    </div>
+                                                                    <!-- Status indicator -->
+                                                                    {#if todo.conditionStatus === 'true'}
+                                                                        <span class="text-[10px] text-green-600 font-medium">탐색중</span>
+                                                                    {:else if todo.conditionStatus === 'false'}
+                                                                        <span class="text-[10px] text-red-500 font-medium">탐색종료</span>
+                                                                    {:else}
+                                                                        <span class="text-[10px] text-gray-400">미설정</span>
+                                                                    {/if}
                                                                 </div>
                                                             {/if}
                                                         </div>

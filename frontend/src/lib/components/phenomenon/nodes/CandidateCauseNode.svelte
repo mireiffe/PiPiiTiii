@@ -23,11 +23,16 @@
         <div class="todo-list">
             <div class="todo-header">행동 정의</div>
             {#each data.todoList.slice(0, 3) as todo}
-                <div class="todo-item {todo.type}">
+                <div class="todo-item {todo.type} {todo.type === 'condition' && todo.conditionStatus === 'false' ? 'inactive' : ''}">
                     <span class="todo-type">
                         {todo.type === "condition" ? "C" : "A"}
                     </span>
                     <span class="todo-text">{todo.text}</span>
+                    {#if todo.type === "condition" && todo.conditionStatus}
+                        <span class="condition-status {todo.conditionStatus === 'true' ? 'active' : 'inactive'}">
+                            {todo.conditionStatus === 'true' ? 'T' : 'F'}
+                        </span>
+                    {/if}
                 </div>
             {/each}
             {#if data.todoList.length > 3}
@@ -101,6 +106,12 @@
         background: #ffedd5;
         color: #ea580c;
     }
+    .todo-item.inactive {
+        opacity: 0.5;
+    }
+    .todo-item.inactive .todo-text {
+        text-decoration: line-through;
+    }
     .todo-text {
         color: #374151;
         line-height: 1.3;
@@ -109,6 +120,26 @@
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
+        flex: 1;
+    }
+    .condition-status {
+        flex-shrink: 0;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 8px;
+        font-weight: bold;
+    }
+    .condition-status.active {
+        background: #22c55e;
+        color: white;
+    }
+    .condition-status.inactive {
+        background: #ef4444;
+        color: white;
     }
     .more {
         font-size: 10px;
