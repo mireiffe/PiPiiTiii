@@ -21,6 +21,8 @@
         value: string;
         source?: string;
     }[] = [];
+    export let workflowActions: { id: string; name: string; params: any[] }[] = [];
+    export let workflowConditions: { id: string; name: string; params: any[] }[] = [];
 
     const dispatch = createEventDispatcher();
 
@@ -235,6 +237,8 @@
             {:else if currentStep === 2}
                 <CauseDerivationExplorer
                     phenomenon={phenomenonData}
+                    {workflowActions}
+                    {workflowConditions}
                     on:change={handlePhenomenonChange}
                 />
             {/if}

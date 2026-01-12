@@ -9,12 +9,22 @@
     } from "$lib/types/phenomenon";
 
     export let phenomenon: PhenomenonData;
+    export let workflowActions: { id: string; name: string; params: any[] }[] = [];
+    export let workflowConditions: { id: string; name: string; params: any[] }[] = [];
 
     // Manage local UI state
     let activeCauseId: string | null = null;
     let isAddingTodo = false;
     let newTodoText = "";
     let newTodoType: TodoType = "action";
+
+    // Inline editing state
+    let editingTodoId: string | null = null;
+    let editingTodoText = "";
+
+    // Drag-and-drop state for todo items
+    let draggingTodoId: string | null = null;
+    let dragOverTodoId: string | null = null;
 
     const dispatch = createEventDispatcher<{
         change: PhenomenonData;
@@ -112,6 +122,109 @@
         } else if (e.key === "Escape") {
             cancelAddTodo();
         }
+    }
+
+    // ===== Inline editing functions =====
+    function startEditTodo(todo: TodoItem) {
+        editingTodoId = todo.id;
+        editingTodoText = todo.text;
+    }
+
+    function cancelEditTodo() {
+        editingTodoId = null;
+        editingTodoText = "";
+    }
+
+    function saveEditTodo() {
+        if (!editingTodoId || !editingTodoText.trim() || !activeCauseId) {
+            cancelEditTodo();
+            return;
+        }
+
+        const cause = phenomenon.candidateCauses.find(
+            (c) => c.id === activeCauseId,
+        );
+        if (!cause || !cause.todoList) {
+            cancelEditTodo();
+            return;
+        }
+
+        const todo = cause.todoList.find((t) => t.id === editingTodoId);
+        if (todo) {
+            todo.text = editingTodoText.trim();
+            phenomenon.candidateCauses = [...phenomenon.candidateCauses];
+            dispatch("change", phenomenon);
+        }
+
+        cancelEditTodo();
+    }
+
+    function handleEditKeyDown(e: KeyboardEvent) {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            saveEditTodo();
+        } else if (e.key === "Escape") {
+            cancelEditTodo();
+        }
+    }
+
+    // ===== Drag-and-drop functions for todo items =====
+    function handleTodoDragStart(e: DragEvent, todoId: string) {
+        draggingTodoId = todoId;
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", todoId);
+        }
+    }
+
+    function handleTodoDragOver(e: DragEvent, todoId: string) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = "move";
+        }
+        dragOverTodoId = todoId;
+    }
+
+    function handleTodoDragLeave(e: DragEvent) {
+        dragOverTodoId = null;
+    }
+
+    function handleTodoDrop(e: DragEvent, targetTodoId: string) {
+        e.preventDefault();
+        dragOverTodoId = null;
+
+        if (!draggingTodoId || draggingTodoId === targetTodoId || !activeCauseId)
+            return;
+
+        const cause = phenomenon.candidateCauses.find(
+            (c) => c.id === activeCauseId,
+        );
+        if (!cause || !cause.todoList) return;
+
+        const todoList = [...cause.todoList];
+        const dragIndex = todoList.findIndex((t) => t.id === draggingTodoId);
+        const targetIndex = todoList.findIndex((t) => t.id === targetTodoId);
+
+        if (dragIndex === -1 || targetIndex === -1) return;
+
+        const [draggedItem] = todoList.splice(dragIndex, 1);
+        todoList.splice(targetIndex, 0, draggedItem);
+
+        cause.todoList = todoList;
+        phenomenon.candidateCauses = [...phenomenon.candidateCauses];
+        dispatch("change", phenomenon);
+
+        draggingTodoId = null;
+    }
+
+    function handleTodoDragEnd() {
+        draggingTodoId = null;
+        dragOverTodoId = null;
+    }
+
+    // ===== Predefined action/condition selection =====
+    function selectPredefinedItem(item: { id: string; name: string }) {
+        newTodoText = item.name;
     }
 </script>
 
@@ -246,16 +359,36 @@
                                                 등록된 행동이나 조건이 없습니다.
                                             </div>
                                         {:else}
-                                            {#each cause.todoList as todo, tIndex}
+                                            {#each cause.todoList as todo, tIndex (todo.id)}
+                                                <!-- svelte-ignore a11y-no-static-element-interactions -->
                                                 <div
                                                     class="relative pl-4 border-l-2 {todo.type ===
                                                     'condition'
                                                         ? 'border-orange-300'
-                                                        : 'border-blue-300'} ml-1"
+                                                        : 'border-blue-300'} ml-1 transition-all duration-150
+                                                        {draggingTodoId === todo.id ? 'opacity-50' : ''}
+                                                        {dragOverTodoId === todo.id ? 'border-l-4 bg-blue-50' : ''}"
+                                                    draggable="true"
+                                                    on:dragstart={(e) => handleTodoDragStart(e, todo.id)}
+                                                    on:dragover={(e) => handleTodoDragOver(e, todo.id)}
+                                                    on:dragleave={handleTodoDragLeave}
+                                                    on:drop={(e) => handleTodoDrop(e, todo.id)}
+                                                    on:dragend={handleTodoDragEnd}
                                                 >
                                                     <div
                                                         class="flex items-start justify-between group"
                                                     >
+                                                        <!-- Drag handle -->
+                                                        <div class="flex-shrink-0 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 mr-1 mt-0.5">
+                                                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                                                <circle cx="9" cy="5" r="1.5" />
+                                                                <circle cx="15" cy="5" r="1.5" />
+                                                                <circle cx="9" cy="12" r="1.5" />
+                                                                <circle cx="15" cy="12" r="1.5" />
+                                                                <circle cx="9" cy="19" r="1.5" />
+                                                                <circle cx="15" cy="19" r="1.5" />
+                                                            </svg>
+                                                        </div>
                                                         <div
                                                             class="text-xs flex-1"
                                                         >
@@ -275,11 +408,26 @@
                                                                         : "Action"}
                                                                 </span>
                                                             </div>
-                                                            <div
-                                                                class="text-gray-800 leading-snug"
-                                                            >
-                                                                {todo.text}
-                                                            </div>
+                                                            {#if editingTodoId === todo.id}
+                                                                <!-- Inline edit mode -->
+                                                                <input
+                                                                    type="text"
+                                                                    bind:value={editingTodoText}
+                                                                    class="w-full text-xs border border-gray-300 rounded px-1 py-0.5 focus:border-purple-500 focus:outline-none"
+                                                                    on:keydown={handleEditKeyDown}
+                                                                    on:blur={saveEditTodo}
+                                                                />
+                                                            {:else}
+                                                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                                                <div
+                                                                    class="text-gray-800 leading-snug cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1"
+                                                                    on:click={() => startEditTodo(todo)}
+                                                                    title="클릭하여 수정"
+                                                                >
+                                                                    {todo.text}
+                                                                </div>
+                                                            {/if}
                                                             {#if todo.type === "condition"}
                                                                 <div
                                                                     class="mt-1 text-[10px] text-gray-400 flex items-center gap-1"
@@ -343,6 +491,34 @@
                                                 {newTodoType === "condition"
                                                     ? "새 조건 (Condition) 추가"
                                                     : "새 행동 (Action) 추가"}
+                                            </div>
+
+                                            <!-- Predefined options from settings -->
+                                            {@const predefinedItems = newTodoType === "condition" ? workflowConditions : workflowActions}
+                                            {#if predefinedItems.length > 0}
+                                                <div class="mb-2">
+                                                    <div class="text-[10px] text-gray-500 mb-1">미리 정의된 항목:</div>
+                                                    <div class="flex flex-wrap gap-1">
+                                                        {#each predefinedItems as item}
+                                                            <button
+                                                                type="button"
+                                                                class="px-2 py-0.5 text-[10px] rounded border transition-colors
+                                                                    {newTodoText === item.name
+                                                                        ? (newTodoType === 'condition'
+                                                                            ? 'bg-orange-100 border-orange-400 text-orange-700'
+                                                                            : 'bg-blue-100 border-blue-400 text-blue-700')
+                                                                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}"
+                                                                on:click={() => selectPredefinedItem(item)}
+                                                            >
+                                                                {item.name}
+                                                            </button>
+                                                        {/each}
+                                                    </div>
+                                                </div>
+                                            {/if}
+
+                                            <div class="text-[10px] text-gray-500 mb-1">
+                                                {predefinedItems.length > 0 ? "또는 직접 입력:" : ""}
                                             </div>
                                             <input
                                                 type="text"

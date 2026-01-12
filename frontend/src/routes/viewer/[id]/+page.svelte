@@ -77,6 +77,7 @@
     let settings = {
         summary_fields: [],
         workflow_actions: [],
+        workflow_conditions: [],
         phenomenon_attributes: [],
     };
     let summaryData = {}; // User version (displayed/edited)
