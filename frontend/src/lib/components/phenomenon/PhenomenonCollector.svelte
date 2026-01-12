@@ -53,6 +53,16 @@
         }
     }
 
+    // 증거 설명 업데이트
+    function handleUpdateDescription(evidenceId: string, description: string) {
+        const evidence = phenomenon.evidences.find(e => e.id === evidenceId);
+        if (evidence && evidence.type === 'capture') {
+            evidence.description = description;
+            phenomenon.evidences = [...phenomenon.evidences];
+            dispatch('change', phenomenon);
+        }
+    }
+
     // 캡처 증거 추가 (외부에서 호출)
     export function addCapture(capture: { slideIndex: number; x: number; y: number; width: number; height: number }) {
         const newEvidence = createCaptureEvidence(
@@ -137,6 +147,7 @@
                             index={index}
                             on:delete={() => handleDeleteEvidence(evidence.id)}
                             on:updateLabel={(e) => handleUpdateLabel(evidence.id, e.detail)}
+                            on:updateDescription={(e) => handleUpdateDescription(evidence.id, e.detail)}
                             on:mouseenter={() => handleEvidenceHover(evidence.id)}
                             on:mouseleave={() => handleEvidenceHover(null)}
                         />

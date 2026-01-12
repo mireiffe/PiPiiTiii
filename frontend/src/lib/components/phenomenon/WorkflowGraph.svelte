@@ -160,6 +160,10 @@
                             evidence.type === "attribute"
                                 ? evidence.value
                                 : undefined,
+                        description:
+                            evidence.type === "capture"
+                                ? evidence.description
+                                : undefined,
                     },
                     position: {
                         x: GROUP_PADDING_X,
