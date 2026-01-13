@@ -315,8 +315,9 @@
 
                         <!-- Capture overlay rectangles (when phenomenon node is selected) -->
                         {#each overlaysBySlide[i] || [] as overlay}
-                            {@const color =
-                                EVIDENCE_COLORS[
+                            {@const color = overlay.isActionCapture
+                                ? { bg: 'rgba(107, 114, 128, 0.2)', border: '#6b7280', name: '회색' }
+                                : EVIDENCE_COLORS[
                                     overlay.colorIndex % EVIDENCE_COLORS.length
                                 ]}
                             {@const isHighlighted =
@@ -349,13 +350,18 @@
                                         });
                                     }
                                 }}
+                                title={overlay.isActionCapture ? `Action: ${overlay.actionName || ''}\nCause: ${overlay.causeName || ''}` : overlay.label || ''}
                             >
                                 <div
                                     class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t
                                            {isHighlighted ? 'scale-110' : ''}"
                                     style="background-color: {color.border};"
                                 >
-                                    #{overlay.colorIndex + 1}
+                                    {#if overlay.isActionCapture}
+                                        A{overlay.colorIndex + 1}
+                                    {:else}
+                                        #{overlay.colorIndex + 1}
+                                    {/if}
                                 </div>
                                 {#if isHighlighted}
                                     <div
