@@ -25,12 +25,18 @@
     export let workflowActions: { id: string; name: string; params: any[] }[] = [];
     export let workflowConditions: { id: string; name: string; params: any[] }[] = [];
 
+    // Action capture mode state
+    export let actionCaptureMode = false;
+    export let actionCaptureTodoId: string | null = null;
+    export let actionCaptureCauseId: string | null = null;
+
     const dispatch = createEventDispatcher();
 
     import WorkflowGraph from "$lib/components/phenomenon/WorkflowGraph.svelte"; // [NEW]
 
     let phenomenonCollectorRef: PhenomenonCollector;
     let candidateCauseExplorerRef: CandidateCauseExplorer;
+    let causeDerivationExplorerRef: CauseDerivationExplorer;
     let currentStep = 0; // 0: Phenomenon, 1: Candidate Causes, 2: Cause Derivation
     let viewMode: "list" | "graph" = "list"; // [NEW]
 
@@ -109,6 +115,30 @@
         dispatch("linkingModeChange", event.detail);
     }
 
+    // Handle action capture mode toggle from CauseDerivationExplorer
+    function handleToggleActionCaptureMode(
+        event: CustomEvent<{ todoId: string | null; causeId: string | null }>,
+    ) {
+        dispatch("toggleActionCaptureMode", event.detail);
+    }
+
+    // Add action capture (called from ViewerCanvas via parent)
+    export function addActionCapture(capture: {
+        slideIndex: number;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    }) {
+        if (actionCaptureTodoId && actionCaptureCauseId && causeDerivationExplorerRef) {
+            causeDerivationExplorerRef.addCaptureToAction(
+                actionCaptureTodoId,
+                actionCaptureCauseId,
+                capture
+            );
+        }
+    }
+
     // Handle evidence click from ViewerCanvas (via parent)
     export function handleEvidenceClick(evidenceId: string) {
         if (currentStep === 1 && candidateCauseExplorerRef) {
@@ -172,7 +202,12 @@
 
         // 탭 이동 시 캡처 모드는 꺼주는게 안전할 수 있음
         if (captureMode && step !== 0) {
-            dispatch("toggleCaptureMode"); // Turn off capture mode if leaving Step 1
+            dispatch("toggleCaptureMode"); // Turn off capture mode if leaving Step 0 (발생현상)
+        }
+
+        // Turn off action capture mode if leaving Step 2 (원인도출)
+        if (actionCaptureMode && step !== 2) {
+            dispatch("toggleActionCaptureMode", { todoId: null, causeId: null });
         }
     }
 </script>
@@ -289,11 +324,15 @@
                 />
             {:else if currentStep === 2}
                 <CauseDerivationExplorer
+                    bind:this={causeDerivationExplorerRef}
                     phenomenon={phenomenonData}
                     {workflowActions}
                     {workflowConditions}
+                    {actionCaptureMode}
+                    {actionCaptureTodoId}
                     on:change={handlePhenomenonChange}
                     on:workflowComplete={handleWorkflowComplete}
+                    on:toggleActionCaptureMode={handleToggleActionCaptureMode}
                 />
             {/if}
         </div>

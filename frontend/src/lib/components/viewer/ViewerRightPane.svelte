@@ -27,6 +27,11 @@
     export let project;
     export let phenomenonAttributes = [];
 
+    // Action capture mode props
+    export let actionCaptureMode = false;
+    export let actionCaptureTodoId = null;
+    export let actionCaptureCauseId = null;
+
     const dispatch = createEventDispatcher();
 
     function toggleSection(section) {
@@ -93,12 +98,16 @@
             {savingWorkflow}
             {captureMode}
             {phenomenonAttributes}
+            {actionCaptureMode}
+            {actionCaptureTodoId}
+            {actionCaptureCauseId}
             workflowActions={settings?.workflow_actions || []}
             workflowConditions={settings?.workflow_conditions || []}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
             on:phenomenonChange
             on:toggleCaptureMode
+            on:toggleActionCaptureMode
             on:evidenceHover
             on:linkingModeChange
             on:deleteWorkflow

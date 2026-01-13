@@ -14,6 +14,7 @@
     export let captureMode = false; // Enable capture mode
     export let captureOverlays = []; // Capture regions to display when phenomenon node is selected
     export let highlightedCaptureIndex = null; // Index of currently highlighted capture (for candidate search)
+    export let isActionCapture = false; // True when capturing for action (gray color)
 
     // Candidate Cause Linking Props
     export let isCandidateLinkingMode = false;
@@ -202,14 +203,14 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
     class="flex-1 overflow-auto bg-gray-100 p-8 slides-container {captureMode
-        ? 'capture-mode'
+        ? isActionCapture ? 'capture-mode action-capture' : 'capture-mode'
         : ''}"
     on:wheel={handleWheel}
     on:mousedown={handleCanvasMouseDown}
 >
     {#if captureMode}
         <div
-            class="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2"
+            class="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 {isActionCapture ? 'bg-gray-600' : 'bg-red-500'} text-white px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2"
         >
             <svg
                 class="w-4 h-4 animate-pulse"
@@ -224,7 +225,11 @@
                     d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
                 />
             </svg>
-            캡처 모드: 마우스 좌클릭+드래그로 영역을 선택하세요
+            {#if isActionCapture}
+                Action 캡처 모드: 마우스 좌클릭+드래그로 영역을 선택하세요
+            {:else}
+                캡처 모드: 마우스 좌클릭+드래그로 영역을 선택하세요
+            {/if}
         </div>
     {/if}
 
@@ -298,7 +303,7 @@
                         <!-- Capture selection rectangle (during capture) -->
                         {#if isCapturing && captureSlideIndex === i && captureRect}
                             <div
-                                class="absolute border-2 border-red-500 bg-red-500/20 pointer-events-none"
+                                class="absolute border-2 {isActionCapture ? 'border-gray-500 bg-gray-500/20' : 'border-red-500 bg-red-500/20'} pointer-events-none"
                                 style={`
                                     left: ${captureRect.left}px;
                                     top: ${captureRect.top}px;
@@ -401,6 +406,10 @@
     }
     .capture-mode .slide-container:hover {
         outline: 2px dashed #ef4444;
+        outline-offset: 4px;
+    }
+    .capture-mode.action-capture .slide-container:hover {
+        outline: 2px dashed #6b7280;
         outline-offset: 4px;
     }
 </style>
