@@ -98,6 +98,11 @@
     let linkingCauseId = null;
     let linkedEvidenceIds = [];
 
+    // Action Capture State (for 원인도출 tab)
+    let actionCaptureMode = false;
+    let actionCaptureTodoId = null;
+    let actionCaptureCauseId = null;
+
     // Filter attributes based on settings
     $: phenomenonAttributes = availableAttributes.filter((attr) =>
         settings.phenomenon_attributes?.includes(attr.key),
@@ -342,6 +347,26 @@
         }
     }
 
+    function handleToggleActionCaptureMode(event) {
+        const { todoId, causeId } = event.detail;
+        if (todoId) {
+            actionCaptureMode = true;
+            actionCaptureTodoId = todoId;
+            actionCaptureCauseId = causeId;
+        } else {
+            actionCaptureMode = false;
+            actionCaptureTodoId = null;
+            actionCaptureCauseId = null;
+        }
+    }
+
+    function handleActionCapture(event) {
+        const capture = event.detail;
+        if (workflowSectionRef && actionCaptureTodoId && actionCaptureCauseId) {
+            workflowSectionRef.addActionCapture(capture);
+        }
+    }
+
     async function handleDeleteWorkflow() {
         // Reset phenomenon data to empty state
         const emptyPhenomenon = createEmptyPhenomenon();
@@ -350,6 +375,13 @@
         // Turn off capture mode if it's active
         if (captureMode) {
             captureMode = false;
+        }
+
+        // Turn off action capture mode if it's active
+        if (actionCaptureMode) {
+            actionCaptureMode = false;
+            actionCaptureTodoId = null;
+            actionCaptureCauseId = null;
         }
 
         // Clear capture overlays
@@ -919,7 +951,7 @@
                 {projectId}
                 {sortedShapes}
                 {selectedShapeId}
-                {captureMode}
+                captureMode={captureMode || actionCaptureMode}
                 {captureOverlays}
                 highlightedCaptureIndex={highlightedEvidenceId?.startsWith(
                     "ev_",
@@ -928,12 +960,13 @@
                     : null}
                 {isCandidateLinkingMode}
                 {linkedEvidenceIds}
+                isActionCapture={actionCaptureMode}
                 on:wheel={handleWheel}
                 on:canvasMouseDown={handleCanvasMouseDown}
                 on:shapeMouseDown={(e) =>
                     handleMouseDown(e.detail.event, e.detail.shape)}
                 on:slideInView={handleSlideInView}
-                on:capture={handleCapture}
+                on:capture={(e) => actionCaptureMode ? handleActionCapture(e) : handleCapture(e)}
                 on:evidenceClick={handleEvidenceClick}
             />
         </div>
@@ -975,6 +1008,9 @@
         savingWorkflow={savingPhenomenon}
         {captureMode}
         {phenomenonAttributes}
+        {actionCaptureMode}
+        {actionCaptureTodoId}
+        {actionCaptureCauseId}
         bind:summaryData
         bind:summaryDataLLM
         {savingSummary}
@@ -989,6 +1025,7 @@
         {project}
         on:phenomenonChange={handlePhenomenonChange}
         on:toggleCaptureMode={toggleCaptureMode}
+        on:toggleActionCaptureMode={handleToggleActionCaptureMode}
         on:evidenceHover={handleEvidenceHover}
         on:linkingModeChange={handleLinkingModeChange}
         on:deleteWorkflow={handleDeleteWorkflow}
