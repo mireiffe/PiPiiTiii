@@ -7,11 +7,18 @@
         TodoItem,
         TodoType,
         ConditionStatus,
+        ActionCapture,
+        CaptureEvidence,
     } from "$lib/types/phenomenon";
+    import { createActionCapture, EVIDENCE_COLORS } from "$lib/types/phenomenon";
 
     export let phenomenon: PhenomenonData;
     export let workflowActions: { id: string; name: string; params: any[] }[] = [];
     export let workflowConditions: { id: string; name: string; params: any[] }[] = [];
+
+    // Capture mode props - passed from parent for action captures
+    export let captureMode = false;
+    export let captureModeActionId: string | null = null;
 
     // Manage local UI state
     let activeCauseId: string | null = null;
@@ -36,7 +43,11 @@
     const dispatch = createEventDispatcher<{
         change: PhenomenonData;
         workflowComplete: { finalCauseId: string };
+        toggleActionCaptureMode: { todoId: string | null };
     }>();
+
+    // Action capture state
+    let expandedCapturesTodoId: string | null = null;
 
     // Ensure todoList exists for all causes
     $: {
@@ -377,6 +388,81 @@
 
     // Reactive: get predefined items based on current todo type
     $: predefinedItems = newTodoType === "condition" ? workflowConditions : workflowActions;
+
+    // ===== Action Capture Functions =====
+
+    // Get phenomenon captures for linking
+    $: phenomenonCaptures = (phenomenon.evidences || []).filter(
+        (e): e is CaptureEvidence => e.type === 'capture'
+    );
+
+    function toggleCapturesExpand(todoId: string) {
+        expandedCapturesTodoId = expandedCapturesTodoId === todoId ? null : todoId;
+    }
+
+    function toggleCaptureLink(todoId: string, captureId: string) {
+        if (!activeCauseId) return;
+        const cause = phenomenon.candidateCauses.find(c => c.id === activeCauseId);
+        if (!cause || !cause.todoList) return;
+
+        const todo = cause.todoList.find(t => t.id === todoId);
+        if (!todo) return;
+
+        if (!todo.captures) {
+            todo.captures = [];
+        }
+
+        const existingIdx = todo.captures.findIndex(c => c.id === captureId);
+        if (existingIdx >= 0) {
+            // Remove
+            todo.captures.splice(existingIdx, 1);
+        } else {
+            // Add - copy capture data from phenomenon
+            const phenomenonCapture = phenomenonCaptures.find(c => c.id === captureId);
+            if (phenomenonCapture) {
+                const actionCapture: ActionCapture = {
+                    id: captureId, // Use same ID to link
+                    slideIndex: phenomenonCapture.slideIndex,
+                    x: phenomenonCapture.x,
+                    y: phenomenonCapture.y,
+                    width: phenomenonCapture.width,
+                    height: phenomenonCapture.height,
+                    label: phenomenonCapture.label,
+                };
+                todo.captures.push(actionCapture);
+            }
+        }
+
+        phenomenon.candidateCauses = [...phenomenon.candidateCauses];
+        dispatch("change", phenomenon);
+    }
+
+    function isCaptureLinked(todo: TodoItem, captureId: string): boolean {
+        return todo.captures?.some(c => c.id === captureId) || false;
+    }
+
+    function getCaptureCount(todo: TodoItem): number {
+        return todo.captures?.length || 0;
+    }
+
+    function removeCapture(todoId: string, captureId: string) {
+        if (!activeCauseId) return;
+        const cause = phenomenon.candidateCauses.find(c => c.id === activeCauseId);
+        if (!cause || !cause.todoList) return;
+
+        const todo = cause.todoList.find(t => t.id === todoId);
+        if (!todo || !todo.captures) return;
+
+        todo.captures = todo.captures.filter(c => c.id !== captureId);
+        phenomenon.candidateCauses = [...phenomenon.candidateCauses];
+        dispatch("change", phenomenon);
+    }
+
+    function getCaptureColor(captureId: string) {
+        const idx = phenomenonCaptures.findIndex(c => c.id === captureId);
+        if (idx !== -1) return EVIDENCE_COLORS[idx % EVIDENCE_COLORS.length];
+        return { bg: 'rgba(156, 163, 175, 0.2)', border: '#9ca3af', name: '회색' }; // Gray for action captures
+    }
 </script>
 
 <div class="flex flex-col h-full bg-gray-50/50">
@@ -666,6 +752,87 @@
                                                                         <span class="text-[10px] text-gray-400">미설정</span>
                                                                     {/if}
                                                                 </div>
+                                                            {/if}
+
+                                                            <!-- Action Captures (only for action type) -->
+                                                            {#if todo.type === "action"}
+                                                                <div class="mt-1.5 flex items-center gap-2 flex-wrap">
+                                                                    <!-- Capture count badge - clickable to expand -->
+                                                                    <button
+                                                                        type="button"
+                                                                        class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded transition-colors
+                                                                               {getCaptureCount(todo) > 0
+                                                                            ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                                            : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}"
+                                                                        on:click|stopPropagation={() => toggleCapturesExpand(todo.id)}
+                                                                        title="연관 캡처 관리"
+                                                                    >
+                                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                        </svg>
+                                                                        캡처 {getCaptureCount(todo)}개
+                                                                        <svg class="w-2.5 h-2.5 transition-transform {expandedCapturesTodoId === todo.id ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                                                        </svg>
+                                                                    </button>
+
+                                                                    <!-- Linked captures inline preview (gray color) -->
+                                                                    {#if todo.captures && todo.captures.length > 0 && expandedCapturesTodoId !== todo.id}
+                                                                        {#each todo.captures.slice(0, 3) as capture (capture.id)}
+                                                                            <span
+                                                                                class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] rounded bg-gray-200 text-gray-600 border border-gray-300"
+                                                                                title={capture.label || `슬라이드 ${capture.slideIndex + 1}`}
+                                                                            >
+                                                                                <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
+                                                                                {capture.label || `S${capture.slideIndex + 1}`}
+                                                                            </span>
+                                                                        {/each}
+                                                                        {#if todo.captures.length > 3}
+                                                                            <span class="text-[9px] text-gray-400">+{todo.captures.length - 3}</span>
+                                                                        {/if}
+                                                                    {/if}
+                                                                </div>
+
+                                                                <!-- Expanded capture selection -->
+                                                                {#if expandedCapturesTodoId === todo.id}
+                                                                    <div class="mt-2 p-2 bg-gray-50 rounded border border-gray-200" transition:slide>
+                                                                        <div class="text-[9px] font-bold text-gray-500 uppercase mb-1.5">발생현상 캡처에서 선택</div>
+                                                                        {#if phenomenonCaptures.length === 0}
+                                                                            <div class="text-[10px] text-gray-400 italic">
+                                                                                발생현상 탭에서 캡처를 먼저 추가하세요.
+                                                                            </div>
+                                                                        {:else}
+                                                                            <div class="flex flex-wrap gap-1">
+                                                                                {#each phenomenonCaptures as pCapture, idx (pCapture.id)}
+                                                                                    {@const isLinked = isCaptureLinked(todo, pCapture.id)}
+                                                                                    {@const color = getCaptureColor(pCapture.id)}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        class="inline-flex items-center gap-1 px-1.5 py-1 text-[10px] rounded border transition-all
+                                                                                               {isLinked
+                                                                                            ? 'bg-gray-200 border-gray-400 text-gray-700 ring-1 ring-gray-400'
+                                                                                            : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}"
+                                                                                        on:click|stopPropagation={() => toggleCaptureLink(todo.id, pCapture.id)}
+                                                                                        title={isLinked ? '클릭하여 연결 해제' : '클릭하여 연결'}
+                                                                                    >
+                                                                                        <span
+                                                                                            class="w-2 h-2 rounded-full shrink-0"
+                                                                                            style="background-color: {color.border}"
+                                                                                        ></span>
+                                                                                        <span class="truncate max-w-[60px]">
+                                                                                            {pCapture.label || `캡처 ${idx + 1}`}
+                                                                                        </span>
+                                                                                        {#if isLinked}
+                                                                                            <svg class="w-2.5 h-2.5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                                                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                                                                            </svg>
+                                                                                        {/if}
+                                                                                    </button>
+                                                                                {/each}
+                                                                            </div>
+                                                                        {/if}
+                                                                    </div>
+                                                                {/if}
                                                             {/if}
                                                         </div>
                                                         <button
