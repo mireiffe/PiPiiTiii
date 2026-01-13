@@ -112,6 +112,25 @@ export type TodoType = 'action' | 'condition';
 
 export type ConditionStatus = 'true' | 'false' | null;  // true=active(탐색중), false=inactive(탐색종료), null=미설정
 
+// Image attachment for cause candidates
+export interface CauseImage {
+    id: string;
+    data: string;  // Base64 encoded image data
+    caption?: string;  // User caption for the image
+    createdAt: string;
+}
+
+// Action capture - same as CaptureEvidence but for actions
+export interface ActionCapture {
+    id: string;
+    slideIndex: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    label?: string;
+}
+
 export interface TodoItem {
     id: string;
     type: TodoType;
@@ -119,6 +138,7 @@ export interface TodoItem {
     isCompleted?: boolean;
     conditionStatus?: ConditionStatus;  // condition 타입일 때만 사용
     paramValues?: Record<string, string>;  // parameter ID -> value mapping
+    captures?: ActionCapture[];  // Captures associated with this action
 }
 
 export interface CandidateCause {
@@ -128,6 +148,7 @@ export interface CandidateCause {
     evidenceLinks?: EvidenceLink[]; //
     notes?: string;         // 원인 후보에 대한 사용자 노트
     createdAt: string;
+    images?: CauseImage[];  // Image attachments for this cause
 
     // Cause Deduction
     todoList?: TodoItem[];
@@ -140,5 +161,35 @@ export function createEmptyPhenomenon(): PhenomenonData {
         description: '',
         candidateCauses: [],
         createdAt: new Date().toISOString()
+    };
+}
+
+// Generate unique ID for cause images
+export function generateCauseImageId(): string {
+    return `img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Generate unique ID for action captures
+export function generateActionCaptureId(): string {
+    return `acap_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Create action capture helper
+export function createActionCapture(
+    slideIndex: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    label?: string
+): ActionCapture {
+    return {
+        id: generateActionCaptureId(),
+        slideIndex,
+        x,
+        y,
+        width,
+        height,
+        label
     };
 }
