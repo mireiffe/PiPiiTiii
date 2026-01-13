@@ -786,13 +786,14 @@
 
                                                                     <!-- Captures inline preview (gray color) -->
                                                                     {#if todo.captures && todo.captures.length > 0 && expandedCapturesTodoId !== todo.id}
-                                                                        {#each todo.captures.slice(0, 3) as capture (capture.id)}
+                                                                        {#each todo.captures.slice(0, 3) as capture, capIdx (capture.id)}
+                                                                            {@const captureLabel = capture.label || `슬라이드 ${capture.slideIndex + 1} - #${capIdx + 1}`}
                                                                             <span
                                                                                 class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] rounded bg-gray-200 text-gray-600 border border-gray-300"
-                                                                                title={capture.label || `슬라이드 ${capture.slideIndex + 1}`}
+                                                                                title={captureLabel}
                                                                             >
                                                                                 <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
-                                                                                {capture.label || `S${capture.slideIndex + 1}`}
+                                                                                {capture.label || `S${capture.slideIndex + 1}-${capIdx + 1}`}
                                                                             </span>
                                                                         {/each}
                                                                         {#if todo.captures.length > 3}
@@ -807,10 +808,11 @@
                                                                         <div class="text-[9px] font-bold text-gray-500 uppercase mb-1.5">연관 캡처 목록</div>
                                                                         <div class="flex flex-wrap gap-1">
                                                                             {#each todo.captures as capture, idx (capture.id)}
+                                                                                {@const captureDisplayName = capture.label || `슬라이드 ${capture.slideIndex + 1} - 캡처 #${idx + 1}`}
                                                                                 <div class="inline-flex items-center gap-1 px-1.5 py-1 text-[10px] rounded bg-gray-200 border border-gray-300 text-gray-700 group">
                                                                                     <span class="w-2 h-2 rounded-full bg-gray-500 shrink-0"></span>
-                                                                                    <span class="truncate max-w-[80px]">
-                                                                                        {capture.label || `슬라이드 ${capture.slideIndex + 1} 캡처`}
+                                                                                    <span class="truncate max-w-[100px]" title={captureDisplayName}>
+                                                                                        {captureDisplayName}
                                                                                     </span>
                                                                                     <button
                                                                                         type="button"

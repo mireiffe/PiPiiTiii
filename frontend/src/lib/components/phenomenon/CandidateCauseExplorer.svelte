@@ -303,12 +303,21 @@
         if (!cause.images) {
             cause.images = [];
         }
+
+        // Check if this is the first image
+        const isFirstImage = cause.images.length === 0;
+
         cause.images = [...cause.images, newImage];
         phenomenon.candidateCauses = [...phenomenon.candidateCauses];
         dispatch("change", phenomenon);
 
         // Auto-expand images section
         expandedImagesCauseId = causeId;
+
+        // Auto-open modal for first image to add caption
+        if (isFirstImage) {
+            openImageModal(newImage);
+        }
     }
 
     function toggleImagesExpand(causeId: string) {

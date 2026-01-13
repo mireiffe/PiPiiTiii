@@ -181,13 +181,43 @@
     // 캡처 오버레이 데이터 반환
     export function getCaptureOverlays() {
         // 데이터 기반으로 생성 (컴포넌트 의존성 제거)
-        if (!phenomenonData || !phenomenonData.evidences) return [];
-        return phenomenonData.evidences
-            .filter((e) => e.type === "capture")
-            .map((e, index) => ({
-                ...e,
-                colorIndex: index,
-            }));
+        if (!phenomenonData) return [];
+
+        const overlays = [];
+
+        // Add phenomenon captures (with colored palette)
+        if (phenomenonData.evidences) {
+            const phenomenonCaptures = phenomenonData.evidences
+                .filter((e) => e.type === "capture")
+                .map((e, index) => ({
+                    ...e,
+                    colorIndex: index,
+                    isActionCapture: false,
+                }));
+            overlays.push(...phenomenonCaptures);
+        }
+
+        // Add action captures from all candidate causes (with gray color)
+        if (phenomenonData.candidateCauses) {
+            let actionCaptureIndex = 0;
+            for (const cause of phenomenonData.candidateCauses) {
+                if (!cause.todoList) continue;
+                for (const todo of cause.todoList) {
+                    if (!todo.captures || todo.type !== 'action') continue;
+                    for (const capture of todo.captures) {
+                        overlays.push({
+                            ...capture,
+                            colorIndex: actionCaptureIndex++,
+                            isActionCapture: true,
+                            actionName: todo.text, // Include action name for context
+                            causeName: cause.text, // Include cause name for context
+                        });
+                    }
+                }
+            }
+        }
+
+        return overlays;
     }
 
     function setStep(step: number) {
