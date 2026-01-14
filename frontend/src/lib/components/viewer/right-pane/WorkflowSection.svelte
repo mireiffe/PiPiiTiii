@@ -1458,9 +1458,9 @@
                                                                         attachment,
                                                                     )}
                                                             >
-                                                                {#if attachment.type === "image"}
+                                                                {#if attachment.type === "image" && attachment.imageId}
                                                                     <img
-                                                                        src={attachment.imageId ? getAttachmentImageUrl(attachment.imageId) : attachment.data}
+                                                                        src={getAttachmentImageUrl(attachment.imageId)}
                                                                         alt="att"
                                                                         class="w-full h-12 object-cover"
                                                                     />

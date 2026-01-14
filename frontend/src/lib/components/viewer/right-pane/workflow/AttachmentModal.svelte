@@ -15,10 +15,8 @@
 
 	let textContent = attachment.data || '';
 
-	// Get image URL: use API for imageId, fallback to base64 data for legacy
-	$: imageUrl = attachment.imageId
-		? getAttachmentImageUrl(attachment.imageId)
-		: attachment.data || '';
+	// Get image URL from attachments.db
+	$: imageUrl = attachment.imageId ? getAttachmentImageUrl(attachment.imageId) : '';
 
 	function handleSave() {
 		dispatch('save', { caption, text: textContent });
