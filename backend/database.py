@@ -395,7 +395,11 @@ class Database:
         row = cursor.fetchone()
         conn.close()
         if row and row[0]:
-            return json.loads(row[0])
+            workflow = json.loads(row[0])
+            # Return None if workflow is empty or missing required structure
+            if not workflow or not isinstance(workflow, dict) or 'steps' not in workflow:
+                return None
+            return workflow
         return None
 
     def update_project_workflow(self, project_id: str, workflow_data: Dict[str, Any]):

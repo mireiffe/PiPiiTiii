@@ -251,7 +251,13 @@
             const res = await fetchProjectWorkflow(projectId);
             if (res.ok) {
                 const data = await res.json();
-                workflowData = data.workflow || createEmptyWorkflowData();
+                // Ensure workflow data has proper structure with steps array
+                const workflow = data.workflow;
+                if (workflow && typeof workflow === 'object' && Array.isArray(workflow.steps)) {
+                    workflowData = workflow;
+                } else {
+                    workflowData = createEmptyWorkflowData();
+                }
             }
         } catch (e) {
             console.error("Failed to load workflow", e);
