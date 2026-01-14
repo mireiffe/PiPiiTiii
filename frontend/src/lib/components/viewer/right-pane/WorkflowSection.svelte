@@ -2,6 +2,8 @@
     import { slide, fade, fly } from "svelte/transition";
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
     import AccordionHeader from "./AccordionHeader.svelte";
+    import AttachmentModal from "./workflow/AttachmentModal.svelte";
+    import ImageAddModal from "./workflow/ImageAddModal.svelte";
     import type {
         WorkflowSteps,
         WorkflowStepRow,
@@ -1476,203 +1478,32 @@
 
                 <!-- Attachment View/Edit Modal -->
                 {#if showAttachmentModal && editingAttachment}
-                    <div
-                        class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
-                        transition:fade={{ duration: 150 }}
-                        on:click={closeAttachmentModal}
-                    >
-                        <div
-                            class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
-                            transition:fly={{ y: 20, duration: 200 }}
-                            on:click|stopPropagation
-                        >
-                            <!-- Header -->
-                            <div
-                                class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50"
-                            >
-                                <h3 class="text-sm font-semibold text-gray-800">
-                                    {editingAttachment.type === "image"
-                                        ? "이미지 첨부"
-                                        : "텍스트 첨부"}
-                                </h3>
-                                <button
-                                    class="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
-                                    on:click={closeAttachmentModal}
-                                >
-                                    <svg
-                                        class="w-5 h-5"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                    >
-                                        <path d="M18 6L6 18M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <!-- Content -->
-                            <div class="flex-1 overflow-y-auto p-4 space-y-4">
-                                {#if editingAttachment.type === "image"}
-                                    <div
-                                        class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
-                                    >
-                                        <img
-                                            src={editingAttachment.data}
-                                            alt="Attachment"
-                                            class="w-full max-h-[400px] object-contain"
-                                        />
-                                    </div>
-                                    <div class="space-y-1.5">
-                                        <label
-                                            class="block text-xs font-medium text-gray-600"
-                                            >캡션</label
-                                        >
-                                        <input
-                                            type="text"
-                                            bind:value={modalCaption}
-                                            placeholder="이미지에 대한 설명을 입력하세요"
-                                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                                        />
-                                    </div>
-                                {:else}
-                                    <div class="space-y-1.5">
-                                        <label
-                                            class="block text-xs font-medium text-gray-600"
-                                            >내용</label
-                                        >
-                                        <textarea
-                                            value={editingAttachment.data}
-                                            on:input={(e) =>
-                                                updateAttachmentText(
-                                                    e.currentTarget.value,
-                                                )}
-                                            placeholder="텍스트 내용"
-                                            rows="6"
-                                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 resize-none"
-                                        ></textarea>
-                                    </div>
-                                {/if}
-
-                                <div class="text-[10px] text-gray-400">
-                                    추가됨: {new Date(
-                                        editingAttachment.createdAt,
-                                    ).toLocaleString("ko-KR")}
-                                </div>
-                            </div>
-
-                            <!-- Footer -->
-                            <div
-                                class="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50"
-                            >
-                                <button
-                                    class="px-3 py-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                    on:click={deleteAttachmentFromModal}
-                                >
-                                    삭제
-                                </button>
-                                <div class="flex gap-2">
-                                    <button
-                                        class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                                        on:click={closeAttachmentModal}
-                                    >
-                                        취소
-                                    </button>
-                                    <button
-                                        class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                                        on:click={saveAttachmentChanges}
-                                    >
-                                        저장
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <AttachmentModal
+                        attachment={editingAttachment}
+                        caption={modalCaption}
+                        on:save={(e) => {
+                            modalCaption = e.detail.caption;
+                            if (editingAttachment.type === "text") {
+                                editingAttachment.data = e.detail.text;
+                            }
+                            saveAttachmentChanges();
+                        }}
+                        on:delete={deleteAttachmentFromModal}
+                        on:close={closeAttachmentModal}
+                    />
                 {/if}
 
                 <!-- Image Add Modal (with caption) -->
                 {#if showImageAddModal && pendingImageData}
-                    <div
-                        class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
-                        transition:fade={{ duration: 150 }}
-                        on:click={closeImageAddModal}
-                    >
-                        <div
-                            class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
-                            transition:fly={{ y: 20, duration: 200 }}
-                            on:click|stopPropagation
-                        >
-                            <!-- Header -->
-                            <div
-                                class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50"
-                            >
-                                <h3 class="text-sm font-semibold text-gray-800">
-                                    이미지 추가
-                                </h3>
-                                <button
-                                    class="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
-                                    on:click={closeImageAddModal}
-                                >
-                                    <svg
-                                        class="w-5 h-5"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                    >
-                                        <path d="M18 6L6 18M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <!-- Content -->
-                            <div class="flex-1 overflow-y-auto p-4 space-y-4">
-                                <div
-                                    class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
-                                >
-                                    <img
-                                        src={pendingImageData}
-                                        alt="Preview"
-                                        class="w-full max-h-[400px] object-contain"
-                                    />
-                                </div>
-                                <div class="space-y-1.5">
-                                    <label
-                                        class="block text-xs font-medium text-gray-600"
-                                        >캡션 (선택)</label
-                                    >
-                                    <input
-                                        type="text"
-                                        bind:value={pendingImageCaption}
-                                        placeholder="이미지에 대한 설명을 입력하세요"
-                                        class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                                        on:keypress={(e) =>
-                                            e.key === "Enter" &&
-                                            confirmAddImage()}
-                                        autofocus
-                                    />
-                                </div>
-                            </div>
-
-                            <!-- Footer -->
-                            <div
-                                class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50/50"
-                            >
-                                <button
-                                    class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                                    on:click={closeImageAddModal}
-                                >
-                                    취소
-                                </button>
-                                <button
-                                    class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                                    on:click={confirmAddImage}
-                                >
-                                    추가
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    <ImageAddModal
+                        imageData={pendingImageData}
+                        caption={pendingImageCaption}
+                        on:confirm={(e) => {
+                            pendingImageCaption = e.detail.caption;
+                            confirmAddImage();
+                        }}
+                        on:cancel={closeImageAddModal}
+                    />
                 {/if}
             {/if}
         </div>
