@@ -16,6 +16,7 @@
         createAttachment,
     } from "$lib/types/workflow";
     import WorkflowGraph from "$lib/components/phenomenon/WorkflowGraph.svelte";
+    import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
 
     export let isExpanded = false;
     export let workflowData: ProjectWorkflowData = createEmptyWorkflowData();
@@ -49,86 +50,91 @@
 
     // --- Drag & Drop State ---
     let draggedIndex: number | null = null;
-    let dragOverIndex: number | null = null;
-    let isDragging = false;
+    let dropTargetIndex: number | null = null;
 
     function handleDragStart(event: DragEvent, index: number) {
         if (captureMode) exitCaptureMode();
         draggedIndex = index;
-        isDragging = true;
         if (event.dataTransfer) {
             event.dataTransfer.effectAllowed = "move";
+            // Required for Firefox
             event.dataTransfer.setData("text/plain", index.toString());
         }
-        // Add slight delay to allow drag image to be set
-        setTimeout(() => {
-            const target = event.target as HTMLElement;
-            target.style.opacity = "0.5";
-        }, 0);
-    }
-
-    function handleDragEnd(event: DragEvent) {
-        const target = event.target as HTMLElement;
-        target.style.opacity = "1";
-
-        // Apply the reorder if we have valid indices
-        if (
-            draggedIndex !== null &&
-            dragOverIndex !== null &&
-            draggedIndex !== dragOverIndex
-        ) {
-            const steps = [...workflowData.steps];
-            const [removed] = steps.splice(draggedIndex, 1);
-            steps.splice(dragOverIndex, 0, removed);
-            workflowData = {
-                ...workflowData,
-                steps,
-                updatedAt: new Date().toISOString(),
-            };
-            dispatch("workflowChange", workflowData);
-        }
-
-        draggedIndex = null;
-        dragOverIndex = null;
-        isDragging = false;
     }
 
     function handleDragOver(event: DragEvent, index: number) {
         event.preventDefault();
+        event.stopPropagation();
+        if (draggedIndex === null) return;
+
         if (event.dataTransfer) {
             event.dataTransfer.dropEffect = "move";
         }
-        if (draggedIndex !== null && index !== draggedIndex) {
-            dragOverIndex = index;
-        }
+
+        // Calculate drop position based on mouse Y relative to target center
+        const target = event.currentTarget as HTMLElement;
+        const rect = target.getBoundingClientRect();
+        const offsetY = event.clientY - rect.top;
+        const isTopHalf = offsetY < rect.height / 2;
+
+        dropTargetIndex = isTopHalf ? index : index + 1;
     }
 
     function handleDragLeave(event: DragEvent) {
-        // Only reset if leaving the container entirely
-        const relatedTarget = event.relatedTarget as HTMLElement;
-        if (!relatedTarget?.closest(".step-item")) {
-            // Keep dragOverIndex as is to maintain visual feedback
-        }
+        // Optional: clear if leaving the list entirely?
+        // For now, keep the last valid target to prevent flickering
     }
 
-    function getStepTransform(index: number): string {
-        if (!isDragging || draggedIndex === null || dragOverIndex === null)
-            return "";
-        if (index === draggedIndex) return "";
+    function handleContainerDragOver(event: DragEvent) {
+        event.preventDefault();
+        if (draggedIndex === null) return;
+        if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = "move";
+        }
+        dropTargetIndex = workflowData.steps.length;
+    }
 
-        // Calculate displacement based on drag position
-        if (draggedIndex < dragOverIndex) {
-            // Dragging downward
-            if (index > draggedIndex && index <= dragOverIndex) {
-                return "translateY(-100%)";
+    function handleContainerDrop(event: DragEvent) {
+        event.preventDefault();
+        if (draggedIndex === null) return;
+        dropTargetIndex = workflowData.steps.length;
+        handleDrop(event);
+    }
+
+    function handleDragEnd() {
+        draggedIndex = null;
+        dropTargetIndex = null;
+    }
+
+    function handleDrop(event: DragEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (draggedIndex !== null && dropTargetIndex !== null) {
+            let target = dropTargetIndex;
+
+            // Adjust target index if dragging downwards because removing the item shifts subsequent indices
+            if (draggedIndex < target) {
+                target -= 1;
             }
-        } else {
-            // Dragging upward
-            if (index < draggedIndex && index >= dragOverIndex) {
-                return "translateY(100%)";
+
+            // Only move if target position is different from current position
+            if (target !== draggedIndex) {
+                const steps = [...workflowData.steps];
+                const [removed] = steps.splice(draggedIndex, 1);
+                steps.splice(target, 0, removed);
+
+                workflowData = {
+                    ...workflowData,
+                    steps,
+                    updatedAt: new Date().toISOString(),
+                };
+                dispatch("workflowChange", workflowData);
             }
         }
-        return "";
+
+        draggedIndex = null;
+        dropTargetIndex = null;
     }
 
     // --- Helpers & Handlers ---
@@ -158,15 +164,6 @@
     onDestroy(() => {
         window.removeEventListener("keydown", handleKeyDown);
     });
-
-    const CAPTURE_COLORS = [
-        { bg: "rgba(59, 130, 246, 0.1)", border: "#3b82f6", text: "#2563eb" },
-        { bg: "rgba(34, 197, 94, 0.1)", border: "#22c55e", text: "#16a34a" },
-        { bg: "rgba(168, 85, 247, 0.1)", border: "#a855f7", text: "#9333ea" },
-        { bg: "rgba(249, 115, 22, 0.1)", border: "#f97316", text: "#ea580c" },
-        { bg: "rgba(236, 72, 153, 0.1)", border: "#ec4899", text: "#db2777" },
-        { bg: "rgba(20, 184, 166, 0.1)", border: "#14b8a6", text: "#0d9488" },
-    ];
 
     $: categories = [
         ...new Set(
@@ -251,6 +248,10 @@
     let showNewStepForm = false;
     let newStepValues: Record<string, string> = {};
 
+    // State for editing step definition
+    let editingStepDefId: string | null = null;
+    let editStepValues: Record<string, string> = {};
+
     function initNewStepForm() {
         newStepValues = {};
         workflowSteps.columns.forEach((col) => {
@@ -282,6 +283,44 @@
     function cancelNewStepForm() {
         newStepValues = {};
         showNewStepForm = false;
+    }
+
+    // --- Step Definition Edit Functions ---
+    function initEditStepForm(stepRow: WorkflowStepRow, event: MouseEvent) {
+        event.stopPropagation();
+        editStepValues = { ...stepRow.values };
+        editingStepDefId = stepRow.id;
+        showNewStepForm = false; // Close new step form if open
+    }
+
+    function handleUpdateStepDef() {
+        if (!editingStepDefId) return;
+
+        // Check if purpose is filled (required)
+        if (!editStepValues["purpose"]?.trim()) {
+            alert("목적을 입력해주세요.");
+            return;
+        }
+
+        // Trim all values
+        const trimmedValues: Record<string, string> = {};
+        Object.keys(editStepValues).forEach((key) => {
+            trimmedValues[key] = editStepValues[key]?.trim() || "";
+        });
+
+        dispatch("updateStepDefinition", {
+            stepId: editingStepDefId,
+            values: trimmedValues,
+        });
+
+        // Reset form
+        editStepValues = {};
+        editingStepDefId = null;
+    }
+
+    function cancelEditStepForm() {
+        editStepValues = {};
+        editingStepDefId = null;
     }
 
     function handleRemoveStep(stepId: string) {
@@ -519,7 +558,7 @@
         const overlays: any[] = [];
         let colorIndex = 0;
         for (const step of workflowData.steps) {
-            const color = CAPTURE_COLORS[colorIndex % CAPTURE_COLORS.length];
+            const color = EVIDENCE_COLORS[colorIndex % EVIDENCE_COLORS.length];
             for (const capture of step.captures) {
                 overlays.push({
                     ...capture,
@@ -619,13 +658,14 @@
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
-                            ><path
+                        >
+                            <path
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
                                 stroke-width="2"
                                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            /></svg
-                        >
+                            />
+                        </svg>
                     </button>
                 </div>
             {/if}
@@ -810,6 +850,84 @@
                                         {@const usageCount = getStepUsageCount(
                                             step.id,
                                         )}
+                                        {@const isEditing = editingStepDefId === step.id}
+
+                                        {#if isEditing}
+                                            <!-- Edit Step Form -->
+                                            <div
+                                                class="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2.5"
+                                                transition:slide={{ duration: 150 }}
+                                                on:click|stopPropagation
+                                            >
+                                                <div
+                                                    class="text-xs font-medium text-amber-700 flex items-center gap-1.5"
+                                                >
+                                                    <svg
+                                                        class="w-3.5 h-3.5"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                    >
+                                                        <path
+                                                            d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                                                        />
+                                                        <path
+                                                            d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                                                        />
+                                                    </svg>
+                                                    스텝 정의 편집
+                                                </div>
+                                                <div class="space-y-2">
+                                                    {#each workflowSteps.columns as column (column.id)}
+                                                        <div
+                                                            class="flex items-center gap-2"
+                                                        >
+                                                            <label
+                                                                class="text-[10px] text-gray-500 w-16 shrink-0 text-right"
+                                                            >
+                                                                {column.name}
+                                                                {#if column.id === "purpose"}
+                                                                    <span
+                                                                        class="text-red-500"
+                                                                        >*</span
+                                                                    >
+                                                                {/if}
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                bind:value={
+                                                                    editStepValues[
+                                                                        column.id
+                                                                    ]
+                                                                }
+                                                                placeholder={column.name}
+                                                                class="flex-1 px-2 py-1 text-xs border border-amber-200 rounded focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                                                                on:keypress={(e) =>
+                                                                    e.key === "Enter" &&
+                                                                    handleUpdateStepDef()}
+                                                            />
+                                                        </div>
+                                                    {/each}
+                                                </div>
+                                                <div
+                                                    class="flex justify-end gap-2 pt-1"
+                                                >
+                                                    <button
+                                                        class="px-2.5 py-1 text-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                                        on:click={cancelEditStepForm}
+                                                    >
+                                                        취소
+                                                    </button>
+                                                    <button
+                                                        class="px-2.5 py-1 text-[10px] bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors font-medium"
+                                                        on:click={handleUpdateStepDef}
+                                                    >
+                                                        저장
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        {:else}
                                         <div
                                             class="w-full text-left p-2.5 bg-white hover:bg-blue-50/80 rounded-lg group transition-all flex items-start gap-2.5 cursor-pointer border border-gray-100 hover:border-blue-200 hover:shadow-sm"
                                             on:click={() => handleAddStep(step)}
@@ -843,7 +961,7 @@
                                                 <div
                                                     class="text-[10px] text-gray-400 pl-0.5 break-words leading-snug line-clamp-2"
                                                 >
-                                                    {step.values["action"] ||
+                                                    {step.values["system"] ||
                                                         step.values[
                                                             "expected_result"
                                                         ] ||
@@ -860,6 +978,34 @@
                                                     >
                                                         {usageCount}회 사용
                                                     </span>
+                                                {/if}
+                                                <!-- Edit button -->
+                                                <button
+                                                    class="p-1 hover:bg-blue-100 rounded text-gray-300 hover:text-blue-500 transition-colors"
+                                                    on:click={(e) =>
+                                                        initEditStepForm(
+                                                            step,
+                                                            e,
+                                                        )}
+                                                    title="스텝 정의 편집"
+                                                >
+                                                    <svg
+                                                        class="w-3 h-3"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                    >
+                                                        <path
+                                                            d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                                                        />
+                                                        <path
+                                                            d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                                <!-- Delete button -->
+                                                {#if usageCount > 0}
                                                     <span
                                                         class="p-1 text-gray-200 cursor-not-allowed"
                                                         title="사용 중인 스텝은 설정에서 삭제해주세요"
@@ -898,22 +1044,10 @@
                                                             />
                                                         </svg>
                                                     </button>
-                                                    <svg
-                                                        class="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        viewBox="0 0 24 24"
-                                                    >
-                                                        <path
-                                                            stroke-linecap="round"
-                                                            stroke-linejoin="round"
-                                                            stroke-width="2"
-                                                            d="M12 4v16m8-8H4"
-                                                        />
-                                                    </svg>
                                                 {/if}
                                             </div>
                                         </div>
+                                        {/if}
                                     {/each}
                                 {/if}
                             </div>
@@ -921,7 +1055,9 @@
                     {/if}
                 </div>
 
-                <div class="flex-1 overflow-y-auto p-3 space-y-2 relative">
+                <div
+                    class="flex-1 overflow-y-auto p-3 space-y-2 relative flex flex-col"
+                >
                     <div
                         class="absolute left-[23px] top-3 bottom-3 w-px bg-gray-200 z-0"
                     ></div>
@@ -929,29 +1065,46 @@
                     {#each workflowData.steps as step, index (step.id)}
                         {@const stepDef = getStepDefinition(step.stepId)}
                         {@const color =
-                            CAPTURE_COLORS[index % CAPTURE_COLORS.length]}
+                            EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
                         {@const isCapturing = captureTargetStepId === step.id}
                         {@const isAddingAttach =
                             addingAttachmentToStepId === step.id}
-                        {@const stepTransform = getStepTransform(index)}
+                        {@const stepTransform = ""}
                         {@const isBeingDragged = draggedIndex === index}
-                        {@const isDropTarget =
-                            dragOverIndex === index && draggedIndex !== index}
+                        {@const showDropIndicatorTop =
+                            dropTargetIndex === index}
+                        {@const showDropIndicatorBottom =
+                            dropTargetIndex === index + 1}
 
                         <div
-                            class="step-item relative z-10 pl-7 transition-transform duration-200 ease-out"
-                            style="transform: {stepTransform}; {isBeingDragged
-                                ? 'z-index: 50;'
-                                : ''}"
+                            class="step-item relative z-10 pl-7 transition-all duration-200"
+                            style={isBeingDragged ? "opacity: 0.5;" : ""}
                             draggable="true"
                             on:dragstart={(e) => handleDragStart(e, index)}
                             on:dragend={handleDragEnd}
+                            on:drop={handleDrop}
                             on:dragover={(e) => handleDragOver(e, index)}
-                            on:dragleave={handleDragLeave}
                         >
+                            {#if showDropIndicatorTop && draggedIndex !== index && draggedIndex !== index - 1}
+                                <!-- Visual polish: don't show if moving to self position -->
+                                <div
+                                    class="absolute top-0 left-7 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
+                                ></div>
+                            {/if}
+
+                            <!-- Special case: logic for bottom indicator is needed only for the last item or we rely on top indicators of next items. 
+                                 But since we render a list, the 'bottom' of item N is the 'top' of item N+1.
+                                 Exception: Last item.
+                            -->
+                            {#if showDropIndicatorBottom && index === workflowData.steps.length - 1 && draggedIndex !== index}
+                                <div
+                                    class="absolute bottom-0 left-7 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform translate-y-1/2 shadow-sm"
+                                ></div>
+                            {/if}
+
                             <div
-                                class="absolute left-0 top-2.5 w-5 h-5 rounded-full border-2 bg-white flex items-center justify-center text-[9px] font-bold shadow-sm transition-all duration-200"
-                                style="border-color: {color.border}; color: {color.border};"
+                                class="absolute left-0 top-2.5 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shadow-sm transition-all duration-200"
+                                style="background-color: {color.border}; color: white;"
                             >
                                 {index + 1}
                             </div>
@@ -962,10 +1115,7 @@
                                     ? 'ring-1 ring-blue-500/20 shadow-md border-blue-300'
                                     : 'border-gray-200 hover:border-blue-300'}
                                 {isBeingDragged
-                                    ? 'shadow-lg scale-[1.02] border-blue-400 ring-2 ring-blue-200'
-                                    : ''}
-                                {isDropTarget
-                                    ? 'border-blue-400 bg-blue-50/30'
+                                    ? 'shadow-none border-blue-200 bg-blue-50/20 ring-0'
                                     : ''}"
                             >
                                 <div
@@ -1097,18 +1247,18 @@
                                     >
                                         {#if stepDef}
                                             <div
-                                                class="bg-gray-50 rounded p-2 grid grid-cols-1 gap-1 text-[11px] text-gray-600 border border-gray-100"
+                                                class="bg-gray-50 rounded-lg p-3 border border-gray-100 flex flex-wrap gap-x-4 gap-y-3"
                                             >
                                                 {#each workflowSteps.columns.filter((col) => stepDef.values[col.id]) as col}
                                                     <div
-                                                        class="flex gap-2 items-start"
+                                                        class="flex flex-col gap-0.5 min-w-[120px] flex-1"
                                                     >
                                                         <span
-                                                            class="font-medium text-gray-400 min-w-[50px] text-[10px] uppercase tracking-wider"
+                                                            class="font-bold text-gray-400 text-[9px] uppercase tracking-wider"
                                                             >{col.name}</span
                                                         >
                                                         <span
-                                                            class="text-gray-700 break-all leading-tight"
+                                                            class="text-[11px] text-gray-700 leading-relaxed whitespace-pre-wrap break-words"
                                                             >{stepDef.values[
                                                                 col.id
                                                             ]}</span
@@ -1314,204 +1464,220 @@
                             >
                         </div>
                     {/if}
+
+                    <!-- Drop Zone for End of List -->
+                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                    <div
+                        class="flex-1 min-h-[50px]"
+                        on:dragover={handleContainerDragOver}
+                        on:drop={handleContainerDrop}
+                    ></div>
                 </div>
+
+                <!-- Attachment View/Edit Modal -->
+                {#if showAttachmentModal && editingAttachment}
+                    <div
+                        class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
+                        transition:fade={{ duration: 150 }}
+                        on:click={closeAttachmentModal}
+                    >
+                        <div
+                            class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
+                            transition:fly={{ y: 20, duration: 200 }}
+                            on:click|stopPropagation
+                        >
+                            <!-- Header -->
+                            <div
+                                class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50"
+                            >
+                                <h3 class="text-sm font-semibold text-gray-800">
+                                    {editingAttachment.type === "image"
+                                        ? "이미지 첨부"
+                                        : "텍스트 첨부"}
+                                </h3>
+                                <button
+                                    class="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+                                    on:click={closeAttachmentModal}
+                                >
+                                    <svg
+                                        class="w-5 h-5"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <path d="M18 6L6 18M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Content -->
+                            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                                {#if editingAttachment.type === "image"}
+                                    <div
+                                        class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
+                                    >
+                                        <img
+                                            src={editingAttachment.data}
+                                            alt="Attachment"
+                                            class="w-full max-h-[400px] object-contain"
+                                        />
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label
+                                            class="block text-xs font-medium text-gray-600"
+                                            >캡션</label
+                                        >
+                                        <input
+                                            type="text"
+                                            bind:value={modalCaption}
+                                            placeholder="이미지에 대한 설명을 입력하세요"
+                                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                                        />
+                                    </div>
+                                {:else}
+                                    <div class="space-y-1.5">
+                                        <label
+                                            class="block text-xs font-medium text-gray-600"
+                                            >내용</label
+                                        >
+                                        <textarea
+                                            value={editingAttachment.data}
+                                            on:input={(e) =>
+                                                updateAttachmentText(
+                                                    e.currentTarget.value,
+                                                )}
+                                            placeholder="텍스트 내용"
+                                            rows="6"
+                                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 resize-none"
+                                        ></textarea>
+                                    </div>
+                                {/if}
+
+                                <div class="text-[10px] text-gray-400">
+                                    추가됨: {new Date(
+                                        editingAttachment.createdAt,
+                                    ).toLocaleString("ko-KR")}
+                                </div>
+                            </div>
+
+                            <!-- Footer -->
+                            <div
+                                class="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50"
+                            >
+                                <button
+                                    class="px-3 py-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    on:click={deleteAttachmentFromModal}
+                                >
+                                    삭제
+                                </button>
+                                <div class="flex gap-2">
+                                    <button
+                                        class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                        on:click={closeAttachmentModal}
+                                    >
+                                        취소
+                                    </button>
+                                    <button
+                                        class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                                        on:click={saveAttachmentChanges}
+                                    >
+                                        저장
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {/if}
+
+                <!-- Image Add Modal (with caption) -->
+                {#if showImageAddModal && pendingImageData}
+                    <div
+                        class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
+                        transition:fade={{ duration: 150 }}
+                        on:click={closeImageAddModal}
+                    >
+                        <div
+                            class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
+                            transition:fly={{ y: 20, duration: 200 }}
+                            on:click|stopPropagation
+                        >
+                            <!-- Header -->
+                            <div
+                                class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50"
+                            >
+                                <h3 class="text-sm font-semibold text-gray-800">
+                                    이미지 추가
+                                </h3>
+                                <button
+                                    class="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+                                    on:click={closeImageAddModal}
+                                >
+                                    <svg
+                                        class="w-5 h-5"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                    >
+                                        <path d="M18 6L6 18M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Content -->
+                            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                                <div
+                                    class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
+                                >
+                                    <img
+                                        src={pendingImageData}
+                                        alt="Preview"
+                                        class="w-full max-h-[400px] object-contain"
+                                    />
+                                </div>
+                                <div class="space-y-1.5">
+                                    <label
+                                        class="block text-xs font-medium text-gray-600"
+                                        >캡션 (선택)</label
+                                    >
+                                    <input
+                                        type="text"
+                                        bind:value={pendingImageCaption}
+                                        placeholder="이미지에 대한 설명을 입력하세요"
+                                        class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                                        on:keypress={(e) =>
+                                            e.key === "Enter" &&
+                                            confirmAddImage()}
+                                        autofocus
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- Footer -->
+                            <div
+                                class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50/50"
+                            >
+                                <button
+                                    class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                    on:click={closeImageAddModal}
+                                >
+                                    취소
+                                </button>
+                                <button
+                                    class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                                    on:click={confirmAddImage}
+                                >
+                                    추가
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                {/if}
             {/if}
         </div>
     {/if}
 </div>
-
-<!-- Attachment View/Edit Modal -->
-{#if showAttachmentModal && editingAttachment}
-    <div
-        class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
-        transition:fade={{ duration: 150 }}
-        on:click={closeAttachmentModal}
-    >
-        <div
-            class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
-            transition:fly={{ y: 20, duration: 200 }}
-            on:click|stopPropagation
-        >
-            <!-- Header -->
-            <div
-                class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50"
-            >
-                <h3 class="text-sm font-semibold text-gray-800">
-                    {editingAttachment.type === "image"
-                        ? "이미지 첨부"
-                        : "텍스트 첨부"}
-                </h3>
-                <button
-                    class="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
-                    on:click={closeAttachmentModal}
-                >
-                    <svg
-                        class="w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                    >
-                        <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Content -->
-            <div class="flex-1 overflow-y-auto p-4 space-y-4">
-                {#if editingAttachment.type === "image"}
-                    <div
-                        class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
-                    >
-                        <img
-                            src={editingAttachment.data}
-                            alt="Attachment"
-                            class="w-full max-h-[400px] object-contain"
-                        />
-                    </div>
-                    <div class="space-y-1.5">
-                        <label class="block text-xs font-medium text-gray-600"
-                            >캡션</label
-                        >
-                        <input
-                            type="text"
-                            bind:value={modalCaption}
-                            placeholder="이미지에 대한 설명을 입력하세요"
-                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                        />
-                    </div>
-                {:else}
-                    <div class="space-y-1.5">
-                        <label class="block text-xs font-medium text-gray-600"
-                            >내용</label
-                        >
-                        <textarea
-                            value={editingAttachment.data}
-                            on:input={(e) =>
-                                updateAttachmentText(e.currentTarget.value)}
-                            placeholder="텍스트 내용"
-                            rows="6"
-                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 resize-none"
-                        ></textarea>
-                    </div>
-                {/if}
-
-                <div class="text-[10px] text-gray-400">
-                    추가됨: {new Date(
-                        editingAttachment.createdAt,
-                    ).toLocaleString("ko-KR")}
-                </div>
-            </div>
-
-            <!-- Footer -->
-            <div
-                class="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50"
-            >
-                <button
-                    class="px-3 py-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    on:click={deleteAttachmentFromModal}
-                >
-                    삭제
-                </button>
-                <div class="flex gap-2">
-                    <button
-                        class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        on:click={closeAttachmentModal}
-                    >
-                        취소
-                    </button>
-                    <button
-                        class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                        on:click={saveAttachmentChanges}
-                    >
-                        저장
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-{/if}
-
-<!-- Image Add Modal (with caption) -->
-{#if showImageAddModal && pendingImageData}
-    <div
-        class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
-        transition:fade={{ duration: 150 }}
-        on:click={closeImageAddModal}
-    >
-        <div
-            class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
-            transition:fly={{ y: 20, duration: 200 }}
-            on:click|stopPropagation
-        >
-            <!-- Header -->
-            <div
-                class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50"
-            >
-                <h3 class="text-sm font-semibold text-gray-800">이미지 추가</h3>
-                <button
-                    class="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
-                    on:click={closeImageAddModal}
-                >
-                    <svg
-                        class="w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                    >
-                        <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Content -->
-            <div class="flex-1 overflow-y-auto p-4 space-y-4">
-                <div
-                    class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
-                >
-                    <img
-                        src={pendingImageData}
-                        alt="Preview"
-                        class="w-full max-h-[400px] object-contain"
-                    />
-                </div>
-                <div class="space-y-1.5">
-                    <label class="block text-xs font-medium text-gray-600"
-                        >캡션 (선택)</label
-                    >
-                    <input
-                        type="text"
-                        bind:value={pendingImageCaption}
-                        placeholder="이미지에 대한 설명을 입력하세요"
-                        class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
-                        on:keypress={(e) =>
-                            e.key === "Enter" && confirmAddImage()}
-                        autofocus
-                    />
-                </div>
-            </div>
-
-            <!-- Footer -->
-            <div
-                class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50/50"
-            >
-                <button
-                    class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                    on:click={closeImageAddModal}
-                >
-                    취소
-                </button>
-                <button
-                    class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                    on:click={confirmAddImage}
-                >
-                    추가
-                </button>
-            </div>
-        </div>
-    </div>
-{/if}
 
 <style>
     /* Custom Scrollbar for popup chips */
@@ -1523,25 +1689,10 @@
         scrollbar-width: none;
     }
 
-    /* Step category badge - auto-shrink font for long text */
+    /* Step category badge */
     .step-category-badge {
         font-size: 9px;
-        max-width: 70px;
-        min-width: 28px;
-        text-overflow: ellipsis;
-        overflow: hidden;
         white-space: nowrap;
-    }
-
-    /* If text is very long, shrink it */
-    .step-category-badge:has(+ *) {
-        container-type: inline-size;
-    }
-
-    @container (max-width: 50px) {
-        .step-category-badge {
-            font-size: 8px;
-        }
     }
 
     /* Drag cursor for step items */
