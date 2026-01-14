@@ -92,7 +92,10 @@
         <WorkflowSection
             isExpanded={expandedSection === "workflow"}
             {workflowData}
-            workflowSteps={settings?.workflow_steps || { columns: [], rows: [] }}
+            workflowSteps={settings?.workflow_steps || {
+                columns: [],
+                rows: [],
+            }}
             {savingWorkflow}
             {captureMode}
             {captureTargetStepId}
@@ -101,6 +104,8 @@
             on:workflowChange
             on:toggleCaptureMode
             on:deleteWorkflow
+            on:deleteStepDefinition
+            on:createStepDefinition
         />
 
         <!-- Summary Section -->

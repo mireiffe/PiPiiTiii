@@ -7,6 +7,7 @@
         WorkflowStepRow,
         WorkflowStepInstance,
         ProjectWorkflowData,
+        StepAttachment,
     } from "$lib/types/workflow";
     import {
         createEmptyWorkflowData,
@@ -34,6 +35,18 @@
     let attachmentTextInput = "";
     let popupRef: HTMLDivElement | null = null;
 
+    // --- Attachment Modal State ---
+    let showAttachmentModal = false;
+    let editingAttachment: StepAttachment | null = null;
+    let editingAttachmentStepId: string | null = null;
+    let modalCaption = "";
+
+    // --- Image Add Modal State ---
+    let showImageAddModal = false;
+    let pendingImageData: string | null = null;
+    let pendingImageStepId: string | null = null;
+    let pendingImageCaption = "";
+
     // --- Drag & Drop State ---
     let draggedIndex: number | null = null;
     let dragOverIndex: number | null = null;
@@ -44,26 +57,34 @@
         draggedIndex = index;
         isDragging = true;
         if (event.dataTransfer) {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', index.toString());
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", index.toString());
         }
         // Add slight delay to allow drag image to be set
         setTimeout(() => {
             const target = event.target as HTMLElement;
-            target.style.opacity = '0.5';
+            target.style.opacity = "0.5";
         }, 0);
     }
 
     function handleDragEnd(event: DragEvent) {
         const target = event.target as HTMLElement;
-        target.style.opacity = '1';
+        target.style.opacity = "1";
 
         // Apply the reorder if we have valid indices
-        if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+        if (
+            draggedIndex !== null &&
+            dragOverIndex !== null &&
+            draggedIndex !== dragOverIndex
+        ) {
             const steps = [...workflowData.steps];
             const [removed] = steps.splice(draggedIndex, 1);
             steps.splice(dragOverIndex, 0, removed);
-            workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
+            workflowData = {
+                ...workflowData,
+                steps,
+                updatedAt: new Date().toISOString(),
+            };
             dispatch("workflowChange", workflowData);
         }
 
@@ -75,7 +96,7 @@
     function handleDragOver(event: DragEvent, index: number) {
         event.preventDefault();
         if (event.dataTransfer) {
-            event.dataTransfer.dropEffect = 'move';
+            event.dataTransfer.dropEffect = "move";
         }
         if (draggedIndex !== null && index !== draggedIndex) {
             dragOverIndex = index;
@@ -85,28 +106,29 @@
     function handleDragLeave(event: DragEvent) {
         // Only reset if leaving the container entirely
         const relatedTarget = event.relatedTarget as HTMLElement;
-        if (!relatedTarget?.closest('.step-item')) {
+        if (!relatedTarget?.closest(".step-item")) {
             // Keep dragOverIndex as is to maintain visual feedback
         }
     }
 
     function getStepTransform(index: number): string {
-        if (!isDragging || draggedIndex === null || dragOverIndex === null) return '';
-        if (index === draggedIndex) return '';
+        if (!isDragging || draggedIndex === null || dragOverIndex === null)
+            return "";
+        if (index === draggedIndex) return "";
 
         // Calculate displacement based on drag position
         if (draggedIndex < dragOverIndex) {
             // Dragging downward
             if (index > draggedIndex && index <= dragOverIndex) {
-                return 'translateY(-100%)';
+                return "translateY(-100%)";
             }
         } else {
             // Dragging upward
             if (index < draggedIndex && index >= dragOverIndex) {
-                return 'translateY(100%)';
+                return "translateY(100%)";
             }
         }
-        return '';
+        return "";
     }
 
     // --- Helpers & Handlers ---
@@ -118,8 +140,14 @@
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-        if (event.key === "Escape" && captureMode) {
-            exitCaptureMode();
+        if (event.key === "Escape") {
+            if (showAttachmentModal) {
+                closeAttachmentModal();
+            } else if (showImageAddModal) {
+                closeImageAddModal();
+            } else if (captureMode) {
+                exitCaptureMode();
+            }
         }
     }
 
@@ -132,29 +160,38 @@
     });
 
     const CAPTURE_COLORS = [
-        { bg: 'rgba(59, 130, 246, 0.1)', border: '#3b82f6', text: '#2563eb' },
-        { bg: 'rgba(34, 197, 94, 0.1)', border: '#22c55e', text: '#16a34a' },
-        { bg: 'rgba(168, 85, 247, 0.1)', border: '#a855f7', text: '#9333ea' },
-        { bg: 'rgba(249, 115, 22, 0.1)', border: '#f97316', text: '#ea580c' },
-        { bg: 'rgba(236, 72, 153, 0.1)', border: '#ec4899', text: '#db2777' },
-        { bg: 'rgba(20, 184, 166, 0.1)', border: '#14b8a6', text: '#0d9488' },
+        { bg: "rgba(59, 130, 246, 0.1)", border: "#3b82f6", text: "#2563eb" },
+        { bg: "rgba(34, 197, 94, 0.1)", border: "#22c55e", text: "#16a34a" },
+        { bg: "rgba(168, 85, 247, 0.1)", border: "#a855f7", text: "#9333ea" },
+        { bg: "rgba(249, 115, 22, 0.1)", border: "#f97316", text: "#ea580c" },
+        { bg: "rgba(236, 72, 153, 0.1)", border: "#ec4899", text: "#db2777" },
+        { bg: "rgba(20, 184, 166, 0.1)", border: "#14b8a6", text: "#0d9488" },
     ];
 
-    $: categories = [...new Set(workflowSteps.rows.map(r => r.values["step_category"]).filter(Boolean))];
+    $: categories = [
+        ...new Set(
+            workflowSteps.rows
+                .map((r) => r.values["step_category"])
+                .filter(Boolean),
+        ),
+    ];
 
-    $: filteredSteps = workflowSteps.rows.filter(row => {
+    $: filteredSteps = workflowSteps.rows.filter((row) => {
         if (selectedCategoryTab !== "all") {
-            if (row.values["step_category"] !== selectedCategoryTab) return false;
+            if (row.values["step_category"] !== selectedCategoryTab)
+                return false;
         }
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
-            return Object.values(row.values).some(v => v?.toLowerCase().includes(query));
+            return Object.values(row.values).some((v) =>
+                v?.toLowerCase().includes(query),
+            );
         }
         return true;
     });
 
     function getStepDefinition(stepId: string): WorkflowStepRow | undefined {
-        return workflowSteps.rows.find(r => r.id === stepId);
+        return workflowSteps.rows.find((r) => r.id === stepId);
     }
 
     function getStepDisplayText(step: WorkflowStepInstance): string {
@@ -164,7 +201,10 @@
     }
 
     function handleAddStep(stepRow: WorkflowStepRow) {
-        const newStep = createStepInstance(stepRow.id, workflowData.steps.length);
+        const newStep = createStepInstance(
+            stepRow.id,
+            workflowData.steps.length,
+        );
         workflowData = {
             ...workflowData,
             steps: [...workflowData.steps, newStep],
@@ -178,41 +218,70 @@
 
     // Count how many times a step definition is used in current workflow
     function getStepUsageCount(stepId: string): number {
-        return workflowData.steps.filter(s => s.stepId === stepId).length;
+        return workflowData.steps.filter((s) => s.stepId === stepId).length;
     }
 
-    // Handle delete from popup (for step definitions used in workflow)
-    function handleDeleteStepFromPopup(event: MouseEvent, stepRow: WorkflowStepRow) {
+    // Handle delete from popup - only allowed for UNUSED step definitions
+    function handleDeleteStepFromPopup(
+        event: MouseEvent,
+        stepRow: WorkflowStepRow,
+    ) {
         event.stopPropagation();
         const usageCount = getStepUsageCount(stepRow.id);
 
-        if (usageCount === 0) {
-            alert("이 스텝은 현재 워크플로우에서 사용되지 않고 있습니다.");
+        if (usageCount > 0) {
+            alert(
+                `이 스텝은 워크플로우에서 ${usageCount}번 사용 중입니다.\n설정 페이지에서 직접 삭제해주세요.`,
+            );
             return;
         }
 
-        if (usageCount > 1) {
-            alert(`이 스텝은 워크플로우에서 ${usageCount}번 사용 중입니다.\n각 스텝 카드로 이동하여 개별적으로 삭제해주세요.`);
+        // usageCount === 0 - can delete from settings
+        if (
+            confirm(
+                "이 스텝 정의를 설정에서 삭제하시겠습니까?\n(모든 프로젝트에서 이 스텝을 사용할 수 없게 됩니다)",
+            )
+        ) {
+            dispatch("deleteStepDefinition", { stepId: stepRow.id });
             showAddStepPopup = false;
+        }
+    }
+
+    // State for adding new step
+    let showNewStepForm = false;
+    let newStepValues: Record<string, string> = {};
+
+    function initNewStepForm() {
+        newStepValues = {};
+        workflowSteps.columns.forEach((col) => {
+            newStepValues[col.id] = "";
+        });
+        showNewStepForm = true;
+    }
+
+    function handleAddNewStep() {
+        // Check if purpose is filled (required)
+        if (!newStepValues["purpose"]?.trim()) {
+            alert("목적을 입력해주세요.");
             return;
         }
 
-        // usageCount === 1
-        if (confirm("이 스텝을 워크플로우에서 삭제하시겠습니까?")) {
-            const stepInstance = workflowData.steps.find(s => s.stepId === stepRow.id);
-            if (stepInstance) {
-                if (captureTargetStepId === stepInstance.id) {
-                    dispatch("toggleCaptureMode", { stepId: null });
-                }
-                workflowData = {
-                    ...workflowData,
-                    steps: workflowData.steps.filter(s => s.stepId !== stepRow.id),
-                    updatedAt: new Date().toISOString(),
-                };
-                dispatch("workflowChange", workflowData);
-            }
-            showAddStepPopup = false;
-        }
+        // Trim all values
+        const trimmedValues: Record<string, string> = {};
+        Object.keys(newStepValues).forEach((key) => {
+            trimmedValues[key] = newStepValues[key]?.trim() || "";
+        });
+
+        dispatch("createStepDefinition", { values: trimmedValues });
+
+        // Reset form
+        newStepValues = {};
+        showNewStepForm = false;
+    }
+
+    function cancelNewStepForm() {
+        newStepValues = {};
+        showNewStepForm = false;
     }
 
     function handleRemoveStep(stepId: string) {
@@ -222,7 +291,7 @@
             }
             workflowData = {
                 ...workflowData,
-                steps: workflowData.steps.filter(s => s.id !== stepId),
+                steps: workflowData.steps.filter((s) => s.id !== stepId),
                 updatedAt: new Date().toISOString(),
             };
             dispatch("workflowChange", workflowData);
@@ -245,24 +314,44 @@
 
     function toggleAttachmentSection(stepId: string) {
         if (captureMode) exitCaptureMode();
-        addingAttachmentToStepId = addingAttachmentToStepId === stepId ? null : stepId;
+        addingAttachmentToStepId =
+            addingAttachmentToStepId === stepId ? null : stepId;
     }
 
-    export function addCapture(capture: { slideIndex: number; x: number; y: number; width: number; height: number; }) {
+    export function addCapture(capture: {
+        slideIndex: number;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    }) {
         if (!captureTargetStepId) return;
-        const stepIndex = workflowData.steps.findIndex(s => s.id === captureTargetStepId);
+        const stepIndex = workflowData.steps.findIndex(
+            (s) => s.id === captureTargetStepId,
+        );
         if (stepIndex === -1) return;
-        
-        const newCapture = createStepCapture(capture.slideIndex, capture.x, capture.y, capture.width, capture.height);
-        workflowData.steps[stepIndex].captures = [...workflowData.steps[stepIndex].captures, newCapture];
+
+        const newCapture = createStepCapture(
+            capture.slideIndex,
+            capture.x,
+            capture.y,
+            capture.width,
+            capture.height,
+        );
+        workflowData.steps[stepIndex].captures = [
+            ...workflowData.steps[stepIndex].captures,
+            newCapture,
+        ];
         workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
         dispatch("workflowChange", workflowData);
     }
 
     function removeCapture(stepId: string, captureId: string) {
-        const stepIndex = workflowData.steps.findIndex(s => s.id === stepId);
+        const stepIndex = workflowData.steps.findIndex((s) => s.id === stepId);
         if (stepIndex === -1) return;
-        workflowData.steps[stepIndex].captures = workflowData.steps[stepIndex].captures.filter(c => c.id !== captureId);
+        workflowData.steps[stepIndex].captures = workflowData.steps[
+            stepIndex
+        ].captures.filter((c) => c.id !== captureId);
         workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
         dispatch("workflowChange", workflowData);
     }
@@ -271,12 +360,13 @@
         const items = event.clipboardData?.items;
         if (!items) return;
         for (const item of items) {
-            if (item.type.startsWith('image/')) {
+            if (item.type.startsWith("image/")) {
                 event.preventDefault();
                 const blob = item.getAsFile();
                 if (!blob) continue;
                 const reader = new FileReader();
-                reader.onload = () => addImageAttachment(stepId, reader.result as string);
+                reader.onload = () =>
+                    addImageAttachment(stepId, reader.result as string);
                 reader.readAsDataURL(blob);
                 return;
             }
@@ -284,20 +374,19 @@
     }
 
     function addImageAttachment(stepId: string, base64Data: string) {
-        const stepIndex = workflowData.steps.findIndex(s => s.id === stepId);
-        if (stepIndex === -1) return;
-        const attachment = createAttachment('image', base64Data);
-        workflowData.steps[stepIndex].attachments = [...workflowData.steps[stepIndex].attachments, attachment];
-        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
-        dispatch("workflowChange", workflowData);
+        // Open modal for image caption input
+        openImageAddModal(stepId, base64Data);
     }
 
     function addTextAttachment(stepId: string) {
         if (!attachmentTextInput.trim()) return;
-        const stepIndex = workflowData.steps.findIndex(s => s.id === stepId);
+        const stepIndex = workflowData.steps.findIndex((s) => s.id === stepId);
         if (stepIndex === -1) return;
-        const attachment = createAttachment('text', attachmentTextInput.trim());
-        workflowData.steps[stepIndex].attachments = [...workflowData.steps[stepIndex].attachments, attachment];
+        const attachment = createAttachment("text", attachmentTextInput.trim());
+        workflowData.steps[stepIndex].attachments = [
+            ...workflowData.steps[stepIndex].attachments,
+            attachment,
+        ];
         workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
         dispatch("workflowChange", workflowData);
         attachmentTextInput = "";
@@ -305,11 +394,125 @@
     }
 
     function removeAttachment(stepId: string, attachmentId: string) {
-        const stepIndex = workflowData.steps.findIndex(s => s.id === stepId);
+        const stepIndex = workflowData.steps.findIndex((s) => s.id === stepId);
         if (stepIndex === -1) return;
-        workflowData.steps[stepIndex].attachments = workflowData.steps[stepIndex].attachments.filter(a => a.id !== attachmentId);
+        workflowData.steps[stepIndex].attachments = workflowData.steps[
+            stepIndex
+        ].attachments.filter((a) => a.id !== attachmentId);
         workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
         dispatch("workflowChange", workflowData);
+    }
+
+    // --- Attachment Modal Functions ---
+    function openAttachmentModal(stepId: string, attachment: StepAttachment) {
+        editingAttachmentStepId = stepId;
+        editingAttachment = attachment;
+        modalCaption = attachment.caption || "";
+        showAttachmentModal = true;
+    }
+
+    function closeAttachmentModal() {
+        showAttachmentModal = false;
+        editingAttachment = null;
+        editingAttachmentStepId = null;
+        modalCaption = "";
+    }
+
+    function saveAttachmentChanges() {
+        if (!editingAttachment || !editingAttachmentStepId) return;
+
+        const stepIndex = workflowData.steps.findIndex(
+            (s) => s.id === editingAttachmentStepId,
+        );
+        if (stepIndex === -1) return;
+
+        const attachmentIndex = workflowData.steps[
+            stepIndex
+        ].attachments.findIndex((a) => a.id === editingAttachment!.id);
+        if (attachmentIndex === -1) return;
+
+        workflowData.steps[stepIndex].attachments[attachmentIndex] = {
+            ...workflowData.steps[stepIndex].attachments[attachmentIndex],
+            caption: modalCaption.trim() || undefined,
+        };
+
+        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
+        closeAttachmentModal();
+    }
+
+    function updateAttachmentText(newText: string) {
+        if (
+            !editingAttachment ||
+            !editingAttachmentStepId ||
+            editingAttachment.type !== "text"
+        )
+            return;
+
+        const stepIndex = workflowData.steps.findIndex(
+            (s) => s.id === editingAttachmentStepId,
+        );
+        if (stepIndex === -1) return;
+
+        const attachmentIndex = workflowData.steps[
+            stepIndex
+        ].attachments.findIndex((a) => a.id === editingAttachment!.id);
+        if (attachmentIndex === -1) return;
+
+        workflowData.steps[stepIndex].attachments[attachmentIndex] = {
+            ...workflowData.steps[stepIndex].attachments[attachmentIndex],
+            data: newText,
+        };
+
+        editingAttachment = { ...editingAttachment, data: newText };
+        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
+    }
+
+    function deleteAttachmentFromModal() {
+        if (!editingAttachment || !editingAttachmentStepId) return;
+        if (confirm("이 첨부를 삭제하시겠습니까?")) {
+            removeAttachment(editingAttachmentStepId, editingAttachment.id);
+            closeAttachmentModal();
+        }
+    }
+
+    // --- Image Add Modal Functions ---
+    function openImageAddModal(stepId: string, base64Data: string) {
+        pendingImageStepId = stepId;
+        pendingImageData = base64Data;
+        pendingImageCaption = "";
+        showImageAddModal = true;
+    }
+
+    function closeImageAddModal() {
+        showImageAddModal = false;
+        pendingImageData = null;
+        pendingImageStepId = null;
+        pendingImageCaption = "";
+    }
+
+    function confirmAddImage() {
+        if (!pendingImageStepId || !pendingImageData) return;
+
+        const stepIndex = workflowData.steps.findIndex(
+            (s) => s.id === pendingImageStepId,
+        );
+        if (stepIndex === -1) return;
+
+        const attachment = createAttachment(
+            "image",
+            pendingImageData,
+            pendingImageCaption.trim() || undefined,
+        );
+        workflowData.steps[stepIndex].attachments = [
+            ...workflowData.steps[stepIndex].attachments,
+            attachment,
+        ];
+        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
+
+        closeImageAddModal();
     }
 
     export function getCaptureOverlays() {
@@ -318,7 +521,12 @@
         for (const step of workflowData.steps) {
             const color = CAPTURE_COLORS[colorIndex % CAPTURE_COLORS.length];
             for (const capture of step.captures) {
-                overlays.push({ ...capture, stepId: step.id, color, colorIndex });
+                overlays.push({
+                    ...capture,
+                    stepId: step.id,
+                    color,
+                    colorIndex,
+                });
             }
             colorIndex++;
         }
@@ -335,7 +543,11 @@
         if (index === 0) return;
         const steps = [...workflowData.steps];
         [steps[index - 1], steps[index]] = [steps[index], steps[index - 1]];
-        workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
+        workflowData = {
+            ...workflowData,
+            steps,
+            updatedAt: new Date().toISOString(),
+        };
         dispatch("workflowChange", workflowData);
     }
 
@@ -343,7 +555,11 @@
         if (index === workflowData.steps.length - 1) return;
         const steps = [...workflowData.steps];
         [steps[index], steps[index + 1]] = [steps[index + 1], steps[index]];
-        workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
+        workflowData = {
+            ...workflowData,
+            steps,
+            updatedAt: new Date().toISOString(),
+        };
         dispatch("workflowChange", workflowData);
     }
 
@@ -356,7 +572,11 @@
 
 <svelte:window on:click={handleClickOutside} />
 
-<div class="border-b border-gray-200 bg-white flex flex-col {isExpanded ? 'flex-1 min-h-0' : ''}">
+<div
+    class="border-b border-gray-200 bg-white flex flex-col {isExpanded
+        ? 'flex-1 min-h-0'
+        : ''}"
+>
     <AccordionHeader
         icon="⚡"
         title="Workflow"
@@ -366,16 +586,25 @@
         <svelte:fragment slot="actions">
             {#if isExpanded}
                 <div class="flex items-center gap-1 mr-2">
-                    <div class="flex bg-gray-100 p-0.5 rounded-md border border-gray-200">
+                    <div
+                        class="flex bg-gray-100 p-0.5 rounded-md border border-gray-200"
+                    >
                         <button
-                            class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-all {viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-700'}"
-                            on:click|stopPropagation={() => viewMode = "list"}
+                            class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-all {viewMode ===
+                            'list'
+                                ? 'bg-white text-gray-900 shadow-sm'
+                                : 'text-gray-400 hover:text-gray-700'}"
+                            on:click|stopPropagation={() => (viewMode = "list")}
                         >
                             List
                         </button>
                         <button
-                            class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-all {viewMode === 'graph' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-700'}"
-                            on:click|stopPropagation={() => viewMode = "graph"}
+                            class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-all {viewMode ===
+                            'graph'
+                                ? 'bg-white text-gray-900 shadow-sm'
+                                : 'text-gray-400 hover:text-gray-700'}"
+                            on:click|stopPropagation={() =>
+                                (viewMode = "graph")}
                         >
                             Graph
                         </button>
@@ -385,7 +614,18 @@
                         on:click|stopPropagation={handleDeleteWorkflow}
                         title="전체 초기화"
                     >
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            ><path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            /></svg
+                        >
                     </button>
                 </div>
             {/if}
@@ -393,18 +633,25 @@
     </AccordionHeader>
 
     {#if isExpanded}
-        <div transition:slide={{ duration: 200 }} class="flex-1 flex flex-col min-h-[400px] bg-gray-50/50 relative overflow-hidden">
-            
+        <div
+            transition:slide={{ duration: 200 }}
+            class="flex-1 flex flex-col min-h-[400px] bg-gray-50/50 relative overflow-hidden"
+        >
             {#if viewMode === "graph"}
                 <WorkflowGraph {workflowData} {workflowSteps} />
             {:else}
                 <!-- Add Step Button - Fixed at top -->
-                <div class="p-3 pb-0 bg-gray-50/50 border-b border-gray-100 relative">
+                <div
+                    class="p-3 pb-0 bg-gray-50/50 border-b border-gray-100 relative"
+                >
                     <button
                         class="w-full py-2.5 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
-                        on:click|stopPropagation={() => showAddStepPopup = !showAddStepPopup}
+                        on:click|stopPropagation={() =>
+                            (showAddStepPopup = !showAddStepPopup)}
                     >
-                        <span class="text-xs font-medium">＋ 다음 스텝 연결</span>
+                        <span class="text-xs font-medium"
+                            >＋ 다음 스텝 연결</span
+                        >
                     </button>
 
                     {#if showAddStepPopup}
@@ -414,9 +661,22 @@
                             transition:fly={{ y: -10, duration: 150 }}
                             on:click|stopPropagation
                         >
-                            <div class="p-2 border-b border-gray-100 bg-gray-50/80 backdrop-blur sticky top-0">
+                            <div
+                                class="p-2 border-b border-gray-100 bg-gray-50/80 backdrop-blur sticky top-0"
+                            >
                                 <div class="relative mb-1.5">
-                                    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                    <svg
+                                        class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                        ><path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                        /></svg
+                                    >
                                     <input
                                         type="text"
                                         bind:value={searchQuery}
@@ -425,17 +685,28 @@
                                         autoFocus
                                     />
                                 </div>
-                                <div class="flex gap-1 overflow-x-auto no-scrollbar pb-0.5">
+                                <div
+                                    class="flex gap-1 overflow-x-auto no-scrollbar pb-0.5"
+                                >
                                     <button
-                                        class="px-2 py-0.5 text-[10px] font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab === 'all' ? 'bg-gray-700 text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}"
-                                        on:click={() => selectedCategoryTab = "all"}
+                                        class="px-2 py-0.5 text-[10px] font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab ===
+                                        'all'
+                                            ? 'bg-gray-700 text-white'
+                                            : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}"
+                                        on:click={() =>
+                                            (selectedCategoryTab = "all")}
                                     >
                                         All
                                     </button>
                                     {#each categories as category}
                                         <button
-                                            class="px-2 py-0.5 text-[10px] font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab === category ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}"
-                                            on:click={() => selectedCategoryTab = category}
+                                            class="px-2 py-0.5 text-[10px] font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab ===
+                                            category
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}"
+                                            on:click={() =>
+                                                (selectedCategoryTab =
+                                                    category)}
                                         >
                                             {category}
                                         </button>
@@ -443,54 +714,202 @@
                                 </div>
                             </div>
 
-                            <div class="flex-1 overflow-y-auto p-2 bg-gray-50/50 space-y-1.5">
-                                {#if filteredSteps.length === 0}
+                            <div
+                                class="flex-1 overflow-y-auto p-2 bg-gray-50/50 space-y-1.5"
+                            >
+                                <!-- New Step Form -->
+                                {#if showNewStepForm}
+                                    <div
+                                        class="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2.5"
+                                        transition:slide={{ duration: 150 }}
+                                    >
+                                        <div
+                                            class="text-xs font-medium text-blue-700"
+                                        >
+                                            새 스텝 추가
+                                        </div>
+                                        <div class="space-y-2">
+                                            {#each workflowSteps.columns as column (column.id)}
+                                                <div
+                                                    class="flex items-center gap-2"
+                                                >
+                                                    <label
+                                                        class="text-[10px] text-gray-500 w-16 shrink-0 text-right"
+                                                    >
+                                                        {column.name}
+                                                        {#if column.id === "purpose"}
+                                                            <span
+                                                                class="text-red-500"
+                                                                >*</span
+                                                            >
+                                                        {/if}
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        bind:value={
+                                                            newStepValues[
+                                                                column.id
+                                                            ]
+                                                        }
+                                                        placeholder={column.name}
+                                                        class="flex-1 px-2 py-1 text-xs border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                                                        on:keypress={(e) =>
+                                                            e.key === "Enter" &&
+                                                            handleAddNewStep()}
+                                                    />
+                                                </div>
+                                            {/each}
+                                        </div>
+                                        <div
+                                            class="flex justify-end gap-2 pt-1"
+                                        >
+                                            <button
+                                                class="px-2.5 py-1 text-[10px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                                on:click={cancelNewStepForm}
+                                            >
+                                                취소
+                                            </button>
+                                            <button
+                                                class="px-2.5 py-1 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-medium"
+                                                on:click={handleAddNewStep}
+                                            >
+                                                추가
+                                            </button>
+                                        </div>
+                                    </div>
+                                {:else}
+                                    <button
+                                        class="w-full p-2 border border-dashed border-blue-300 rounded-lg text-blue-500 hover:bg-blue-50 hover:border-blue-400 transition-all flex items-center justify-center gap-1 text-xs"
+                                        on:click={initNewStepForm}
+                                    >
+                                        <svg
+                                            class="w-3.5 h-3.5"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M12 4v16m8-8H4"
+                                            />
+                                        </svg>
+                                        새 스텝 정의 추가
+                                    </button>
+                                {/if}
+
+                                {#if filteredSteps.length === 0 && !showNewStepForm}
                                     <div class="py-6 text-center text-gray-400">
-                                        <p class="text-[10px]">일치하는 스텝이 없습니다</p>
+                                        <p class="text-[10px]">
+                                            일치하는 스텝이 없습니다
+                                        </p>
                                     </div>
                                 {:else}
                                     {#each filteredSteps as step, idx (step.id)}
-                                        {@const usageCount = getStepUsageCount(step.id)}
+                                        {@const usageCount = getStepUsageCount(
+                                            step.id,
+                                        )}
                                         <div
                                             class="w-full text-left p-2.5 bg-white hover:bg-blue-50/80 rounded-lg group transition-all flex items-start gap-2.5 cursor-pointer border border-gray-100 hover:border-blue-200 hover:shadow-sm"
                                             on:click={() => handleAddStep(step)}
                                         >
                                             <!-- Index number -->
-                                            <div class="shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[10px] font-semibold group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                            <div
+                                                class="shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[10px] font-semibold group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors"
+                                            >
                                                 {idx + 1}
                                             </div>
 
                                             <div class="flex-1 min-w-0">
-                                                <div class="flex items-start gap-1.5 mb-1">
-                                                    <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold tracking-tight shrink-0 step-category-badge">
-                                                        {step.values["step_category"] || "ETC"}
+                                                <div
+                                                    class="flex items-start gap-1.5 mb-1"
+                                                >
+                                                    <span
+                                                        class="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold tracking-tight shrink-0 step-category-badge"
+                                                    >
+                                                        {step.values[
+                                                            "step_category"
+                                                        ] || "ETC"}
                                                     </span>
-                                                    <span class="text-xs font-medium text-gray-800 group-hover:text-blue-700 break-words leading-snug flex-1">
-                                                        {step.values["purpose"] || "목적 없음"}
+                                                    <span
+                                                        class="text-xs font-medium text-gray-800 group-hover:text-blue-700 break-words leading-snug flex-1"
+                                                    >
+                                                        {step.values[
+                                                            "purpose"
+                                                        ] || "목적 없음"}
                                                     </span>
                                                 </div>
-                                                <div class="text-[10px] text-gray-400 pl-0.5 break-words leading-snug line-clamp-2">
-                                                    {step.values["action"] || step.values["expected_result"] || "-"}
+                                                <div
+                                                    class="text-[10px] text-gray-400 pl-0.5 break-words leading-snug line-clamp-2"
+                                                >
+                                                    {step.values["action"] ||
+                                                        step.values[
+                                                            "expected_result"
+                                                        ] ||
+                                                        "-"}
                                                 </div>
                                             </div>
 
-                                            <div class="flex items-center gap-1.5 shrink-0 self-center">
+                                            <div
+                                                class="flex items-center gap-1.5 shrink-0 self-center"
+                                            >
                                                 {#if usageCount > 0}
-                                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium whitespace-nowrap">
+                                                    <span
+                                                        class="text-[9px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium whitespace-nowrap"
+                                                    >
                                                         {usageCount}회 사용
                                                     </span>
+                                                    <span
+                                                        class="p-1 text-gray-200 cursor-not-allowed"
+                                                        title="사용 중인 스텝은 설정에서 삭제해주세요"
+                                                    >
+                                                        <svg
+                                                            class="w-3 h-3"
+                                                            viewBox="0 0 24 24"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            stroke-width="2"
+                                                        >
+                                                            <path
+                                                                d="M12 15v2m0 0v2m0-2h2m-2 0H10m9.364-9.364l-2.829 2.829m0 0L14.5 12.5m2.036-2.035a3 3 0 10-4.07 4.07m4.07-4.07l-4.07 4.07M5.636 5.636l2.829 2.829m0 0l2.035 2.035m-2.035-2.035a3 3 0 104.07 4.07"
+                                                            />
+                                                        </svg>
+                                                    </span>
+                                                {:else}
                                                     <button
                                                         class="p-1 hover:bg-red-100 rounded text-gray-300 hover:text-red-500 transition-colors"
-                                                        on:click={(e) => handleDeleteStepFromPopup(e, step)}
-                                                        title="워크플로우에서 삭제"
+                                                        on:click={(e) =>
+                                                            handleDeleteStepFromPopup(
+                                                                e,
+                                                                step,
+                                                            )}
+                                                        title="스텝 정의 삭제"
                                                     >
-                                                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        <svg
+                                                            class="w-3 h-3"
+                                                            viewBox="0 0 24 24"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            stroke-width="2"
+                                                        >
+                                                            <path
+                                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                            />
                                                         </svg>
                                                     </button>
-                                                {:else}
-                                                    <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                    <svg
+                                                        class="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M12 4v16m8-8H4"
+                                                        />
                                                     </svg>
                                                 {/if}
                                             </div>
@@ -503,20 +922,27 @@
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-3 space-y-2 relative">
-                    <div class="absolute left-[23px] top-3 bottom-3 w-px bg-gray-200 z-0"></div>
+                    <div
+                        class="absolute left-[23px] top-3 bottom-3 w-px bg-gray-200 z-0"
+                    ></div>
 
                     {#each workflowData.steps as step, index (step.id)}
                         {@const stepDef = getStepDefinition(step.stepId)}
-                        {@const color = CAPTURE_COLORS[index % CAPTURE_COLORS.length]}
+                        {@const color =
+                            CAPTURE_COLORS[index % CAPTURE_COLORS.length]}
                         {@const isCapturing = captureTargetStepId === step.id}
-                        {@const isAddingAttach = addingAttachmentToStepId === step.id}
+                        {@const isAddingAttach =
+                            addingAttachmentToStepId === step.id}
                         {@const stepTransform = getStepTransform(index)}
                         {@const isBeingDragged = draggedIndex === index}
-                        {@const isDropTarget = dragOverIndex === index && draggedIndex !== index}
+                        {@const isDropTarget =
+                            dragOverIndex === index && draggedIndex !== index}
 
                         <div
                             class="step-item relative z-10 pl-7 transition-transform duration-200 ease-out"
-                            style="transform: {stepTransform}; {isBeingDragged ? 'z-index: 50;' : ''}"
+                            style="transform: {stepTransform}; {isBeingDragged
+                                ? 'z-index: 50;'
+                                : ''}"
                             draggable="true"
                             on:dragstart={(e) => handleDragStart(e, index)}
                             on:dragend={handleDragEnd}
@@ -532,32 +958,62 @@
 
                             <div
                                 class="bg-white rounded-lg border shadow-sm overflow-hidden transition-all duration-200 group
-                                {expandedStepId === step.id ? 'ring-1 ring-blue-500/20 shadow-md border-blue-300' : 'border-gray-200 hover:border-blue-300'}
-                                {isBeingDragged ? 'shadow-lg scale-[1.02] border-blue-400 ring-2 ring-blue-200' : ''}
-                                {isDropTarget ? 'border-blue-400 bg-blue-50/30' : ''}"
+                                {expandedStepId === step.id
+                                    ? 'ring-1 ring-blue-500/20 shadow-md border-blue-300'
+                                    : 'border-gray-200 hover:border-blue-300'}
+                                {isBeingDragged
+                                    ? 'shadow-lg scale-[1.02] border-blue-400 ring-2 ring-blue-200'
+                                    : ''}
+                                {isDropTarget
+                                    ? 'border-blue-400 bg-blue-50/30'
+                                    : ''}"
                             >
                                 <div
                                     class="p-2 cursor-pointer hover:bg-gray-50/50 flex items-start justify-between gap-2"
                                     on:click={() => toggleStepExpand(step.id)}
                                 >
                                     <!-- Drag Handle -->
-                                    <div class="flex items-center pr-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity self-center">
-                                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                                            <circle cx="9" cy="6" r="2"/><circle cx="15" cy="6" r="2"/>
-                                            <circle cx="9" cy="12" r="2"/><circle cx="15" cy="12" r="2"/>
-                                            <circle cx="9" cy="18" r="2"/><circle cx="15" cy="18" r="2"/>
+                                    <div
+                                        class="flex items-center pr-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity self-center"
+                                    >
+                                        <svg
+                                            class="w-3 h-3"
+                                            viewBox="0 0 24 24"
+                                            fill="currentColor"
+                                        >
+                                            <circle
+                                                cx="9"
+                                                cy="6"
+                                                r="2"
+                                            /><circle cx="15" cy="6" r="2" />
+                                            <circle
+                                                cx="9"
+                                                cy="12"
+                                                r="2"
+                                            /><circle cx="15" cy="12" r="2" />
+                                            <circle
+                                                cx="9"
+                                                cy="18"
+                                                r="2"
+                                            /><circle cx="15" cy="18" r="2" />
                                         </svg>
                                     </div>
                                     <div class="flex-1 min-w-0">
-                                        <div class="flex items-center flex-wrap gap-1.5 mb-0.5">
+                                        <div
+                                            class="flex items-center flex-wrap gap-1.5 mb-0.5"
+                                        >
                                             {#if stepDef?.values["step_category"]}
-                                                <span 
+                                                <span
                                                     class="inline-flex px-1.5 py-px rounded text-[10px] font-semibold tracking-tight bg-gray-100 text-gray-500 border border-gray-100"
                                                 >
-                                                    {stepDef.values["step_category"]}
+                                                    {stepDef.values[
+                                                        "step_category"
+                                                    ]}
                                                 </span>
                                             {/if}
-                                            <h4 class="text-xs font-medium text-gray-800 leading-tight break-words flex-1">
+                                            <h4
+                                                class="text-xs font-medium text-gray-800 leading-tight break-words flex-1"
+                                            >
                                                 {getStepDisplayText(step)}
                                             </h4>
                                         </div>
@@ -565,46 +1021,98 @@
                                         {#if step.captures.length > 0 || step.attachments.length > 0}
                                             <div class="flex gap-2 mt-1">
                                                 {#if step.captures.length > 0}
-                                                    <span class="text-[9px] text-blue-600 flex items-center gap-0.5 opacity-80">
-                                                        📷 {step.captures.length}
+                                                    <span
+                                                        class="text-[9px] text-blue-600 flex items-center gap-0.5 opacity-80"
+                                                    >
+                                                        📷 {step.captures
+                                                            .length}
                                                     </span>
                                                 {/if}
                                                 {#if step.attachments.length > 0}
-                                                    <span class="text-[9px] text-amber-600 flex items-center gap-0.5 opacity-80">
-                                                        📎 {step.attachments.length}
+                                                    <span
+                                                        class="text-[9px] text-amber-600 flex items-center gap-0.5 opacity-80"
+                                                    >
+                                                        📎 {step.attachments
+                                                            .length}
                                                     </span>
                                                 {/if}
                                             </div>
                                         {/if}
                                     </div>
 
-                                    <div class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity {expandedStepId === step.id ? 'opacity-100' : ''}">
-                                        <button 
+                                    <div
+                                        class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity {expandedStepId ===
+                                        step.id
+                                            ? 'opacity-100'
+                                            : ''}"
+                                    >
+                                        <button
                                             class="p-0.5 hover:bg-gray-100 rounded text-gray-300 hover:text-gray-500 disabled:opacity-10"
-                                            on:click|stopPropagation={() => moveStepUp(index)}
+                                            on:click|stopPropagation={() =>
+                                                moveStepUp(index)}
                                             disabled={index === 0}
                                         >
-                                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
+                                            <svg
+                                                class="w-2.5 h-2.5"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                                ><path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M5 15l7-7 7 7"
+                                                /></svg
+                                            >
                                         </button>
-                                        <button 
+                                        <button
                                             class="p-0.5 hover:bg-gray-100 rounded text-gray-300 hover:text-gray-500 disabled:opacity-10"
-                                            on:click|stopPropagation={() => moveStepDown(index)}
-                                            disabled={index === workflowData.steps.length - 1}
+                                            on:click|stopPropagation={() =>
+                                                moveStepDown(index)}
+                                            disabled={index ===
+                                                workflowData.steps.length - 1}
                                         >
-                                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                                            <svg
+                                                class="w-2.5 h-2.5"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                                ><path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M19 9l-7 7-7-7"
+                                                /></svg
+                                            >
                                         </button>
                                     </div>
                                 </div>
 
                                 {#if expandedStepId === step.id}
-                                    <div class="px-2 pb-2 space-y-2" transition:slide|local={{ duration: 150 }}>
-                                        
+                                    <div
+                                        class="px-2 pb-2 space-y-2"
+                                        transition:slide|local={{
+                                            duration: 150,
+                                        }}
+                                    >
                                         {#if stepDef}
-                                            <div class="bg-gray-50 rounded p-2 grid grid-cols-1 gap-1 text-[11px] text-gray-600 border border-gray-100">
-                                                {#each workflowSteps.columns.filter(col => stepDef.values[col.id]) as col}
-                                                    <div class="flex gap-2 items-start">
-                                                        <span class="font-medium text-gray-400 min-w-[50px] text-[10px] uppercase tracking-wider">{col.name}</span>
-                                                        <span class="text-gray-700 break-all leading-tight">{stepDef.values[col.id]}</span>
+                                            <div
+                                                class="bg-gray-50 rounded p-2 grid grid-cols-1 gap-1 text-[11px] text-gray-600 border border-gray-100"
+                                            >
+                                                {#each workflowSteps.columns.filter((col) => stepDef.values[col.id]) as col}
+                                                    <div
+                                                        class="flex gap-2 items-start"
+                                                    >
+                                                        <span
+                                                            class="font-medium text-gray-400 min-w-[50px] text-[10px] uppercase tracking-wider"
+                                                            >{col.name}</span
+                                                        >
+                                                        <span
+                                                            class="text-gray-700 break-all leading-tight"
+                                                            >{stepDef.values[
+                                                                col.id
+                                                            ]}</span
+                                                        >
                                                     </div>
                                                 {/each}
                                             </div>
@@ -613,13 +1121,22 @@
                                         <div class="grid grid-cols-2 gap-2">
                                             <button
                                                 class="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded text-[11px] font-medium border transition-all
-                                                {isCapturing 
-                                                    ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-inner' 
+                                                {isCapturing
+                                                    ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-inner'
                                                     : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 hover:shadow-sm'}"
-                                                on:click|stopPropagation={() => startCaptureForStep(step.id)}
+                                                on:click|stopPropagation={() =>
+                                                    startCaptureForStep(
+                                                        step.id,
+                                                    )}
                                             >
-                                                <span>{isCapturing ? '📷' : '📷'}</span>
-                                                {isCapturing ? '캡처 중...' : '영역 캡처'}
+                                                <span
+                                                    >{isCapturing
+                                                        ? "📷"
+                                                        : "📷"}</span
+                                                >
+                                                {isCapturing
+                                                    ? "캡처 중..."
+                                                    : "영역 캡처"}
                                             </button>
 
                                             <button
@@ -627,7 +1144,10 @@
                                                 {isAddingAttach
                                                     ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-inner'
                                                     : 'bg-white border-gray-200 text-gray-600 hover:border-amber-300 hover:text-amber-600 hover:shadow-sm'}"
-                                                on:click|stopPropagation={() => toggleAttachmentSection(step.id)}
+                                                on:click|stopPropagation={() =>
+                                                    toggleAttachmentSection(
+                                                        step.id,
+                                                    )}
                                             >
                                                 <span>📎</span>
                                                 첨부 추가
@@ -635,21 +1155,41 @@
                                         </div>
 
                                         {#if isAddingAttach}
-                                            <div class="bg-amber-50/50 border border-amber-100 rounded p-1.5" transition:slide={{ duration: 150 }}>
-                                                <div class="relative flex items-center">
+                                            <div
+                                                class="bg-amber-50/50 border border-amber-100 rounded p-1.5"
+                                                transition:slide={{
+                                                    duration: 150,
+                                                }}
+                                            >
+                                                <div
+                                                    class="relative flex items-center"
+                                                >
                                                     <input
                                                         type="text"
-                                                        bind:value={attachmentTextInput}
+                                                        bind:value={
+                                                            attachmentTextInput
+                                                        }
                                                         class="w-full pl-2 pr-8 py-1.5 text-[11px] border border-amber-200 rounded focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
                                                         placeholder="내용 입력 또는 이미지 붙여넣기 (Ctrl+V)"
-                                                        on:keypress={(e) => e.key === 'Enter' && addTextAttachment(step.id)}
-                                                        on:paste={(e) => handlePaste(e, step.id)}
+                                                        on:keypress={(e) =>
+                                                            e.key === "Enter" &&
+                                                            addTextAttachment(
+                                                                step.id,
+                                                            )}
+                                                        on:paste={(e) =>
+                                                            handlePaste(
+                                                                e,
+                                                                step.id,
+                                                            )}
                                                         autoFocus
                                                     />
-                                                    <button 
+                                                    <button
                                                         class="absolute right-1 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 hover:bg-amber-100 rounded"
                                                         disabled={!attachmentTextInput.trim()}
-                                                        on:click={() => addTextAttachment(step.id)}
+                                                        on:click={() =>
+                                                            addTextAttachment(
+                                                                step.id,
+                                                            )}
                                                     >
                                                         ↵
                                                     </button>
@@ -658,14 +1198,40 @@
                                         {/if}
 
                                         {#if step.captures.length > 0 || step.attachments.length > 0}
-                                            <div class="pt-1 border-t border-gray-50 flex flex-col gap-1.5">
+                                            <div
+                                                class="pt-1 border-t border-gray-50 flex flex-col gap-1.5"
+                                            >
                                                 {#if step.captures.length > 0}
-                                                    <div class="flex flex-wrap gap-1">
+                                                    <div
+                                                        class="flex flex-wrap gap-1"
+                                                    >
                                                         {#each step.captures as capture (capture.id)}
-                                                            <div class="group inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 bg-blue-50/50 border border-blue-100 rounded text-[10px] text-blue-700">
-                                                                <span class="opacity-80">슬라이드 {capture.slideIndex + 1}</span>
-                                                                <button class="p-px hover:bg-blue-200 rounded-full text-blue-400 hover:text-blue-600" on:click={() => removeCapture(step.id, capture.id)}>
-                                                                    <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                                            <div
+                                                                class="group inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 bg-blue-50/50 border border-blue-100 rounded text-[10px] text-blue-700"
+                                                            >
+                                                                <span
+                                                                    class="opacity-80"
+                                                                    >슬라이드 {capture.slideIndex +
+                                                                        1}</span
+                                                                >
+                                                                <button
+                                                                    class="p-px hover:bg-blue-200 rounded-full text-blue-400 hover:text-blue-600"
+                                                                    on:click={() =>
+                                                                        removeCapture(
+                                                                            step.id,
+                                                                            capture.id,
+                                                                        )}
+                                                                >
+                                                                    <svg
+                                                                        class="w-2.5 h-2.5"
+                                                                        viewBox="0 0 24 24"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        stroke-width="3"
+                                                                        ><path
+                                                                            d="M18 6L6 18M6 6l12 12"
+                                                                        /></svg
+                                                                    >
                                                                 </button>
                                                             </div>
                                                         {/each}
@@ -673,34 +1239,62 @@
                                                 {/if}
 
                                                 {#if step.attachments.length > 0}
-                                                    <div class="grid grid-cols-2 gap-1.5">
+                                                    <div
+                                                        class="grid grid-cols-2 gap-1.5"
+                                                    >
                                                         {#each step.attachments as attachment (attachment.id)}
-                                                            <div class="relative group bg-gray-50 rounded border border-gray-100 overflow-hidden flex items-center">
-                                                                {#if attachment.type === 'image'}
-                                                                    <img src={attachment.data} alt="att" class="w-full h-12 object-cover" />
-                                                                    <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors"></div>
+                                                            <button
+                                                                class="relative group bg-gray-50 rounded border border-gray-100 overflow-hidden flex items-center text-left hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
+                                                                on:click={() =>
+                                                                    openAttachmentModal(
+                                                                        step.id,
+                                                                        attachment,
+                                                                    )}
+                                                            >
+                                                                {#if attachment.type === "image"}
+                                                                    <img
+                                                                        src={attachment.data}
+                                                                        alt="att"
+                                                                        class="w-full h-12 object-cover"
+                                                                    />
+                                                                    <div
+                                                                        class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center"
+                                                                    >
+                                                                        <span
+                                                                            class="opacity-0 group-hover:opacity-100 text-white text-[10px] font-medium bg-black/50 px-1.5 py-0.5 rounded transition-opacity"
+                                                                        >
+                                                                            클릭하여
+                                                                            보기
+                                                                        </span>
+                                                                    </div>
+                                                                    {#if attachment.caption}
+                                                                        <div
+                                                                            class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 py-0.5 truncate"
+                                                                        >
+                                                                            {attachment.caption}
+                                                                        </div>
+                                                                    {/if}
                                                                 {:else}
-                                                                    <div class="p-1.5 text-[10px] text-gray-600 leading-snug break-words w-full line-clamp-2">
+                                                                    <div
+                                                                        class="p-1.5 text-[10px] text-gray-600 leading-snug break-words w-full line-clamp-2"
+                                                                    >
                                                                         {attachment.data}
                                                                     </div>
                                                                 {/if}
-                                                                <button 
-                                                                    class="absolute top-0.5 right-0.5 w-4 h-4 bg-white/90 shadow-sm rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                    on:click={() => removeAttachment(step.id, attachment.id)}
-                                                                >
-                                                                    <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                                                                </button>
-                                                            </div>
+                                                            </button>
                                                         {/each}
                                                     </div>
                                                 {/if}
                                             </div>
                                         {/if}
 
-                                        <div class="pt-1 border-t border-gray-50 flex justify-end">
-                                            <button 
+                                        <div
+                                            class="pt-1 border-t border-gray-50 flex justify-end"
+                                        >
+                                            <button
                                                 class="text-[10px] text-red-300 hover:text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
-                                                on:click={() => handleRemoveStep(step.id)}
+                                                on:click={() =>
+                                                    handleRemoveStep(step.id)}
                                             >
                                                 삭제
                                             </button>
@@ -712,8 +1306,12 @@
                     {/each}
 
                     {#if workflowData.steps.length === 0}
-                        <div class="absolute inset-0 flex flex-col items-center justify-center text-gray-300 pointer-events-none pb-8">
-                            <span class="text-xs opacity-50">스텝을 추가하세요</span>
+                        <div
+                            class="absolute inset-0 flex flex-col items-center justify-center text-gray-300 pointer-events-none pb-8"
+                        >
+                            <span class="text-xs opacity-50"
+                                >스텝을 추가하세요</span
+                            >
                         </div>
                     {/if}
                 </div>
@@ -721,6 +1319,199 @@
         </div>
     {/if}
 </div>
+
+<!-- Attachment View/Edit Modal -->
+{#if showAttachmentModal && editingAttachment}
+    <div
+        class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
+        transition:fade={{ duration: 150 }}
+        on:click={closeAttachmentModal}
+    >
+        <div
+            class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
+            transition:fly={{ y: 20, duration: 200 }}
+            on:click|stopPropagation
+        >
+            <!-- Header -->
+            <div
+                class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50"
+            >
+                <h3 class="text-sm font-semibold text-gray-800">
+                    {editingAttachment.type === "image"
+                        ? "이미지 첨부"
+                        : "텍스트 첨부"}
+                </h3>
+                <button
+                    class="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+                    on:click={closeAttachmentModal}
+                >
+                    <svg
+                        class="w-5 h-5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                {#if editingAttachment.type === "image"}
+                    <div
+                        class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
+                    >
+                        <img
+                            src={editingAttachment.data}
+                            alt="Attachment"
+                            class="w-full max-h-[400px] object-contain"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-gray-600"
+                            >캡션</label
+                        >
+                        <input
+                            type="text"
+                            bind:value={modalCaption}
+                            placeholder="이미지에 대한 설명을 입력하세요"
+                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                        />
+                    </div>
+                {:else}
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-medium text-gray-600"
+                            >내용</label
+                        >
+                        <textarea
+                            value={editingAttachment.data}
+                            on:input={(e) =>
+                                updateAttachmentText(e.currentTarget.value)}
+                            placeholder="텍스트 내용"
+                            rows="6"
+                            class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 resize-none"
+                        ></textarea>
+                    </div>
+                {/if}
+
+                <div class="text-[10px] text-gray-400">
+                    추가됨: {new Date(
+                        editingAttachment.createdAt,
+                    ).toLocaleString("ko-KR")}
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div
+                class="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50"
+            >
+                <button
+                    class="px-3 py-1.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    on:click={deleteAttachmentFromModal}
+                >
+                    삭제
+                </button>
+                <div class="flex gap-2">
+                    <button
+                        class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        on:click={closeAttachmentModal}
+                    >
+                        취소
+                    </button>
+                    <button
+                        class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                        on:click={saveAttachmentChanges}
+                    >
+                        저장
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- Image Add Modal (with caption) -->
+{#if showImageAddModal && pendingImageData}
+    <div
+        class="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
+        transition:fade={{ duration: 150 }}
+        on:click={closeImageAddModal}
+    >
+        <div
+            class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
+            transition:fly={{ y: 20, duration: 200 }}
+            on:click|stopPropagation
+        >
+            <!-- Header -->
+            <div
+                class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50"
+            >
+                <h3 class="text-sm font-semibold text-gray-800">이미지 추가</h3>
+                <button
+                    class="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+                    on:click={closeImageAddModal}
+                >
+                    <svg
+                        class="w-5 h-5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div
+                    class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100"
+                >
+                    <img
+                        src={pendingImageData}
+                        alt="Preview"
+                        class="w-full max-h-[400px] object-contain"
+                    />
+                </div>
+                <div class="space-y-1.5">
+                    <label class="block text-xs font-medium text-gray-600"
+                        >캡션 (선택)</label
+                    >
+                    <input
+                        type="text"
+                        bind:value={pendingImageCaption}
+                        placeholder="이미지에 대한 설명을 입력하세요"
+                        class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
+                        on:keypress={(e) =>
+                            e.key === "Enter" && confirmAddImage()}
+                        autofocus
+                    />
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div
+                class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50/50"
+            >
+                <button
+                    class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    on:click={closeImageAddModal}
+                >
+                    취소
+                </button>
+                <button
+                    class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    on:click={confirmAddImage}
+                >
+                    추가
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
 
 <style>
     /* Custom Scrollbar for popup chips */

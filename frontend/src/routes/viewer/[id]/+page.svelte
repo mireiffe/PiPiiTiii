@@ -6,7 +6,10 @@
     import ViewerSidebar from "$lib/components/viewer/ViewerSidebar.svelte";
     import ViewerCanvas from "$lib/components/viewer/ViewerCanvas.svelte";
     import ViewerRightPane from "$lib/components/viewer/ViewerRightPane.svelte";
-    import { createEmptyWorkflowData, type ProjectWorkflowData } from "$lib/types/workflow";
+    import {
+        createEmptyWorkflowData,
+        type ProjectWorkflowData,
+    } from "$lib/types/workflow";
 
     import {
         fetchProject,
@@ -253,7 +256,11 @@
                 const data = await res.json();
                 // Ensure workflow data has proper structure with steps array
                 const workflow = data.workflow;
-                if (workflow && typeof workflow === 'object' && Array.isArray(workflow.steps)) {
+                if (
+                    workflow &&
+                    typeof workflow === "object" &&
+                    Array.isArray(workflow.steps)
+                ) {
                     workflowData = workflow;
                 } else {
                     workflowData = createEmptyWorkflowData();
@@ -323,6 +330,69 @@
 
         // Clear capture overlays
         captureOverlays = [];
+    }
+
+    async function handleDeleteStepDefinition(
+        event: CustomEvent<{ stepId: string }>,
+    ) {
+        const { stepId } = event.detail;
+        // Remove from settings.workflow_steps.rows
+        settings.workflow_steps.rows = settings.workflow_steps.rows.filter(
+            (r) => r.id !== stepId,
+        );
+        settings = { ...settings };
+
+        // Save updated settings
+        try {
+            const res = await updateSettings(settings);
+            if (!res.ok) {
+                console.error(
+                    "Failed to save settings after deleting step definition",
+                );
+                alert("설정 저장에 실패했습니다.");
+            }
+        } catch (e) {
+            console.error("Failed to save settings", e);
+            alert("설정 저장 중 오류가 발생했습니다.");
+        }
+    }
+
+    async function handleCreateStepDefinition(
+        event: CustomEvent<{ values: Record<string, string> }>,
+    ) {
+        const { values } = event.detail;
+        const newId = `row_${Date.now()}`;
+        const newRow = {
+            id: newId,
+            values: { ...values },
+        };
+
+        // Initialize empty values for all columns that weren't provided
+        settings.workflow_steps.columns.forEach((col) => {
+            if (!(col.id in newRow.values)) {
+                newRow.values[col.id] = "";
+            }
+        });
+
+        settings.workflow_steps.rows = [
+            ...settings.workflow_steps.rows,
+            newRow,
+        ];
+        settings = { ...settings };
+
+        // Save updated settings
+        try {
+            const res = await updateSettings(settings);
+            if (!res.ok) {
+                console.error(
+                    "Failed to save settings after creating step definition",
+                );
+                alert("설정 저장에 실패했습니다.");
+            }
+        } catch (e) {
+            console.error("Failed to save settings", e);
+            alert("설정 저장 중 오류가 발생했습니다.");
+        }
     }
 
     async function saveSummary() {
@@ -951,6 +1021,8 @@
         on:workflowChange={handleWorkflowChange}
         on:toggleCaptureMode={handleToggleCaptureMode}
         on:deleteWorkflow={handleDeleteWorkflow}
+        on:deleteStepDefinition={handleDeleteStepDefinition}
+        on:createStepDefinition={handleCreateStepDefinition}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
             toggleSlideSelection(e.detail.slideIndex)}
