@@ -17,6 +17,7 @@ import pythoncom
 import uuid
 import ppt_parser as parsing
 from database import Database
+from attachments_db import AttachmentsDatabase
 import asyncio
 from attributes.manager import AttributeManager
 from llm_service import LLMService
@@ -58,6 +59,15 @@ DB_PATH = os.path.join(
     "projects.db",
 )
 db = Database(DB_PATH)
+
+# Attachments database (separate DB for BLOB storage)
+ATTACHMENTS_DB_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "backend",
+    "data",
+    "attachments.db",
+)
+attachments_db = AttachmentsDatabase(ATTACHMENTS_DB_PATH)
 
 
 # CORS settings
@@ -1378,6 +1388,84 @@ def get_project_attributes(project_id: str):
         raise HTTPException(
             status_code=500, detail=f"Failed to load attributes: {str(e)}"
         )
+
+
+# ========== Attachments API ==========
+
+
+class AttachmentImageUpload(BaseModel):
+    image_id: str
+    project_id: str
+    data: str  # Base64 encoded image data
+
+
+@app.post("/api/attachments/image")
+def upload_attachment_image(request: AttachmentImageUpload):
+    """Upload an attachment image to the separate BLOB database."""
+    try:
+        success = attachments_db.save_image(
+            request.image_id,
+            request.project_id,
+            request.data
+        )
+        if success:
+            return {"status": "success", "image_id": request.image_id}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save image")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+
+
+@app.get("/api/attachments/image/{image_id}")
+def get_attachment_image(image_id: str):
+    """Retrieve an attachment image from the BLOB database."""
+    try:
+        image_data = attachments_db.get_image(image_id)
+        if image_data is None:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        # Detect image type from magic bytes
+        content_type = "image/png"  # Default
+        if image_data[:3] == b'\xff\xd8\xff':
+            content_type = "image/jpeg"
+        elif image_data[:4] == b'\x89PNG':
+            content_type = "image/png"
+        elif image_data[:6] in (b'GIF87a', b'GIF89a'):
+            content_type = "image/gif"
+        elif image_data[:4] == b'RIFF' and image_data[8:12] == b'WEBP':
+            content_type = "image/webp"
+
+        from fastapi.responses import Response
+        return Response(content=image_data, media_type=content_type)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve image: {str(e)}")
+
+
+@app.delete("/api/attachments/image/{image_id}")
+def delete_attachment_image(image_id: str):
+    """Delete an attachment image from the BLOB database."""
+    try:
+        deleted = attachments_db.delete_image(image_id)
+        if deleted:
+            return {"status": "success", "message": "Image deleted"}
+        else:
+            raise HTTPException(status_code=404, detail="Image not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(e)}")
+
+
+@app.delete("/api/attachments/project/{project_id}")
+def delete_project_attachments(project_id: str):
+    """Delete all attachment images for a project."""
+    try:
+        deleted_count = attachments_db.delete_project_images(project_id)
+        return {"status": "success", "deleted_count": deleted_count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete attachments: {str(e)}")
 
 
 if __name__ == "__main__":

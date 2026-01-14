@@ -38,7 +38,8 @@ export interface StepCapture {
 export interface StepAttachment {
     id: string;
     type: 'image' | 'text';
-    data: string;  // Base64 for image, plain text for text
+    data?: string;  // Plain text for text type (image data is stored separately in attachments.db)
+    imageId?: string;  // Reference to image in attachments.db (for image type)
     caption?: string;
     createdAt: string;
 }
@@ -121,14 +122,23 @@ export function createStepCapture(
 // Create an attachment
 export function createAttachment(
     type: 'image' | 'text',
-    data: string,
+    dataOrImageId: string,
     caption?: string
 ): StepAttachment {
-    return {
+    const attachment: StepAttachment = {
         id: generateAttachmentId(),
         type,
-        data,
         caption,
         createdAt: new Date().toISOString(),
     };
+
+    if (type === 'image') {
+        // For images, dataOrImageId is the imageId reference
+        attachment.imageId = dataOrImageId;
+    } else {
+        // For text, dataOrImageId is the actual text content
+        attachment.data = dataOrImageId;
+    }
+
+    return attachment;
 }

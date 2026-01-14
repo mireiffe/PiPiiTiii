@@ -91,6 +91,7 @@
         <!-- Workflow Section -->
         <WorkflowSection
             isExpanded={expandedSection === "workflow"}
+            projectId={project?.id || ""}
             {workflowData}
             workflowSteps={settings?.workflow_steps || {
                 columns: [],
@@ -106,6 +107,7 @@
             on:deleteWorkflow
             on:deleteStepDefinition
             on:createStepDefinition
+            on:updateStepDefinition
         />
 
         <!-- Summary Section -->
