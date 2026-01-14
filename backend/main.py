@@ -22,6 +22,14 @@ from attributes.manager import AttributeManager
 from llm_service import LLMService
 from typing import Optional
 
+# Import utility modules
+from utils import (
+    create_file_resolver,
+    extract_preserved_descriptions,
+    update_shape_property,
+    parse_workflow_from_llm_response,
+)
+
 
 def calculate_prompt_version(settings: dict) -> str:
     """Calculate a hash of all prompt configurations for version tracking."""
@@ -71,6 +79,8 @@ attr_manager = AttributeManager(
     db, os.path.join(BASE_DIR, "backend", "attributes", "definitions")
 )
 
+# Initialize file resolver
+file_resolver = create_file_resolver(BASE_DIR, UPLOAD_DIR, db)
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(RESULT_DIR, exist_ok=True)
@@ -147,19 +157,7 @@ def update_progress(project_id: str, percent: int, message: str):
         progress_store[project_id]["status"] = "error"
 
 
-def extract_preserved_descriptions(
-    shapes: List[Dict[str, Any]], slide_index: int, preserved_data: Dict[tuple, str]
-):
-    """Recursively extract descriptions from shapes to preserve them during reparse."""
-    for shape in shapes:
-        name = shape.get("name")
-        desc = shape.get("description")
-        if name and desc:
-            preserved_data[(slide_index, name)] = desc
-        if "children" in shape:
-            extract_preserved_descriptions(
-                shape["children"], slide_index, preserved_data
-            )
+# extract_preserved_descriptions is now imported from utils.shape_utils
 
 
 def run_parsing_task(file_path: str, project_dir: str, project_id: str):
@@ -270,7 +268,9 @@ class Settings(BaseModel):
     workflow_prompts: Optional[WorkflowPrompts] = None
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
-    phenomenon_attributes: List[str] = []  # List of attribute keys to include in phenomenon
+    phenomenon_attributes: List[
+        str
+    ] = []  # List of attribute keys to include in phenomenon
     workflow_steps: Optional[WorkflowSteps] = None
 
 
@@ -513,22 +513,12 @@ def update_project_shape(project_id: str, update: PositionUpdate):
     if not target_slide:
         raise HTTPException(status_code=404, detail="Slide not found")
 
-    # Helper to find shape recursively
-    def find_and_update_shape(shapes, target_id):
-        for shape in shapes:
-            # shape_index in parsing.py is integer or string.
-            # Let's convert to string for comparison
-            if str(shape.get("shape_index")) == str(target_id):
-                shape["left"] = update.left
-                shape["top"] = update.top
-                return True
-
-            if "children" in shape:
-                if find_and_update_shape(shape["children"], target_id):
-                    return True
-        return False
-
-    found = find_and_update_shape(target_slide.get("shapes", []), update.shape_index)
+    # Use shape_utils to update shape properties
+    found = update_shape_property(
+        target_slide.get("shapes", []),
+        str(update.shape_index),
+        {"left": update.left, "top": update.top},
+    )
 
     if not found:
         raise HTTPException(status_code=404, detail="Shape not found")
@@ -602,17 +592,12 @@ def update_project_description(project_id: str, update: DescriptionUpdate):
     if not target_slide:
         raise HTTPException(status_code=404, detail="Slide not found")
 
-    def find_and_update_desc(shapes, target_id):
-        for shape in shapes:
-            if str(shape.get("shape_index")) == str(target_id):
-                shape["description"] = update.description
-                return True
-            if "children" in shape:
-                if find_and_update_desc(shape["children"], target_id):
-                    return True
-        return False
-
-    found = find_and_update_desc(target_slide.get("shapes", []), update.shape_index)
+    # Use shape_utils to update shape description
+    found = update_shape_property(
+        target_slide.get("shapes", []),
+        str(update.shape_index),
+        {"description": update.description},
+    )
 
     if not found:
         raise HTTPException(status_code=404, detail="Shape not found")
@@ -635,51 +620,8 @@ def reparse_all_project(project_id: str):
         data = json.load(f)
 
     ppt_path = data.get("ppt_path")
-    # Convert relative path to absolute path if needed
-    if ppt_path and not os.path.isabs(ppt_path):
-        ppt_path = os.path.join(BASE_DIR, ppt_path)
-
-    if not ppt_path or not os.path.exists(ppt_path):
-        # Try to find it in uploads
-        # 1. Try original filename from DB or JSON if available (we don't have it in JSON root easily, but maybe in DB)
-        # But we can try to guess from the ppt_path basename if it was saved there
-
-        found_ppt = False
-
-        # Strategy 1: Check if the file exists in uploads with the basename of the stored path
-        if ppt_path:
-            basename = os.path.basename(ppt_path)
-            candidate = os.path.join(UPLOAD_DIR, basename)
-            if os.path.exists(candidate):
-                ppt_path = candidate
-                found_ppt = True
-
-        # Strategy 2: Legacy fallback - search for project_id prefix
-        if not found_ppt:
-            for f in os.listdir(UPLOAD_DIR):
-                if f.startswith(project_id) and os.path.isfile(
-                    os.path.join(UPLOAD_DIR, f)
-                ):
-                    ppt_path = os.path.join(UPLOAD_DIR, f)
-                    found_ppt = True
-                    break
-
-        if not found_ppt:
-            # Strategy 3: Try to look up original filename from DB
-            # This requires DB access which we have via `db` global
-            try:
-                project_info = db.get_project(project_id)
-                if project_info and project_info.get("original_filename"):
-                    orig_name = project_info["original_filename"]
-                    candidate = os.path.join(UPLOAD_DIR, orig_name)
-                    if os.path.exists(candidate):
-                        ppt_path = candidate
-                        found_ppt = True
-            except Exception as e:
-                print(f"DB lookup failed during reparse: {e}")
-
-        if not found_ppt:
-            raise HTTPException(status_code=404, detail="Original PPT file not found")
+    # Use file resolver to find PPT file
+    ppt_path = file_resolver.resolve_ppt_path(ppt_path, project_id)
 
     try:
         # Extract existing descriptions to preserve them
@@ -723,47 +665,8 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
         data = json.load(f)
 
     ppt_path = data.get("ppt_path")
-    # Convert relative path to absolute path if needed
-    if ppt_path and not os.path.isabs(ppt_path):
-        ppt_path = os.path.join(BASE_DIR, ppt_path)
-
-    if not ppt_path or not os.path.exists(ppt_path):
-        # Try to find it in uploads
-        found_ppt = False
-
-        # Strategy 1: Check if the file exists in uploads with the basename of the stored path
-        if ppt_path:
-            basename = os.path.basename(ppt_path)
-            candidate = os.path.join(UPLOAD_DIR, basename)
-            if os.path.exists(candidate):
-                ppt_path = candidate
-                found_ppt = True
-
-        # Strategy 2: Legacy fallback - search for project_id prefix
-        if not found_ppt:
-            for f in os.listdir(UPLOAD_DIR):
-                if f.startswith(project_id) and os.path.isfile(
-                    os.path.join(UPLOAD_DIR, f)
-                ):
-                    ppt_path = os.path.join(UPLOAD_DIR, f)
-                    found_ppt = True
-                    break
-
-        if not found_ppt:
-            # Strategy 3: Try to look up original filename from DB
-            try:
-                project_info = db.get_project(project_id)
-                if project_info and project_info.get("original_filename"):
-                    orig_name = project_info["original_filename"]
-                    candidate = os.path.join(UPLOAD_DIR, orig_name)
-                    if os.path.exists(candidate):
-                        ppt_path = candidate
-                        found_ppt = True
-            except Exception as e:
-                print(f"DB lookup failed during slide reparse: {e}")
-
-        if not found_ppt:
-            raise HTTPException(status_code=404, detail="Original PPT file not found")
+    # Use file resolver to find PPT file
+    ppt_path = file_resolver.resolve_ppt_path(ppt_path, project_id)
 
     try:
         # Extract existing descriptions to preserve them
@@ -1037,139 +940,14 @@ async def generate_workflow_llm(project_id: str, request: GenerateWorkflowReques
         llm_service = LLMService(llm_config.dict())
         response = await llm_service.generate_text(system_prompt, user_prompt)
 
-        # Helper to extract JSON
-        def extract_first_json(text):
-            try:
-                # 1. Try markdown code blocks
-                import re
+        # Parse and validate workflow using llm_utils
+        result = parse_workflow_from_llm_response(response, workflow_actions)
 
-                # Match content inside ``` ... ```
-                code_blocks = re.findall(r"```(?:json)?(.*?)```", text, re.DOTALL)
-                for block in code_blocks:
-                    # Try to find JSON inside the block
-                    block = block.strip()
-                    start = block.find("{")
-                    if start != -1:
-                        # Try brace counting within the block
-                        count = 0
-                        for i in range(start, len(block)):
-                            if block[i] == "{":
-                                count += 1
-                            elif block[i] == "}":
-                                count -= 1
-                                if count == 0:
-                                    candidate = block[start : i + 1]
-                                    try:
-                                        json.loads(candidate)
-                                        return candidate
-                                    except:
-                                        pass
+        # If successful, update DB
+        if result["status"] == "success":
+            db.update_project_workflow(project_id, result["workflow"])
 
-                # 2. If no valid JSON in code blocks, try global brace counting
-                # Find first '{'
-                start_index = text.find("{")
-                if start_index == -1:
-                    return None
-
-                count = 0
-                for i in range(start_index, len(text)):
-                    if text[i] == "{":
-                        count += 1
-                    elif text[i] == "}":
-                        count -= 1
-                        if count == 0:
-                            return text[start_index : i + 1]
-
-                return None
-            except Exception as e:
-                print(f"JSON Extraction Error: {e}")
-                return None
-
-        new_workflow_json_str = extract_first_json(response)
-
-        if new_workflow_json_str:
-            try:
-                new_workflow_data = json.loads(new_workflow_json_str)
-                # Basic validation: check if it has rootId and nodes
-                if (
-                    "rootId" not in new_workflow_data
-                    or "nodes" not in new_workflow_data
-                ):
-                    raise ValueError("LLM response is not a valid workflow structure")
-
-                # Enhanced Validation
-                defined_actions = {a["id"]: a for a in workflow_actions}
-                validation_issues = []
-
-                nodes = new_workflow_data.get("nodes", {})
-                for node_id, node in nodes.items():
-                    if node.get("type") == "Action":
-                        action_id = node.get("actionId")
-                        if not action_id:
-                            continue  # Could be issue, but let's focus on undefined values
-
-                        if action_id not in defined_actions:
-                            validation_issues.append(
-                                f"Node '{node.get('name', node_id)}' uses undefined action '{action_id}'"
-                            )
-                        else:
-                            # Validate params
-                            action_def = defined_actions[action_id]
-                            defined_params = {
-                                p["id"]: p for p in action_def.get("params", [])
-                            }
-                            node_params = node.get("params", {}) or {}
-
-                            # Check for undefined params
-                            for p_key in node_params.keys():
-                                if p_key not in defined_params:
-                                    validation_issues.append(
-                                        f"Node '{node.get('name', node_id)}' (Action: {action_id}) uses undefined param '{p_key}'"
-                                    )
-
-                            # Check for missing required params
-                            for p_id, p_def in defined_params.items():
-                                if (
-                                    p_def.get("required", False)
-                                    and p_id not in node_params
-                                ):
-                                    validation_issues.append(
-                                        f"Node '{node.get('name', node_id)}' (Action: {action_id}) missing required param '{p_id}'"
-                                    )
-
-                if validation_issues:
-                    return {
-                        "status": "confirmation_required",
-                        "workflow": new_workflow_data,
-                        "undefined_actions": validation_issues,  # Keeping key for frontend compat, but now contains broader issues
-                        "message": "워크플로우 검증 문제 발생",
-                        "llm_response": response,
-                    }
-
-                # Update DB
-                db.update_project_workflow(project_id, new_workflow_data)
-
-                return {
-                    "status": "success",
-                    "workflow": new_workflow_data,
-                    "llm_response": response,
-                }
-            except json.JSONDecodeError as e:
-                print(f"JSON Parse Error: {str(e)}")
-                print(f"Raw Response: {response}")
-                print(f"Extracted String: {new_workflow_json_str}")
-                return {
-                    "status": "error",
-                    "message": f"Failed to parse LLM response as JSON: {str(e)}",
-                    "llm_response": response,
-                }
-        else:
-            print(f"No JSON found. Raw Response: {response}")
-            return {
-                "status": "error",
-                "message": "No JSON found in LLM response",
-                "llm_response": response,
-            }
+        return result
 
     except Exception as e:
         print(f"Workflow generation error: {e}")
@@ -1584,12 +1362,14 @@ def get_project_attributes(project_id: str):
             key = attr["key"]
             value = project.get(key)
             if value is not None and value != "":
-                attributes.append({
-                    "key": key,
-                    "name": attr["display_name"],
-                    "value": str(value),
-                    "source": "project"
-                })
+                attributes.append(
+                    {
+                        "key": key,
+                        "name": attr["display_name"],
+                        "value": str(value),
+                        "source": "project",
+                    }
+                )
 
         return {"attributes": attributes}
     except HTTPException:
