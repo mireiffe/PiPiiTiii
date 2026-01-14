@@ -165,32 +165,20 @@ export async function validateWorkflows() {
     return apiFetch("/api/workflows/validate");
 }
 
-// ========== Phenomenon API ==========
+// ========== Workflow API (Step-based) ==========
 
-import type { PhenomenonData } from "$lib/types/phenomenon";
+import type { ProjectWorkflowData } from "$lib/types/workflow";
 
-export async function fetchProjectPhenomenon(id: string) {
-    return apiFetch(`/api/project/${id}/phenomenon`);
+export async function fetchProjectWorkflow(id: string) {
+    return apiFetch(`/api/project/${id}/workflow`);
 }
 
-export async function updateProjectPhenomenon(id: string, phenomenon: PhenomenonData) {
-    return apiFetch(`/api/project/${id}/phenomenon`, {
+export async function updateProjectWorkflow(id: string, workflow: ProjectWorkflowData) {
+    return apiFetch(`/api/project/${id}/workflow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phenomenon }),
+        body: JSON.stringify({ workflow }),
     });
-}
-
-// Project attribute from database
-export interface ProjectAttribute {
-    key: string;
-    name: string;
-    value: string;
-    source: string;
-}
-
-export async function fetchProjectAttributes(id: string) {
-    return apiFetch(`/api/project/${id}/attributes`);
 }
 
 // Attribute definitions (for settings page)

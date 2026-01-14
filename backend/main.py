@@ -243,29 +243,25 @@ class SummaryField(BaseModel):
     user_prompt: str = ""
 
 
-class WorkflowActionParam(BaseModel):
-    id: str
-    name: str
-    required: bool = False
-    param_type: str = "description"  # "selection" or "description"
-    selection_values: List[str] = []  # For selection type, predefined values
-
-
-class WorkflowAction(BaseModel):
-    id: str
-    name: str
-    params: List[WorkflowActionParam] = []
-
-
-class WorkflowCondition(BaseModel):
-    id: str
-    name: str
-    params: List[WorkflowActionParam] = []
-
-
 class WorkflowPrompts(BaseModel):
     system_prompt: str = ""
     user_prompt: str = ""
+
+
+class WorkflowStepColumn(BaseModel):
+    id: str
+    name: str
+    isDefault: bool = False  # Default columns cannot be deleted, only renamed
+
+
+class WorkflowStepRow(BaseModel):
+    id: str
+    values: Dict[str, str] = {}  # column_id -> value
+
+
+class WorkflowSteps(BaseModel):
+    columns: List[WorkflowStepColumn] = []
+    rows: List[WorkflowStepRow] = []
 
 
 class Settings(BaseModel):
@@ -274,9 +270,8 @@ class Settings(BaseModel):
     workflow_prompts: Optional[WorkflowPrompts] = None
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
-    workflow_actions: List[WorkflowAction] = []
-    workflow_conditions: List[WorkflowCondition] = []
     phenomenon_attributes: List[str] = []  # List of attribute keys to include in phenomenon
+    workflow_steps: Optional[WorkflowSteps] = None
 
 
 class WorkflowData(BaseModel):
@@ -828,73 +823,50 @@ def reparse_slide_endpoint(project_id: str, slide_index: int):
         pythoncom.CoUninitialize()
 
 
+def get_default_workflow_steps() -> dict:
+    """Return default workflow steps structure."""
+    return {
+        "columns": [
+            {"id": "step_category", "name": "스텝 구분", "isDefault": True},
+            {"id": "system", "name": "System", "isDefault": True},
+            {"id": "access_target", "name": "접근 Target", "isDefault": True},
+            {"id": "purpose", "name": "목적", "isDefault": True},
+            {"id": "related_db_table", "name": "연관 DB Table", "isDefault": True},
+        ],
+        "rows": [],
+    }
+
+
 def load_settings() -> dict:
     """Load settings from file or return defaults."""
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
             settings = json.load(f)
-            # Ensure workflow_actions exists (migration for existing settings)
-            if "workflow_actions" not in settings:
-                settings["workflow_actions"] = get_default_workflow_actions()
-            # Ensure workflow_conditions exists (migration for existing settings)
-            if "workflow_conditions" not in settings:
-                settings["workflow_conditions"] = []
+            # Ensure workflow_steps exists (migration for existing settings)
+            if "workflow_steps" not in settings:
+                settings["workflow_steps"] = get_default_workflow_steps()
             return settings
     else:
         return {
+            "llm": {
+                "api_type": "openai",
+                "api_endpoint": "https://api.openai.com/v1",
+                "model_name": "gpt-4o",
+            },
             "workflow_llm": {
                 "api_type": "openai",
                 "api_endpoint": "https://api.openai.com/v1",
                 "model_name": "gpt-4o",
             },
             "workflow_prompts": {
-                "system_prompt": "당신은 로봇이나 에이전트의 행동을 제어하는 Behavior Tree 워크플로우를 생성하고 수정하는 전문가입니다. 문서 요약 정보가 제공되는 경우 이를 배경 지식으로 활용하여 사용자의 요청을 처리하세요. 주어진 요청에 따라 워크플로우를 분석하고 수정된 JSON을 반환해야 합니다. 정해진 액션과 파라미터 규격을 엄격히 준수하세요.",
-                "user_prompt": "사용 가능한 액션 목록(파라미터 포함):\n{available_actions}\n\n현재 워크플로우: {workflow_json}\n\n요청사항: {query}\n\n위 요청사항을 반영하여 수정된 워크플로우 JSON 전체를 마크다운 코드 블록(json)으로 감싸서 반환해주세요.",
+                "system_prompt": "",
+                "user_prompt": "",
             },
-            "summary_fields": [
-                {
-                    "id": "overall_summary",
-                    "name": "종합요약",
-                    "order": 0,
-                    "system_prompt": "당신은 PPT 프레젠테이션을 분석하는 전문가입니다. 슬라이드 이미지를 보고 핵심 내용을 정확하게 파악해주세요.",
-                    "user_prompt": "이 PPT 슬라이드들의 핵심 내용을 3줄로 간결하게 요약해주세요.",
-                },
-                {
-                    "id": "incident",
-                    "name": "발생현상",
-                    "order": 1,
-                    "system_prompt": "당신은 기술 문서를 분석하는 전문가입니다.",
-                    "user_prompt": "이 슬라이드에서 언급된 발생 현상이나 문제점을 요약해주세요.",
-                },
-            ],
+            "summary_fields": [],
             "use_thumbnails": True,
-            "workflow_actions": get_default_workflow_actions(),
-            "workflow_conditions": [],
+            "phenomenon_attributes": [],
+            "workflow_steps": get_default_workflow_steps(),
         }
-
-
-def get_default_workflow_actions() -> list:
-    """Return default workflow actions."""
-    return [
-        {
-            "id": "action_analyze",
-            "name": "분석",
-            "params": [{"id": "target", "name": "분석대상", "required": True}],
-        },
-        {
-            "id": "action_verify",
-            "name": "확인",
-            "params": [{"id": "target", "name": "확인대상", "required": True}],
-        },
-        {
-            "id": "action_inspect",
-            "name": "검사",
-            "params": [
-                {"id": "target", "name": "검사대상", "required": True},
-                {"id": "criteria", "name": "검사기준", "required": False},
-            ],
-        },
-    ]
 
 
 @app.get("/api/settings")
@@ -1020,8 +992,8 @@ async def generate_workflow_llm(project_id: str, request: GenerateWorkflowReques
         if summary_text:
             system_prompt = summary_text + system_prompt
 
-        # Get available actions with params
-        workflow_actions = settings.get("workflow_actions", [])
+        # Get available actions with params (deprecated - now using workflow_steps)
+        workflow_actions = []  # Legacy: workflow_actions removed
         # Provide full schema to LLM
         available_actions_list = [
             {
@@ -1208,19 +1180,12 @@ async def generate_workflow_llm(project_id: str, request: GenerateWorkflowReques
 def validate_all_workflows():
     """
     Validate all project workflows against current settings.
-    Returns list of projects with invalid actions or params.
+    Returns list of projects with invalid workflow steps.
     """
     try:
         settings = load_settings()
-        workflow_actions = settings.get("workflow_actions", [])
-
-        # Build lookup maps for valid actions and their params
-        valid_actions = {}
-        for action in workflow_actions:
-            valid_actions[action["id"]] = {
-                "name": action["name"],
-                "params": {p["id"] for p in action.get("params", [])},
-            }
+        workflow_steps = settings.get("workflow_steps", {})
+        valid_step_ids = {row["id"] for row in workflow_steps.get("rows", [])}
 
         # Check all workflows
         all_workflows = db.get_all_workflows()
@@ -1231,35 +1196,19 @@ def validate_all_workflows():
             if not workflow:
                 continue
 
-            nodes = workflow.get("nodes", {})
+            # Validate workflow steps if present
+            steps = workflow.get("steps", [])
             issues = []
 
-            for node_id, node in nodes.items():
-                if node.get("type") == "Action":
-                    action_id = node.get("actionId")
-                    if action_id and action_id not in valid_actions:
-                        issues.append(
-                            {
-                                "type": "invalid_action",
-                                "node_id": node_id,
-                                "action_id": action_id,
-                                "action_name": node.get("name", ""),
-                            }
-                        )
-                    elif action_id and action_id in valid_actions:
-                        # Check params
-                        node_params = node.get("params", {})
-                        valid_param_ids = valid_actions[action_id]["params"]
-                        for param_id in node_params.keys():
-                            if param_id not in valid_param_ids:
-                                issues.append(
-                                    {
-                                        "type": "invalid_param",
-                                        "node_id": node_id,
-                                        "action_id": action_id,
-                                        "param_id": param_id,
-                                    }
-                                )
+            for step in steps:
+                step_id = step.get("stepId")
+                if step_id and step_id not in valid_step_ids:
+                    issues.append(
+                        {
+                            "type": "invalid_step",
+                            "step_id": step_id,
+                        }
+                    )
 
             if issues:
                 invalid_projects.append({"project_id": project["id"], "issues": issues})
