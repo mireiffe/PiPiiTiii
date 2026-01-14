@@ -34,6 +34,81 @@
     let attachmentTextInput = "";
     let popupRef: HTMLDivElement | null = null;
 
+    // --- Drag & Drop State ---
+    let draggedIndex: number | null = null;
+    let dragOverIndex: number | null = null;
+    let isDragging = false;
+
+    function handleDragStart(event: DragEvent, index: number) {
+        if (captureMode) exitCaptureMode();
+        draggedIndex = index;
+        isDragging = true;
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', index.toString());
+        }
+        // Add slight delay to allow drag image to be set
+        setTimeout(() => {
+            const target = event.target as HTMLElement;
+            target.style.opacity = '0.5';
+        }, 0);
+    }
+
+    function handleDragEnd(event: DragEvent) {
+        const target = event.target as HTMLElement;
+        target.style.opacity = '1';
+
+        // Apply the reorder if we have valid indices
+        if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+            const steps = [...workflowData.steps];
+            const [removed] = steps.splice(draggedIndex, 1);
+            steps.splice(dragOverIndex, 0, removed);
+            workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
+            dispatch("workflowChange", workflowData);
+        }
+
+        draggedIndex = null;
+        dragOverIndex = null;
+        isDragging = false;
+    }
+
+    function handleDragOver(event: DragEvent, index: number) {
+        event.preventDefault();
+        if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = 'move';
+        }
+        if (draggedIndex !== null && index !== draggedIndex) {
+            dragOverIndex = index;
+        }
+    }
+
+    function handleDragLeave(event: DragEvent) {
+        // Only reset if leaving the container entirely
+        const relatedTarget = event.relatedTarget as HTMLElement;
+        if (!relatedTarget?.closest('.step-item')) {
+            // Keep dragOverIndex as is to maintain visual feedback
+        }
+    }
+
+    function getStepTransform(index: number): string {
+        if (!isDragging || draggedIndex === null || dragOverIndex === null) return '';
+        if (index === draggedIndex) return '';
+
+        // Calculate displacement based on drag position
+        if (draggedIndex < dragOverIndex) {
+            // Dragging downward
+            if (index > draggedIndex && index <= dragOverIndex) {
+                return 'translateY(-100%)';
+            }
+        } else {
+            // Dragging upward
+            if (index < draggedIndex && index >= dragOverIndex) {
+                return 'translateY(100%)';
+            }
+        }
+        return '';
+    }
+
     // --- Helpers & Handlers ---
 
     function exitCaptureMode() {
@@ -99,6 +174,45 @@
         showAddStepPopup = false;
         searchQuery = "";
         expandedStepId = newStep.id;
+    }
+
+    // Count how many times a step definition is used in current workflow
+    function getStepUsageCount(stepId: string): number {
+        return workflowData.steps.filter(s => s.stepId === stepId).length;
+    }
+
+    // Handle delete from popup (for step definitions used in workflow)
+    function handleDeleteStepFromPopup(event: MouseEvent, stepRow: WorkflowStepRow) {
+        event.stopPropagation();
+        const usageCount = getStepUsageCount(stepRow.id);
+
+        if (usageCount === 0) {
+            alert("이 스텝은 현재 워크플로우에서 사용되지 않고 있습니다.");
+            return;
+        }
+
+        if (usageCount > 1) {
+            alert(`이 스텝은 워크플로우에서 ${usageCount}번 사용 중입니다.\n각 스텝 카드로 이동하여 개별적으로 삭제해주세요.`);
+            showAddStepPopup = false;
+            return;
+        }
+
+        // usageCount === 1
+        if (confirm("이 스텝을 워크플로우에서 삭제하시겠습니까?")) {
+            const stepInstance = workflowData.steps.find(s => s.stepId === stepRow.id);
+            if (stepInstance) {
+                if (captureTargetStepId === stepInstance.id) {
+                    dispatch("toggleCaptureMode", { stepId: null });
+                }
+                workflowData = {
+                    ...workflowData,
+                    steps: workflowData.steps.filter(s => s.stepId !== stepRow.id),
+                    updatedAt: new Date().toISOString(),
+                };
+                dispatch("workflowChange", workflowData);
+            }
+            showAddStepPopup = false;
+        }
     }
 
     function handleRemoveStep(stepId: string) {
@@ -329,31 +443,58 @@
                                 </div>
                             </div>
 
-                            <div class="flex-1 overflow-y-auto p-1 bg-white">
+                            <div class="flex-1 overflow-y-auto p-2 bg-gray-50/50 space-y-1.5">
                                 {#if filteredSteps.length === 0}
                                     <div class="py-6 text-center text-gray-400">
                                         <p class="text-[10px]">일치하는 스텝이 없습니다</p>
                                     </div>
                                 {:else}
-                                    {#each filteredSteps as step (step.id)}
-                                        <button
-                                            class="w-full text-left p-2 hover:bg-blue-50 rounded-md group transition-colors flex items-start gap-2 border-b border-gray-50 last:border-0"
+                                    {#each filteredSteps as step, idx (step.id)}
+                                        {@const usageCount = getStepUsageCount(step.id)}
+                                        <div
+                                            class="w-full text-left p-2.5 bg-white hover:bg-blue-50/80 rounded-lg group transition-all flex items-start gap-2.5 cursor-pointer border border-gray-100 hover:border-blue-200 hover:shadow-sm"
                                             on:click={() => handleAddStep(step)}
                                         >
+                                            <!-- Index number -->
+                                            <div class="shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[10px] font-semibold group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                                {idx + 1}
+                                            </div>
+
                                             <div class="flex-1 min-w-0">
-                                                <div class="flex items-center gap-1.5 mb-0.5">
-                                                    <span class="inline-block px-1.5 py-px rounded bg-blue-100 text-blue-700 text-[9px] font-bold tracking-tight">
+                                                <div class="flex items-start gap-1.5 mb-1">
+                                                    <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold tracking-tight shrink-0 step-category-badge">
                                                         {step.values["step_category"] || "ETC"}
                                                     </span>
-                                                    <span class="text-xs font-medium text-gray-800 group-hover:text-blue-700 truncate">
+                                                    <span class="text-xs font-medium text-gray-800 group-hover:text-blue-700 break-words leading-snug flex-1">
                                                         {step.values["purpose"] || "목적 없음"}
                                                     </span>
                                                 </div>
-                                                <div class="text-[10px] text-gray-400 truncate pl-0.5">
+                                                <div class="text-[10px] text-gray-400 pl-0.5 break-words leading-snug line-clamp-2">
                                                     {step.values["action"] || step.values["expected_result"] || "-"}
                                                 </div>
                                             </div>
-                                        </button>
+
+                                            <div class="flex items-center gap-1.5 shrink-0 self-center">
+                                                {#if usageCount > 0}
+                                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium whitespace-nowrap">
+                                                        {usageCount}회 사용
+                                                    </span>
+                                                    <button
+                                                        class="p-1 hover:bg-red-100 rounded text-gray-300 hover:text-red-500 transition-colors"
+                                                        on:click={(e) => handleDeleteStepFromPopup(e, step)}
+                                                        title="워크플로우에서 삭제"
+                                                    >
+                                                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+                                                {:else}
+                                                    <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                    </svg>
+                                                {/if}
+                                            </div>
+                                        </div>
                                     {/each}
                                 {/if}
                             </div>
@@ -369,23 +510,44 @@
                         {@const color = CAPTURE_COLORS[index % CAPTURE_COLORS.length]}
                         {@const isCapturing = captureTargetStepId === step.id}
                         {@const isAddingAttach = addingAttachmentToStepId === step.id}
+                        {@const stepTransform = getStepTransform(index)}
+                        {@const isBeingDragged = draggedIndex === index}
+                        {@const isDropTarget = dragOverIndex === index && draggedIndex !== index}
 
-                        <div class="relative z-10 pl-7" transition:fly={{ y: 20, duration: 200 }}>
-                            <div 
-                                class="absolute left-0 top-2.5 w-5 h-5 rounded-full border-2 bg-white flex items-center justify-center text-[9px] font-bold shadow-sm transition-colors duration-300"
+                        <div
+                            class="step-item relative z-10 pl-7 transition-transform duration-200 ease-out"
+                            style="transform: {stepTransform}; {isBeingDragged ? 'z-index: 50;' : ''}"
+                            draggable="true"
+                            on:dragstart={(e) => handleDragStart(e, index)}
+                            on:dragend={handleDragEnd}
+                            on:dragover={(e) => handleDragOver(e, index)}
+                            on:dragleave={handleDragLeave}
+                        >
+                            <div
+                                class="absolute left-0 top-2.5 w-5 h-5 rounded-full border-2 bg-white flex items-center justify-center text-[9px] font-bold shadow-sm transition-all duration-200"
                                 style="border-color: {color.border}; color: {color.border};"
                             >
                                 {index + 1}
                             </div>
 
-                            <div 
-                                class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden transition-all duration-200 hover:border-blue-300 group
-                                {expandedStepId === step.id ? 'ring-1 ring-blue-500/20 shadow-md' : ''}"
+                            <div
+                                class="bg-white rounded-lg border shadow-sm overflow-hidden transition-all duration-200 group
+                                {expandedStepId === step.id ? 'ring-1 ring-blue-500/20 shadow-md border-blue-300' : 'border-gray-200 hover:border-blue-300'}
+                                {isBeingDragged ? 'shadow-lg scale-[1.02] border-blue-400 ring-2 ring-blue-200' : ''}
+                                {isDropTarget ? 'border-blue-400 bg-blue-50/30' : ''}"
                             >
-                                <div 
+                                <div
                                     class="p-2 cursor-pointer hover:bg-gray-50/50 flex items-start justify-between gap-2"
                                     on:click={() => toggleStepExpand(step.id)}
                                 >
+                                    <!-- Drag Handle -->
+                                    <div class="flex items-center pr-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity self-center">
+                                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                            <circle cx="9" cy="6" r="2"/><circle cx="15" cy="6" r="2"/>
+                                            <circle cx="9" cy="12" r="2"/><circle cx="15" cy="12" r="2"/>
+                                            <circle cx="9" cy="18" r="2"/><circle cx="15" cy="18" r="2"/>
+                                        </svg>
+                                    </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center flex-wrap gap-1.5 mb-0.5">
                                             {#if stepDef?.values["step_category"]}
@@ -568,5 +730,35 @@
     .no-scrollbar {
         -ms-overflow-style: none;
         scrollbar-width: none;
+    }
+
+    /* Step category badge - auto-shrink font for long text */
+    .step-category-badge {
+        font-size: 9px;
+        max-width: 70px;
+        min-width: 28px;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    /* If text is very long, shrink it */
+    .step-category-badge:has(+ *) {
+        container-type: inline-size;
+    }
+
+    @container (max-width: 50px) {
+        .step-category-badge {
+            font-size: 8px;
+        }
+    }
+
+    /* Drag cursor for step items */
+    .step-item {
+        cursor: grab;
+    }
+
+    .step-item:active {
+        cursor: grabbing;
     }
 </style>
