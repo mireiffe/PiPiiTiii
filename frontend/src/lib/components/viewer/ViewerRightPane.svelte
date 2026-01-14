@@ -7,7 +7,6 @@
     export let rightPaneFullscreen = false;
     export let rightPaneWidth = 300;
     export let expandedSection = null;
-    export let phenomenonData;
     export let settings;
     export let allowEdit;
     export let savingWorkflow;
@@ -25,12 +24,10 @@
     export let selectedShapeId = null;
     export let editingDescription = "";
     export let project;
-    export let phenomenonAttributes = [];
 
-    // Action capture mode props
-    export let actionCaptureMode = false;
-    export let actionCaptureTodoId = null;
-    export let actionCaptureCauseId = null;
+    // Workflow step-based data
+    export let workflowData = { steps: [] };
+    export let captureTargetStepId = null;
 
     const dispatch = createEventDispatcher();
 
@@ -91,25 +88,18 @@
     </div>
 
     <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
-        <!-- Workflow Section (Phenomenon Collection) -->
+        <!-- Workflow Section -->
         <WorkflowSection
             isExpanded={expandedSection === "workflow"}
-            {phenomenonData}
+            {workflowData}
+            workflowSteps={settings?.workflow_steps || { columns: [], rows: [] }}
             {savingWorkflow}
             {captureMode}
-            {phenomenonAttributes}
-            {actionCaptureMode}
-            {actionCaptureTodoId}
-            {actionCaptureCauseId}
-            workflowActions={settings?.workflow_actions || []}
-            workflowConditions={settings?.workflow_conditions || []}
+            {captureTargetStepId}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
-            on:phenomenonChange
+            on:workflowChange
             on:toggleCaptureMode
-            on:toggleActionCaptureMode
-            on:evidenceHover
-            on:linkingModeChange
             on:deleteWorkflow
         />
 

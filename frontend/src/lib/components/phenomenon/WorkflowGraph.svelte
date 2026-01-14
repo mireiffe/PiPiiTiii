@@ -10,229 +10,155 @@
         type Edge,
     } from "@xyflow/svelte";
     import "@xyflow/svelte/dist/style.css";
-    import type { PhenomenonData } from "$lib/types/phenomenon";
-    import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
-    import type { WorkflowAction, WorkflowCondition } from "$lib/types/workflow";
-    import EvidenceNode from "./nodes/EvidenceNode.svelte";
-    import CandidateCauseNode from "./nodes/CandidateCauseNode.svelte";
+    import type {
+        ProjectWorkflowData,
+        WorkflowSteps,
+        WorkflowStepInstance,
+        WorkflowStepRow,
+    } from "$lib/types/workflow";
 
-    export let phenomenon: PhenomenonData;
-    export let workflowActions: WorkflowAction[] = [];
-    export let workflowConditions: WorkflowCondition[] = [];
+    export let workflowData: ProjectWorkflowData;
+    export let workflowSteps: WorkflowSteps;
 
     let nodes = writable<Node[]>([]);
     let edges = writable<Edge[]>([]);
 
-    const nodeTypes = {
-        evidence: EvidenceNode,
-        candidateCause: CandidateCauseNode,
-    };
+    // Color palette for steps
+    const STEP_COLORS = [
+        { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },   // blue
+        { bg: '#dcfce7', border: '#22c55e', text: '#166534' },   // green
+        { bg: '#f3e8ff', border: '#a855f7', text: '#6b21a8' },   // purple
+        { bg: '#ffedd5', border: '#f97316', text: '#c2410c' },   // orange
+        { bg: '#fce7f3', border: '#ec4899', text: '#be185d' },   // pink
+        { bg: '#ccfbf1', border: '#14b8a6', text: '#0f766e' },   // teal
+        { bg: '#fef9c3', border: '#eab308', text: '#a16207' },   // yellow
+        { bg: '#fee2e2', border: '#ef4444', text: '#b91c1c' },   // red
+    ];
 
-    const GROUP_PADDING_TOP = 60;
-    const GROUP_PADDING_BOTTOM = 40;
-    const GROUP_PADDING_X = 20;
-    // Different gap for different node types
-    const CAPTURE_NODE_GAP = 55;                // Capture nodes without description
-    const CAPTURE_NODE_WITH_DESC_GAP = 95;      // Capture nodes with description (2 lines)
-    const ATTR_NODE_GAP = 36;                   // Attribute nodes are compact (~28px)
-    const CAUSE_NODE_BASE_HEIGHT = 90;   // Base height for cause node
-    const CAUSE_NODE_TODO_HEIGHT = 50;   // Additional height per todo item (with params)
-    const CAUSE_NODE_GAP = 16;           // Gap between cause nodes
-    const EVIDENCE_GROUP_WIDTH = 300;
-    const CAUSE_GROUP_WIDTH = 340;
+    const NODE_WIDTH = 280;
+    const NODE_HEIGHT = 80;
+    const NODE_GAP_Y = 100;
+    const NODE_GAP_X = 60;
+    const PADDING_TOP = 50;
+    const PADDING_LEFT = 50;
+
+    // Get step definition by ID
+    function getStepDefinition(stepId: string): WorkflowStepRow | undefined {
+        return workflowSteps.rows.find(r => r.id === stepId);
+    }
+
+    // Get step display text
+    function getStepDisplayText(step: WorkflowStepInstance): string {
+        const def = getStepDefinition(step.stepId);
+        if (!def) return "(알 수 없는 스텝)";
+        const category = def.values["step_category"];
+        const purpose = def.values["purpose"];
+        if (category && purpose) return `[${category}] ${purpose}`;
+        if (category) return `[${category}]`;
+        if (purpose) return purpose;
+        return def.id;
+    }
+
+    // Get step details text
+    function getStepDetails(step: WorkflowStepInstance): string {
+        const def = getStepDefinition(step.stepId);
+        if (!def) return "";
+        const system = def.values["system"];
+        const target = def.values["access_target"];
+        return [system, target].filter(Boolean).join(" → ");
+    }
 
     $: {
-        updateGraph(phenomenon);
+        updateGraph(workflowData);
     }
 
-    // Calculate height for a cause node based on todoList
-    function calcCauseNodeHeight(todoList: any[]): number {
-        const visibleTodos = Math.min(todoList?.length || 0, 3);
-        return CAUSE_NODE_BASE_HEIGHT + visibleTodos * CAUSE_NODE_TODO_HEIGHT;
-    }
-
-    function updateGraph(data: PhenomenonData) {
+    function updateGraph(data: ProjectWorkflowData) {
         const newNodes: Node[] = [];
         const newEdges: Edge[] = [];
 
-        // Calculate evidence nodes total height
-        let evidenceTotalHeight = 0;
-        if (data.evidences) {
-            data.evidences.forEach((ev) => {
-                if (ev.type === "capture") {
-                    evidenceTotalHeight += ev.description ? CAPTURE_NODE_WITH_DESC_GAP : CAPTURE_NODE_GAP;
-                } else {
-                    evidenceTotalHeight += ATTR_NODE_GAP;
-                }
+        if (!data || !data.steps || data.steps.length === 0) {
+            // Show empty state
+            newNodes.push({
+                id: "empty",
+                type: "default",
+                position: { x: PADDING_LEFT, y: PADDING_TOP },
+                data: { label: "워크플로우 스텝이 없습니다" },
+                style: `
+                    background: #f3f4f6;
+                    border: 2px dashed #d1d5db;
+                    border-radius: 8px;
+                    padding: 20px;
+                    color: #6b7280;
+                    font-size: 14px;
+                    width: ${NODE_WIDTH}px;
+                `,
+                draggable: false,
+                selectable: false,
             });
+            nodes.set(newNodes);
+            edges.set(newEdges);
+            return;
         }
-        evidenceTotalHeight = Math.max(evidenceTotalHeight, 100);
 
-        // Calculate cause nodes total height dynamically
-        let causeTotalHeight = 0;
-        if (data.candidateCauses) {
-            data.candidateCauses.forEach((cause) => {
-                causeTotalHeight += calcCauseNodeHeight(cause.todoList || []) + CAUSE_NODE_GAP;
+        // Create nodes for each step
+        data.steps.forEach((step, index) => {
+            const color = STEP_COLORS[index % STEP_COLORS.length];
+            const x = PADDING_LEFT;
+            const y = PADDING_TOP + index * NODE_GAP_Y;
+
+            const displayText = getStepDisplayText(step);
+            const details = getStepDetails(step);
+            const captureCount = step.captures.length;
+            const attachmentCount = step.attachments.length;
+
+            // Build label with metadata
+            let metaText = "";
+            if (captureCount > 0 || attachmentCount > 0) {
+                const parts = [];
+                if (captureCount > 0) parts.push(`📷 ${captureCount}`);
+                if (attachmentCount > 0) parts.push(`📎 ${attachmentCount}`);
+                metaText = parts.join(" | ");
+            }
+
+            newNodes.push({
+                id: step.id,
+                type: "default",
+                position: { x, y },
+                data: {
+                    label: displayText,
+                },
+                style: `
+                    background: ${color.bg};
+                    border: 2px solid ${color.border};
+                    border-radius: 10px;
+                    padding: 12px 16px;
+                    width: ${NODE_WIDTH}px;
+                    min-height: ${NODE_HEIGHT}px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: ${color.text};
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                `,
+                sourcePosition: Position.Bottom,
+                targetPosition: Position.Top,
             });
-        }
-        causeTotalHeight = Math.max(causeTotalHeight, 100);
 
-        const maxContentHeight = Math.max(evidenceTotalHeight, causeTotalHeight);
-        const groupHeight = maxContentHeight + GROUP_PADDING_TOP + GROUP_PADDING_BOTTOM;
-
-        newNodes.push({
-            id: "group-evidence",
-            type: "group",
-            data: { label: "발생현상" },
-            position: { x: 50, y: 50 },
-            style: `
-                width: ${EVIDENCE_GROUP_WIDTH}px;
-                height: ${groupHeight}px;
-                background: rgba(254, 226, 226, 0.7) !important;
-                border: 3px solid #f87171;
-                border-radius: 12px;
-                box-shadow: 0 4px 12px -2px rgba(239, 68, 68, 0.25);
-            `,
-            draggable: false,
-        });
-
-        newNodes.push({
-            id: "group-causes",
-            type: "group",
-            data: { label: "원인후보" },
-            position: { x: 450, y: 50 },
-            style: `
-                width: ${CAUSE_GROUP_WIDTH}px;
-                height: ${groupHeight}px;
-                background: rgba(219, 234, 254, 0.7) !important;
-                border: 3px solid #60a5fa;
-                border-radius: 12px;
-                box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.25);
-            `,
-            draggable: false,
-        });
-
-        newNodes.push({
-            id: "header-evidence",
-            type: "default",
-            parentId: "group-evidence",
-            extent: "parent",
-            data: { label: "발생현상" },
-            position: { x: 20, y: 20 },
-            draggable: false,
-            selectable: false,
-            connectable: false,
-            style: "width: auto; font-weight: 700; font-size: 16px; color: #dc2626; background: transparent; border: none; text-align: left; padding: 0;",
-        });
-
-        newNodes.push({
-            id: "header-causes",
-            type: "default",
-            parentId: "group-causes",
-            extent: "parent",
-            data: { label: "원인후보" },
-            position: { x: 20, y: 20 },
-            draggable: false,
-            selectable: false,
-            connectable: false,
-            style: "width: auto; font-weight: 700; font-size: 16px; color: #2563eb; background: transparent; border: none; text-align: left; padding: 0;",
-        });
-
-        if (data.evidences) {
-            let evidenceYOffset = GROUP_PADDING_TOP;
-            data.evidences.forEach((evidence, index) => {
-                const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length];
-                let label =
-                    evidence.type === "capture"
-                        ? evidence.label || `캡처 #${evidence.slideIndex + 1}`
-                        : evidence.name || evidence.key;
-
-                newNodes.push({
-                    id: evidence.id,
-                    type: "evidence",
-                    parentId: "group-evidence",
-                    extent: "parent",
-                    data: {
-                        label,
-                        index,
-                        color,
-                        evidenceType: evidence.type,
-                        slideIndex:
-                            evidence.type === "capture"
-                                ? evidence.slideIndex
-                                : undefined,
-                        attributeValue:
-                            evidence.type === "attribute"
-                                ? evidence.value
-                                : undefined,
-                        description:
-                            evidence.type === "capture"
-                                ? evidence.description
-                                : undefined,
+            // Create edge to next step
+            if (index < data.steps.length - 1) {
+                const nextStep = data.steps[index + 1];
+                newEdges.push({
+                    id: `e-${step.id}-${nextStep.id}`,
+                    source: step.id,
+                    target: nextStep.id,
+                    type: "smoothstep",
+                    markerEnd: {
+                        type: MarkerType.ArrowClosed,
+                        color: "#94a3b8",
                     },
-                    position: {
-                        x: GROUP_PADDING_X,
-                        y: evidenceYOffset,
-                    },
-                    sourcePosition: Position.Right,
-                    targetPosition: Position.Left,
+                    style: "stroke: #94a3b8; stroke-width: 2px;",
                 });
-
-                // Use different gap based on node type and whether it has description
-                if (evidence.type === "capture") {
-                    evidenceYOffset += evidence.description ? CAPTURE_NODE_WITH_DESC_GAP : CAPTURE_NODE_GAP;
-                } else {
-                    evidenceYOffset += ATTR_NODE_GAP;
-                }
-            });
-        }
-
-        if (data.candidateCauses) {
-            let causeYOffset = GROUP_PADDING_TOP;
-            data.candidateCauses.forEach((cause) => {
-                const todoList = cause.todoList || [];
-                const nodeHeight = calcCauseNodeHeight(todoList);
-
-                newNodes.push({
-                    id: cause.id,
-                    type: "candidateCause",
-                    parentId: "group-causes",
-                    extent: "parent",
-                    data: {
-                        label: cause.text,
-                        todoList,
-                        linkedEvidenceCount:
-                            cause.evidenceLinks?.length || 0,
-                        workflowActions,
-                        workflowConditions,
-                    },
-                    position: {
-                        x: GROUP_PADDING_X,
-                        y: causeYOffset,
-                    },
-                    sourcePosition: Position.Right,
-                    targetPosition: Position.Left,
-                });
-
-                // Move to next position based on actual node height
-                causeYOffset += nodeHeight + CAUSE_NODE_GAP;
-
-                if (cause.evidenceLinks) {
-                    cause.evidenceLinks.forEach((link) => {
-                        newEdges.push({
-                            id: `e-${link.evidenceId}-${cause.id}`,
-                            source: link.evidenceId,
-                            target: cause.id,
-                            markerEnd: {
-                                type: MarkerType.ArrowClosed,
-                                color: "#94a3b8",
-                            },
-                            style: "stroke: #94a3b8; stroke-width: 2px;",
-                        });
-                    });
-                }
-            });
-        }
+            }
+        });
 
         nodes.set(newNodes);
         edges.set(newEdges);
@@ -243,11 +169,12 @@
     <SvelteFlow
         nodes={$nodes}
         edges={$edges}
-        {nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.3 }}
         attributionPosition="bottom-right"
         proOptions={{ hideAttribution: true }}
+        minZoom={0.3}
+        maxZoom={2}
     >
         <Background gap={20} size={1} color="#e2e8f0" />
         <Controls position="bottom-left" showLock={false} />
@@ -258,7 +185,7 @@
     .workflow-graph-container {
         width: 100%;
         height: 100%;
-        min-height: 500px;
+        min-height: 400px;
         background: #ffffff;
         position: relative;
     }
@@ -276,5 +203,9 @@
         height: 28px;
         border: none;
         border-bottom: 1px solid #eee;
+    }
+
+    :global(.workflow-graph-container .svelte-flow__node) {
+        cursor: default;
     }
 </style>

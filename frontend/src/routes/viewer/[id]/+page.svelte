@@ -6,7 +6,7 @@
     import ViewerSidebar from "$lib/components/viewer/ViewerSidebar.svelte";
     import ViewerCanvas from "$lib/components/viewer/ViewerCanvas.svelte";
     import ViewerRightPane from "$lib/components/viewer/ViewerRightPane.svelte";
-    import { createEmptyPhenomenon } from "$lib/types/phenomenon";
+    import { createEmptyWorkflowData, type ProjectWorkflowData } from "$lib/types/workflow";
 
     import {
         fetchProject,
@@ -22,9 +22,8 @@
         generateSummaryStream,
         updateProjectSummaryLLM,
         updateProjectPromptVersion,
-        fetchProjectPhenomenon,
-        updateProjectPhenomenon,
-        fetchProjectAttributes,
+        fetchProjectWorkflow,
+        updateProjectWorkflow,
     } from "$lib/api/project";
 
     // Configure marked options
@@ -76,37 +75,19 @@
     // Settings and summary
     let settings = {
         summary_fields: [],
-        workflow_actions: [],
-        workflow_conditions: [],
-        phenomenon_attributes: [],
+        workflow_steps: { columns: [], rows: [] },
     };
     let summaryData = {}; // User version (displayed/edited)
     let summaryDataLLM = {}; // LLM-generated version (original)
     let savingSummary = false;
 
-    // Phenomenon state
-    let phenomenonData = createEmptyPhenomenon();
-    let savingPhenomenon = false;
+    // Workflow state (step-based)
+    let workflowData = createEmptyWorkflowData();
+    let savingWorkflow = false;
     let captureMode = false;
+    let captureTargetStepId = null; // Which step is capturing
     let workflowSectionRef; // Reference to WorkflowSection component
     let captureOverlays = []; // Capture regions to display on canvas
-    let highlightedEvidenceId = null; // Currently hovered evidence
-    let availableAttributes = []; // Project attributes from database
-
-    // Candidate Cause Linking State
-    let isCandidateLinkingMode = false;
-    let linkingCauseId = null;
-    let linkedEvidenceIds = [];
-
-    // Action Capture State (for 원인도출 tab)
-    let actionCaptureMode = false;
-    let actionCaptureTodoId = null;
-    let actionCaptureCauseId = null;
-
-    // Filter attributes based on settings
-    $: phenomenonAttributes = availableAttributes.filter((attr) =>
-        settings.phenomenon_attributes?.includes(attr.key),
-    );
 
     // Accordion state for right pane sections
     let expandedSection = "workflow"; // 'workflow' | 'summary' | 'objects' - default is workflow
@@ -150,8 +131,8 @@
             s.type_code !== 13,
     );
 
-    // Update capture overlays whenever phenomenon changes
-    $: if (phenomenonData) {
+    // Update capture overlays whenever workflow changes
+    $: if (workflowData) {
         // Use tick to ensure workflowSectionRef is ready
         tick().then(() => {
             if (workflowSectionRef) {
@@ -171,8 +152,7 @@
         await loadProject();
         await loadSettings();
         await loadSummary();
-        await loadPhenomenon();
-        await loadAttributes();
+        await loadWorkflow();
         window.addEventListener("resize", updateScale);
         window.addEventListener("keydown", handleKeyDown);
         return () => {
@@ -266,59 +246,54 @@
         }
     }
 
-    async function loadPhenomenon() {
+    async function loadWorkflow() {
         try {
-            const res = await fetchProjectPhenomenon(projectId);
+            const res = await fetchProjectWorkflow(projectId);
             if (res.ok) {
                 const data = await res.json();
-                phenomenonData = data.phenomenon || createEmptyPhenomenon();
+                workflowData = data.workflow || createEmptyWorkflowData();
             }
         } catch (e) {
-            console.error("Failed to load phenomenon", e);
+            console.error("Failed to load workflow", e);
         }
     }
 
-    async function loadAttributes() {
+    async function saveWorkflow(newWorkflow) {
+        savingWorkflow = true;
         try {
-            const res = await fetchProjectAttributes(projectId);
-            if (res.ok) {
-                const data = await res.json();
-                availableAttributes = data.attributes || [];
-            }
+            workflowData = newWorkflow;
+            await updateProjectWorkflow(projectId, newWorkflow);
         } catch (e) {
-            console.error("Failed to load attributes", e);
-        }
-    }
-
-    async function savePhenomenon(newPhenomenon) {
-        savingPhenomenon = true;
-        try {
-            phenomenonData = newPhenomenon;
-            await updateProjectPhenomenon(projectId, newPhenomenon);
-        } catch (e) {
-            console.error("Failed to save phenomenon", e);
+            console.error("Failed to save workflow", e);
         } finally {
-            savingPhenomenon = false;
+            savingWorkflow = false;
         }
     }
 
-    function handlePhenomenonChange(event) {
-        const newPhenomenon = event.detail;
-        savePhenomenon(newPhenomenon);
-        // Update capture overlays after phenomenon change
+    function handleWorkflowChange(event) {
+        const newWorkflow = event.detail;
+        saveWorkflow(newWorkflow);
+        // Update capture overlays after workflow change
         updateCaptureOverlays();
     }
 
     function handleCapture(event) {
         const capture = event.detail;
-        // Add capture to the phenomenon collector
-        if (workflowSectionRef) {
+        // Add capture to the workflow section
+        if (workflowSectionRef && captureTargetStepId) {
             workflowSectionRef.addCapture(capture);
         }
     }
 
-    function toggleCaptureMode() {
-        captureMode = !captureMode;
+    function handleToggleCaptureMode(event) {
+        const { stepId } = event.detail;
+        if (stepId) {
+            captureMode = true;
+            captureTargetStepId = stepId;
+        } else {
+            captureMode = false;
+            captureTargetStepId = null;
+        }
     }
 
     function updateCaptureOverlays() {
@@ -329,68 +304,19 @@
         }
     }
 
-    function handleEvidenceHover(event) {
-        highlightedEvidenceId = event.detail.evidenceId;
-    }
-
-    function handleLinkingModeChange(event) {
-        const { isLinking, causeId, linkedEvidenceIds: ids } = event.detail;
-        isCandidateLinkingMode = isLinking;
-        linkingCauseId = causeId;
-        linkedEvidenceIds = ids || [];
-    }
-
-    function handleEvidenceClick(event) {
-        const evidenceId = event.detail.evidenceId;
-        if (isCandidateLinkingMode && workflowSectionRef) {
-            workflowSectionRef.handleEvidenceClick(evidenceId);
-        }
-    }
-
-    function handleToggleActionCaptureMode(event) {
-        const { todoId, causeId } = event.detail;
-        if (todoId) {
-            actionCaptureMode = true;
-            actionCaptureTodoId = todoId;
-            actionCaptureCauseId = causeId;
-        } else {
-            actionCaptureMode = false;
-            actionCaptureTodoId = null;
-            actionCaptureCauseId = null;
-        }
-    }
-
-    function handleActionCapture(event) {
-        const capture = event.detail;
-        if (workflowSectionRef && actionCaptureTodoId && actionCaptureCauseId) {
-            workflowSectionRef.addActionCapture(capture);
-        }
-    }
-
     async function handleDeleteWorkflow() {
-        // Reset phenomenon data to empty state
-        const emptyPhenomenon = createEmptyPhenomenon();
-        await savePhenomenon(emptyPhenomenon);
+        // Reset workflow data to empty state
+        const emptyWorkflow = createEmptyWorkflowData();
+        await saveWorkflow(emptyWorkflow);
 
         // Turn off capture mode if it's active
         if (captureMode) {
             captureMode = false;
-        }
-
-        // Turn off action capture mode if it's active
-        if (actionCaptureMode) {
-            actionCaptureMode = false;
-            actionCaptureTodoId = null;
-            actionCaptureCauseId = null;
+            captureTargetStepId = null;
         }
 
         // Clear capture overlays
         captureOverlays = [];
-
-        // Reset linking mode
-        isCandidateLinkingMode = false;
-        linkingCauseId = null;
-        linkedEvidenceIds = [];
     }
 
     async function saveSummary() {
@@ -951,23 +877,14 @@
                 {projectId}
                 {sortedShapes}
                 {selectedShapeId}
-                captureMode={captureMode || actionCaptureMode}
+                {captureMode}
                 {captureOverlays}
-                highlightedCaptureIndex={highlightedEvidenceId?.startsWith(
-                    "ev_",
-                )
-                    ? null
-                    : null}
-                {isCandidateLinkingMode}
-                {linkedEvidenceIds}
-                isActionCapture={actionCaptureMode}
                 on:wheel={handleWheel}
                 on:canvasMouseDown={handleCanvasMouseDown}
                 on:shapeMouseDown={(e) =>
                     handleMouseDown(e.detail.event, e.detail.shape)}
                 on:slideInView={handleSlideInView}
-                on:capture={(e) => actionCaptureMode ? handleActionCapture(e) : handleCapture(e)}
-                on:evidenceClick={handleEvidenceClick}
+                on:capture={handleCapture}
             />
         </div>
 
@@ -1002,15 +919,12 @@
         bind:rightPaneWidth
         bind:workflowSectionRef
         {expandedSection}
-        {phenomenonData}
+        {workflowData}
+        {captureTargetStepId}
         {settings}
         {allowEdit}
-        savingWorkflow={savingPhenomenon}
+        {savingWorkflow}
         {captureMode}
-        {phenomenonAttributes}
-        {actionCaptureMode}
-        {actionCaptureTodoId}
-        {actionCaptureCauseId}
         bind:summaryData
         bind:summaryDataLLM
         {savingSummary}
@@ -1023,11 +937,8 @@
         {selectedShapeId}
         bind:editingDescription
         {project}
-        on:phenomenonChange={handlePhenomenonChange}
-        on:toggleCaptureMode={toggleCaptureMode}
-        on:toggleActionCaptureMode={handleToggleActionCaptureMode}
-        on:evidenceHover={handleEvidenceHover}
-        on:linkingModeChange={handleLinkingModeChange}
+        on:workflowChange={handleWorkflowChange}
+        on:toggleCaptureMode={handleToggleCaptureMode}
         on:deleteWorkflow={handleDeleteWorkflow}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
