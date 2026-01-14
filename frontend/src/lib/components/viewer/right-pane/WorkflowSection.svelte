@@ -1,6 +1,6 @@
 <script lang="ts">
     import { slide, fade } from "svelte/transition";
-    import { createEventDispatcher, onMount } from "svelte";
+    import { createEventDispatcher, onMount, onDestroy } from "svelte";
     import AccordionHeader from "./AccordionHeader.svelte";
     import type {
         WorkflowSteps,
@@ -37,6 +37,28 @@
     let addingAttachmentToStepId: string | null = null;
     let attachmentTextInput = "";
     let popupRef: HTMLDivElement | null = null;
+
+    // Exit capture mode helper
+    function exitCaptureMode() {
+        if (captureMode) {
+            dispatch("toggleCaptureMode", { stepId: null });
+        }
+    }
+
+    // Handle ESC key to exit capture mode
+    function handleKeyDown(event: KeyboardEvent) {
+        if (event.key === "Escape" && captureMode) {
+            exitCaptureMode();
+        }
+    }
+
+    onMount(() => {
+        window.addEventListener("keydown", handleKeyDown);
+    });
+
+    onDestroy(() => {
+        window.removeEventListener("keydown", handleKeyDown);
+    });
 
     // Color palette for step captures
     const CAPTURE_COLORS = [
@@ -121,14 +143,35 @@
         }
     }
 
-    // Toggle step expansion
+    // Toggle step expansion (exit capture mode when collapsing or switching steps)
     function toggleStepExpand(stepId: string) {
+        // Exit capture mode when closing step or switching to another step
+        if (captureMode) {
+            exitCaptureMode();
+        }
         expandedStepId = expandedStepId === stepId ? null : stepId;
+        // Also close attachment input when switching steps
+        addingAttachmentToStepId = null;
     }
 
-    // Start capture mode for a specific step
+    // Start capture mode for a specific step (toggle behavior)
     function startCaptureForStep(stepId: string) {
-        dispatch("toggleCaptureMode", { stepId });
+        if (captureMode && captureTargetStepId === stepId) {
+            // If already capturing for this step, toggle off
+            exitCaptureMode();
+        } else {
+            // Start capture for this step
+            dispatch("toggleCaptureMode", { stepId });
+        }
+    }
+
+    // Toggle attachment section (exit capture mode when opening)
+    function toggleAttachmentSection(stepId: string) {
+        // Exit capture mode when opening attachment section
+        if (captureMode) {
+            exitCaptureMode();
+        }
+        addingAttachmentToStepId = addingAttachmentToStepId === stepId ? null : stepId;
     }
 
     // Add capture to step (called from parent via export)
@@ -377,19 +420,6 @@
             {:else}
                 <!-- List View -->
                 <div class="flex-1 overflow-y-auto p-3 space-y-3">
-                    <!-- Capture Mode Banner -->
-                    {#if captureMode && captureTargetStepId}
-                        <div class="bg-blue-100 border border-blue-300 rounded-lg px-3 py-2 text-sm text-blue-800 flex items-center justify-between">
-                            <span>🎯 슬라이드에서 영역을 드래그하여 캡처하세요</span>
-                            <button
-                                class="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                                on:click={() => dispatch("toggleCaptureMode", { stepId: null })}
-                            >
-                                취소
-                            </button>
-                        </div>
-                    {/if}
-
                     <!-- Add Step Button -->
                     <div class="relative">
                         <button
@@ -403,35 +433,46 @@
                         {#if showAddStepPopup}
                             <div
                                 bind:this={popupRef}
-                                class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-hidden flex flex-col"
+                                class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-[500px] overflow-hidden flex flex-col"
                                 transition:fade={{ duration: 150 }}
                                 on:click|stopPropagation
                             >
+                                <!-- Header -->
+                                <div class="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                                    <span class="text-sm font-medium text-gray-700">스텝 선택</span>
+                                    <span class="text-xs text-gray-400">{filteredSteps.length}개</span>
+                                </div>
+
                                 <!-- Search -->
                                 <div class="p-2 border-b border-gray-100">
-                                    <input
-                                        type="text"
-                                        bind:value={searchQuery}
-                                        placeholder="스텝 검색..."
-                                        class="w-full px-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
+                                    <div class="relative">
+                                        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                        <input
+                                            type="text"
+                                            bind:value={searchQuery}
+                                            placeholder="스텝 검색..."
+                                            class="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
                                 </div>
 
                                 <!-- Category Tabs -->
-                                <div class="flex gap-1 p-2 border-b border-gray-100 overflow-x-auto flex-shrink-0">
+                                <div class="flex gap-1.5 p-2 border-b border-gray-100 overflow-x-auto flex-shrink-0 bg-gray-50/50">
                                     <button
-                                        class="px-2 py-1 text-xs rounded whitespace-nowrap {selectedCategoryTab === 'all'
-                                            ? 'bg-blue-100 text-blue-700'
-                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                                        class="px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab === 'all'
+                                            ? 'bg-blue-500 text-white shadow-sm'
+                                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'}"
                                         on:click={() => selectedCategoryTab = "all"}
                                     >
                                         전체
                                     </button>
                                     {#each categories as category}
                                         <button
-                                            class="px-2 py-1 text-xs rounded whitespace-nowrap {selectedCategoryTab === category
-                                                ? 'bg-blue-100 text-blue-700'
-                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                                            class="px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab === category
+                                                ? 'bg-blue-500 text-white shadow-sm'
+                                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'}"
                                             on:click={() => selectedCategoryTab = category}
                                         >
                                             {category}
@@ -440,28 +481,58 @@
                                 </div>
 
                                 <!-- Step List -->
-                                <div class="flex-1 overflow-y-auto max-h-48">
+                                <div class="flex-1 overflow-y-auto">
                                     {#if filteredSteps.length === 0}
-                                        <div class="p-4 text-center text-gray-400 text-sm">
-                                            {searchQuery ? "검색 결과가 없습니다" : "등록된 스텝이 없습니다"}
+                                        <div class="p-6 text-center text-gray-400">
+                                            <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <div class="text-sm">{searchQuery ? "검색 결과가 없습니다" : "등록된 스텝이 없습니다"}</div>
                                         </div>
                                     {:else}
                                         {#each filteredSteps as step (step.id)}
                                             <button
-                                                class="w-full px-3 py-2 text-left text-sm hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-b-0"
+                                                class="w-full px-3 py-3 text-left hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0 group"
                                                 on:click={() => handleAddStep(step)}
                                             >
-                                                <div class="font-medium text-gray-800">
-                                                    {#if step.values["step_category"]}
-                                                        <span class="text-blue-600">[{step.values["step_category"]}]</span>
-                                                    {/if}
-                                                    {step.values["purpose"] || "(목적 없음)"}
-                                                </div>
-                                                {#if step.values["system"] || step.values["access_target"]}
-                                                    <div class="text-xs text-gray-500 mt-0.5">
-                                                        {[step.values["system"], step.values["access_target"]].filter(Boolean).join(" → ")}
+                                                <div class="flex items-start gap-3">
+                                                    <!-- Category Icon/Badge -->
+                                                    <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                                                        {step.values["step_category"]?.charAt(0) || "S"}
                                                     </div>
-                                                {/if}
+                                                    <!-- Content -->
+                                                    <div class="flex-1 min-w-0">
+                                                        <div class="flex items-center gap-2 mb-0.5">
+                                                            {#if step.values["step_category"]}
+                                                                <span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                                                                    {step.values["step_category"]}
+                                                                </span>
+                                                            {/if}
+                                                        </div>
+                                                        <div class="font-medium text-sm text-gray-800 truncate group-hover:text-blue-700">
+                                                            {step.values["purpose"] || "(목적 없음)"}
+                                                        </div>
+                                                        {#if step.values["system"] || step.values["access_target"]}
+                                                            <div class="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                                                                <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                                                </svg>
+                                                                <span class="truncate">
+                                                                    {[step.values["system"], step.values["access_target"]].filter(Boolean).join(" → ")}
+                                                                </span>
+                                                            </div>
+                                                        {/if}
+                                                        {#if step.values["action"] || step.values["expected_result"]}
+                                                            <div class="text-xs text-gray-400 mt-1 truncate">
+                                                                {step.values["action"] || step.values["expected_result"]}
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+                                                    <!-- Arrow indicator -->
+                                                    <svg class="w-4 h-4 text-gray-300 group-hover:text-blue-500 flex-shrink-0 mt-2 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                    </svg>
+                                                </div>
                                             </button>
                                         {/each}
                                     {/if}
@@ -554,42 +625,66 @@
                                                     : 'bg-white border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-200'}"
                                             on:click={() => startCaptureForStep(step.id)}
                                         >
-                                            📷 슬라이드 캡처
+                                            📷 {captureTargetStepId === step.id ? '캡처 중...' : '슬라이드 캡처'}
                                         </button>
                                         <button
-                                            class="flex-1 px-3 py-1.5 text-xs font-medium rounded border bg-white border-gray-200 text-gray-600 hover:bg-green-50 hover:border-green-200 transition-colors"
-                                            on:click={() => addingAttachmentToStepId = addingAttachmentToStepId === step.id ? null : step.id}
+                                            class="flex-1 px-3 py-1.5 text-xs font-medium rounded border transition-colors
+                                                {addingAttachmentToStepId === step.id
+                                                    ? 'bg-green-100 border-green-300 text-green-700'
+                                                    : 'bg-white border-gray-200 text-gray-600 hover:bg-green-50 hover:border-green-200'}"
+                                            on:click={() => toggleAttachmentSection(step.id)}
                                         >
                                             📎 이미지/텍스트 추가
                                         </button>
                                     </div>
 
-                                    <!-- Add Attachment Section -->
+                                    <!-- Add Attachment Section (Combined Image/Text Input) -->
                                     {#if addingAttachmentToStepId === step.id}
-                                        <div class="border border-gray-200 rounded p-2 bg-white space-y-2" transition:slide={{ duration: 100 }}>
+                                        <div class="border border-gray-200 rounded-lg bg-white overflow-hidden" transition:slide={{ duration: 100 }}>
+                                            <!-- Combined input area -->
                                             <div
-                                                class="border-2 border-dashed border-gray-300 rounded p-3 text-center text-sm text-gray-500"
+                                                class="relative"
                                                 on:paste={(e) => handlePaste(e, step.id)}
                                                 tabindex="0"
                                                 role="button"
                                             >
-                                                이미지를 붙여넣기 (Ctrl+V) 하거나<br/>
-                                                아래에 텍스트를 입력하세요
-                                            </div>
-                                            <div class="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    bind:value={attachmentTextInput}
-                                                    placeholder="텍스트 입력..."
-                                                    class="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                    on:keypress={(e) => e.key === 'Enter' && addTextAttachment(step.id)}
-                                                />
-                                                <button
-                                                    class="px-3 py-1 text-xs font-medium bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                                                    on:click={() => addTextAttachment(step.id)}
-                                                >
-                                                    추가
-                                                </button>
+                                                <div class="flex items-stretch">
+                                                    <!-- Text input area -->
+                                                    <input
+                                                        type="text"
+                                                        bind:value={attachmentTextInput}
+                                                        placeholder="텍스트 입력 또는 이미지 붙여넣기 (Ctrl+V)"
+                                                        class="flex-1 px-3 py-2.5 text-sm border-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                                                        on:keypress={(e) => e.key === 'Enter' && addTextAttachment(step.id)}
+                                                        on:paste={(e) => handlePaste(e, step.id)}
+                                                    />
+                                                    <!-- Add button -->
+                                                    <button
+                                                        class="px-4 py-2 text-xs font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        on:click={() => addTextAttachment(step.id)}
+                                                        disabled={!attachmentTextInput.trim()}
+                                                    >
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                        </svg>
+                                                        추가
+                                                    </button>
+                                                </div>
+                                                <!-- Helper text -->
+                                                <div class="px-3 py-1.5 bg-gray-50 border-t border-gray-100 text-[10px] text-gray-400 flex items-center gap-3">
+                                                    <span class="flex items-center gap-1">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                        Ctrl+V로 이미지 붙여넣기
+                                                    </span>
+                                                    <span class="flex items-center gap-1">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                        Enter로 텍스트 추가
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     {/if}
