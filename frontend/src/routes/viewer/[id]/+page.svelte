@@ -592,6 +592,11 @@
         window.addEventListener("mouseup", handleMouseUp);
     }
 
+    function handleCanvasMouseDown() {
+        if (captureMode) return;
+        selectedShapeId = null;
+    }
+
     function handleMouseMove(e) {
         if (!draggingId || !allowEdit) return;
 
