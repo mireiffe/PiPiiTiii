@@ -284,6 +284,83 @@
             {#if viewMode === "graph"}
                 <WorkflowGraph {workflowData} {workflowSteps} />
             {:else}
+                <!-- Add Step Button - Fixed at top -->
+                <div class="p-3 pb-0 bg-gray-50/50 border-b border-gray-100 relative">
+                    <button
+                        class="w-full py-2.5 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
+                        on:click|stopPropagation={() => showAddStepPopup = !showAddStepPopup}
+                    >
+                        <span class="text-xs font-medium">＋ 다음 스텝 연결</span>
+                    </button>
+
+                    {#if showAddStepPopup}
+                        <div
+                            bind:this={popupRef}
+                            class="absolute top-full left-3 right-3 mt-1 bg-white rounded-lg shadow-xl border border-gray-200 z-50 flex flex-col max-h-[600px] overflow-hidden"
+                            transition:fly={{ y: -10, duration: 150 }}
+                            on:click|stopPropagation
+                        >
+                            <div class="p-2 border-b border-gray-100 bg-gray-50/80 backdrop-blur sticky top-0">
+                                <div class="relative mb-1.5">
+                                    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                    <input
+                                        type="text"
+                                        bind:value={searchQuery}
+                                        placeholder="작업 검색..."
+                                        class="w-full pl-8 pr-2 py-1.5 text-xs bg-white border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div class="flex gap-1 overflow-x-auto no-scrollbar pb-0.5">
+                                    <button
+                                        class="px-2 py-0.5 text-[10px] font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab === 'all' ? 'bg-gray-700 text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}"
+                                        on:click={() => selectedCategoryTab = "all"}
+                                    >
+                                        All
+                                    </button>
+                                    {#each categories as category}
+                                        <button
+                                            class="px-2 py-0.5 text-[10px] font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab === category ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}"
+                                            on:click={() => selectedCategoryTab = category}
+                                        >
+                                            {category}
+                                        </button>
+                                    {/each}
+                                </div>
+                            </div>
+
+                            <div class="flex-1 overflow-y-auto p-1 bg-white">
+                                {#if filteredSteps.length === 0}
+                                    <div class="py-6 text-center text-gray-400">
+                                        <p class="text-[10px]">일치하는 스텝이 없습니다</p>
+                                    </div>
+                                {:else}
+                                    {#each filteredSteps as step (step.id)}
+                                        <button
+                                            class="w-full text-left p-2 hover:bg-blue-50 rounded-md group transition-colors flex items-start gap-2 border-b border-gray-50 last:border-0"
+                                            on:click={() => handleAddStep(step)}
+                                        >
+                                            <div class="flex-1 min-w-0">
+                                                <div class="flex items-center gap-1.5 mb-0.5">
+                                                    <span class="inline-block px-1.5 py-px rounded bg-blue-100 text-blue-700 text-[9px] font-bold tracking-tight">
+                                                        {step.values["step_category"] || "ETC"}
+                                                    </span>
+                                                    <span class="text-xs font-medium text-gray-800 group-hover:text-blue-700 truncate">
+                                                        {step.values["purpose"] || "목적 없음"}
+                                                    </span>
+                                                </div>
+                                                <div class="text-[10px] text-gray-400 truncate pl-0.5">
+                                                    {step.values["action"] || step.values["expected_result"] || "-"}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    {/each}
+                                {/if}
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+
                 <div class="flex-1 overflow-y-auto p-3 space-y-2 relative">
                     <div class="absolute left-[23px] top-3 bottom-3 w-px bg-gray-200 z-0"></div>
 
@@ -471,82 +548,6 @@
                             </div>
                         </div>
                     {/each}
-
-                    <div class="relative z-10 pl-7 pt-1 pb-4">
-                        <button
-                            class="w-full py-2 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/50"
-                            on:click|stopPropagation={() => showAddStepPopup = !showAddStepPopup}
-                        >
-                            <span class="text-xs font-medium">＋ 다음 스텝 연결</span>
-                        </button>
-
-                        {#if showAddStepPopup}
-                            <div
-                                bind:this={popupRef}
-                                class="absolute bottom-full left-7 right-0 mb-1 bg-white rounded-lg shadow-xl border border-gray-200 z-50 flex flex-col max-h-[350px] overflow-hidden"
-                                transition:fly={{ y: 10, duration: 150 }}
-                                on:click|stopPropagation
-                            >
-                                <div class="p-2 border-b border-gray-100 bg-gray-50/80 backdrop-blur sticky top-0">
-                                    <div class="relative mb-1.5">
-                                        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                                        <input
-                                            type="text"
-                                            bind:value={searchQuery}
-                                            placeholder="작업 검색..."
-                                            class="w-full pl-8 pr-2 py-1.5 text-xs bg-white border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
-                                            autoFocus
-                                        />
-                                    </div>
-                                    <div class="flex gap-1 overflow-x-auto no-scrollbar pb-0.5">
-                                        <button
-                                            class="px-2 py-0.5 text-[10px] font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab === 'all' ? 'bg-gray-700 text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}"
-                                            on:click={() => selectedCategoryTab = "all"}
-                                        >
-                                            All
-                                        </button>
-                                        {#each categories as category}
-                                            <button
-                                                class="px-2 py-0.5 text-[10px] font-medium rounded-full whitespace-nowrap transition-colors {selectedCategoryTab === category ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}"
-                                                on:click={() => selectedCategoryTab = category}
-                                            >
-                                                {category}
-                                            </button>
-                                        {/each}
-                                    </div>
-                                </div>
-
-                                <div class="flex-1 overflow-y-auto p-1 bg-white">
-                                    {#if filteredSteps.length === 0}
-                                        <div class="py-6 text-center text-gray-400">
-                                            <p class="text-[10px]">일치하는 스텝이 없습니다</p>
-                                        </div>
-                                    {:else}
-                                        {#each filteredSteps as step (step.id)}
-                                            <button
-                                                class="w-full text-left p-2 hover:bg-blue-50 rounded-md group transition-colors flex items-start gap-2 border-b border-gray-50 last:border-0"
-                                                on:click={() => handleAddStep(step)}
-                                            >
-                                                <div class="flex-1 min-w-0">
-                                                    <div class="flex items-center gap-1.5 mb-0.5">
-                                                        <span class="inline-block px-1.5 py-px rounded bg-blue-100 text-blue-700 text-[9px] font-bold tracking-tight">
-                                                            {step.values["step_category"] || "ETC"}
-                                                        </span>
-                                                        <span class="text-xs font-medium text-gray-800 group-hover:text-blue-700 truncate">
-                                                            {step.values["purpose"] || "목적 없음"}
-                                                        </span>
-                                                    </div>
-                                                    <div class="text-[10px] text-gray-400 truncate pl-0.5">
-                                                        {step.values["action"] || step.values["expected_result"] || "-"}
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        {/each}
-                                    {/if}
-                                </div>
-                            </div>
-                        {/if}
-                    </div>
 
                     {#if workflowData.steps.length === 0}
                         <div class="absolute inset-0 flex flex-col items-center justify-center text-gray-300 pointer-events-none pb-8">
