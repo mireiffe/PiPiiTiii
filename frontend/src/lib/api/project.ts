@@ -162,7 +162,7 @@ export async function updateProjectPromptVersion(id: string) {
 // ========== Workflow API ==========
 
 export async function validateWorkflows() {
-    return apiFetch("/api/workflows/validate");
+    return apiFetch("/api/workflow/validate");
 }
 
 // ========== Workflow API (Step-based) ==========
