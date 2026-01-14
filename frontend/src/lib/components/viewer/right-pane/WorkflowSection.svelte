@@ -17,7 +17,7 @@
         createStepCapture,
         createAttachment,
     } from "$lib/types/workflow";
-    import WorkflowGraph from "$lib/components/phenomenon/WorkflowGraph.svelte";
+    import TimelineGraph from "./workflow/TimelineGraph.svelte";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
 
     export let isExpanded = false;
@@ -680,7 +680,14 @@
             class="flex-1 flex flex-col min-h-[400px] bg-gray-50/50 relative overflow-hidden"
         >
             {#if viewMode === "graph"}
-                <WorkflowGraph {workflowData} {workflowSteps} />
+                <TimelineGraph
+                    {workflowData}
+                    {workflowSteps}
+                    onNodeClick={(stepId) => {
+                        expandedStepId = stepId;
+                        viewMode = "list";
+                    }}
+                />
             {:else}
                 <!-- Add Step Button - Fixed at top -->
                 <div
