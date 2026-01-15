@@ -98,6 +98,7 @@
                 columns: [],
                 rows: [],
             }}
+            stepContainers={settings?.step_containers || []}
             {savingWorkflow}
             {captureMode}
             {captureTargetStepId}

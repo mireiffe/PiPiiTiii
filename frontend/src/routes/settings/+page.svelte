@@ -1,11 +1,12 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fetchSettings, updateSettings, fetchAllAttributes } from "$lib/api/project";
-    import type { WorkflowSteps } from "$lib/types/workflow";
+    import type { WorkflowSteps, StepContainer } from "$lib/types/workflow";
     import LLMSettingsSection from "$lib/components/settings/LLMSettingsSection.svelte";
     import SummaryFieldsSection from "$lib/components/settings/SummaryFieldsSection.svelte";
     import PhenomenonAttributesSection from "$lib/components/settings/PhenomenonAttributesSection.svelte";
     import WorkflowStepsSection from "$lib/components/settings/WorkflowStepsSection.svelte";
+    import StepContainersSection from "$lib/components/settings/StepContainersSection.svelte";
 
     interface AttributeDefinition {
         key: string;
@@ -35,6 +36,7 @@
         use_thumbnails: boolean;
         phenomenon_attributes: string[];
         workflow_steps: WorkflowSteps;
+        step_containers: StepContainer[];
     }
 
     const DEFAULT_COLUMNS = [
@@ -59,6 +61,7 @@
         use_thumbnails: true,
         phenomenon_attributes: [],
         workflow_steps: { columns: [], rows: [] },
+        step_containers: [],
     };
 
     onMount(async () => {
@@ -99,6 +102,7 @@
                     use_thumbnails: data.use_thumbnails ?? true,
                     phenomenon_attributes: data.phenomenon_attributes || [],
                     workflow_steps: data.workflow_steps || { columns: DEFAULT_COLUMNS, rows: [] },
+                    step_containers: data.step_containers || [],
                 };
 
                 if (!settings.workflow_steps.columns || settings.workflow_steps.columns.length === 0) {
@@ -191,6 +195,11 @@
     function handleToggleRowExpand(e: CustomEvent<{ rowId: string }>) {
         expandedRowId = expandedRowId === e.detail.rowId ? null : e.detail.rowId;
     }
+
+    // Step containers handlers
+    function handleStepContainersUpdate(e: CustomEvent<{ containers: StepContainer[] }>) {
+        settings.step_containers = e.detail.containers;
+    }
 </script>
 
 <div class="h-screen flex flex-col bg-gray-100">
@@ -241,6 +250,12 @@
                     {expandedRowId}
                     on:update={handleWorkflowStepsUpdate}
                     on:toggleRowExpand={handleToggleRowExpand}
+                />
+
+                <!-- Step Containers 설정 -->
+                <StepContainersSection
+                    containers={settings.step_containers}
+                    on:update={handleStepContainersUpdate}
                 />
             </div>
         {/if}
