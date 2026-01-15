@@ -207,7 +207,7 @@
                                 bind:value={newStepValues[column.id]}
                                 placeholder={column.name}
                                 class="flex-1 px-2 py-1 text-xs border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
-                                on:keypress={(e) => e.key === "Enter" && handleAddNewStep()}
+                                on:keydown={(e) => e.key === "Enter" && handleAddNewStep()}
                             />
                         </div>
                     {/each}
@@ -276,7 +276,7 @@
                                         bind:value={editStepValues[column.id]}
                                         placeholder={column.name}
                                         class="flex-1 px-2 py-1 text-xs border border-amber-200 rounded focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
-                                        on:keypress={(e) => e.key === "Enter" && handleUpdateStepDef()}
+                                        on:keydown={(e) => e.key === "Enter" && handleUpdateStepDef()}
                                     />
                                 </div>
                             {/each}
