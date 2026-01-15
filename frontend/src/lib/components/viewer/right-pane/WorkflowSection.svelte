@@ -7,6 +7,7 @@
     import StepDefinitionPopup from "./workflow/StepDefinitionPopup.svelte";
     import WorkflowStepItem from "./workflow/WorkflowStepItem.svelte";
     import TimelineGraph from "./workflow/TimelineGraph.svelte";
+    import ContainerGraph from "./workflow/ContainerGraph.svelte";
     import {
         createDragDropHandlers,
         type DragDropState,
@@ -815,13 +816,10 @@
             class="flex-1 flex flex-col min-h-[400px] bg-gray-50/50 relative overflow-hidden"
         >
             {#if viewMode === "graph"}
-                <TimelineGraph
+                <ContainerGraph
                     {workflowData}
                     {workflowSteps}
-                    onNodeClick={(stepId) => {
-                        expandedStepId = stepId;
-                        viewMode = "list";
-                    }}
+                    {stepContainers}
                 />
             {:else}
                 <!-- Selection Toolbar (shown when items are selected) -->
