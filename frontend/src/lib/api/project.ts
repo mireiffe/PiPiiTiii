@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, BASE_URL } from "./client";
 
 export async function fetchProjects() {
     return apiFetch("/api/projects");
@@ -223,9 +223,7 @@ export async function uploadAttachmentImage(
  * @param imageId - The image ID to retrieve
  */
 export function getAttachmentImageUrl(imageId: string): string {
-    // Use the API base URL from the client
-    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    return `${apiBase}/api/attachments/image/${imageId}`;
+    return `${BASE_URL}/api/attachments/image/${imageId}`;
 }
 
 /**

@@ -1018,6 +1018,7 @@
         {selectedShapeId}
         bind:editingDescription
         {project}
+        {projectId}
         on:workflowChange={handleWorkflowChange}
         on:toggleCaptureMode={handleToggleCaptureMode}
         on:deleteWorkflow={handleDeleteWorkflow}
