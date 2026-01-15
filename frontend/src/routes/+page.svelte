@@ -811,8 +811,8 @@
                   on:click={(e) => togglePinProject(project.id, e)}
                   title={isPinned ? '고정 해제' : '상단에 고정'}
                 >
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 3a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 5.323V4a1 1 0 011-1z" />
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M16 12V4h-2v2h-4V4H8v8c0 1.1.9 2 2 2h1v6h2v-6h1c1.1 0 2-.9 2-2z"/>
                   </svg>
                 </button>
 
@@ -847,8 +847,8 @@
                       <!-- Pinned Badge -->
                       {#if isPinned}
                         <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300" title="고정된 프로젝트">
-                          <svg class="w-3 h-3 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M10 3a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 5.323V4a1 1 0 011-1z" />
+                          <svg class="w-3 h-3 text-amber-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M16 12V4h-2v2h-4V4H8v8c0 1.1.9 2 2 2h1v6h2v-6h1c1.1 0 2-.9 2-2z"/>
                           </svg>
                           <span class="text-[10px] font-medium text-amber-700">고정됨</span>
                         </div>
