@@ -480,7 +480,7 @@
                                 showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
                                 showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
                                 isLastStep={index === workflowData.steps.length - 1}
-                                {attachmentTextInput}
+                                bind:attachmentTextInput
                                 on:toggleExpand={() => toggleStepExpand(step.id)}
                                 on:startCapture={() => startCaptureForStep(step.id)}
                                 on:toggleAttachment={() => toggleAttachmentSection(step.id)}
