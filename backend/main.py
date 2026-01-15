@@ -278,9 +278,6 @@ class Settings(BaseModel):
     workflow_prompts: Optional[WorkflowPrompts] = None
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
-    phenomenon_attributes: List[
-        str
-    ] = []  # List of attribute keys to include in phenomenon
     workflow_steps: Optional[WorkflowSteps] = None
 
 
@@ -777,7 +774,6 @@ def load_settings() -> dict:
             },
             "summary_fields": [],
             "use_thumbnails": True,
-            "phenomenon_attributes": [],
             "workflow_steps": get_default_workflow_steps(),
         }
 
@@ -1322,37 +1318,6 @@ async def batch_generate_summary(request: BatchGenerateSummaryRequest):
             "X-Accel-Buffering": "no",
         },
     )
-
-
-# ========== Phenomenon API ==========
-
-
-class PhenomenonUpdateRequest(BaseModel):
-    phenomenon: Optional[Dict[str, Any]] = None
-
-
-@app.get("/api/project/{project_id}/phenomenon")
-def get_project_phenomenon(project_id: str):
-    """Get phenomenon data for a project."""
-    try:
-        phenomenon = db.get_project_phenomenon(project_id)
-        return {"phenomenon": phenomenon}
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to load phenomenon: {str(e)}"
-        )
-
-
-@app.post("/api/project/{project_id}/phenomenon")
-def update_project_phenomenon(project_id: str, request: PhenomenonUpdateRequest):
-    """Update phenomenon data for a project."""
-    try:
-        db.update_project_phenomenon(project_id, request.phenomenon)
-        return {"status": "success", "message": "Phenomenon updated successfully"}
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to save phenomenon: {str(e)}"
-        )
 
 
 @app.get("/api/project/{project_id}/attributes")

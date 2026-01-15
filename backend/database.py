@@ -49,10 +49,14 @@ class Database:
             cursor.execute("ALTER TABLE projects ADD COLUMN workflow_data TEXT")
             print("Added workflow_data column to projects table")
 
-        # Migration: Add phenomenon_data column for phenomenon collection
-        if "phenomenon_data" not in columns:
-            cursor.execute("ALTER TABLE projects ADD COLUMN phenomenon_data TEXT")
-            print("Added phenomenon_data column to projects table")
+        # Migration: Remove phenomenon_data column (deprecated, data moved to workflow_data)
+        if "phenomenon_data" in columns:
+            try:
+                cursor.execute("ALTER TABLE projects DROP COLUMN phenomenon_data")
+                print("Removed deprecated phenomenon_data column from projects table")
+            except sqlite3.OperationalError:
+                print("WARNING: Could not remove phenomenon_data column (SQLite version < 3.35.0)")
+                print("The column is unused and can be safely ignored.")
 
         conn.commit()
         conn.close()
@@ -433,34 +437,3 @@ class Database:
                 "workflow": workflow
             })
         return result
-
-    def get_project_phenomenon(self, project_id: str) -> Optional[Dict[str, Any]]:
-        """Get phenomenon data for a project."""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT phenomenon_data FROM projects WHERE id = ?",
-            (project_id,),
-        )
-        row = cursor.fetchone()
-        conn.close()
-        if row and row[0]:
-            return json.loads(row[0])
-        return None
-
-    def update_project_phenomenon(self, project_id: str, phenomenon_data: Optional[Dict[str, Any]]):
-        """Update phenomenon data for a project."""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        if phenomenon_data is None:
-            cursor.execute(
-                "UPDATE projects SET phenomenon_data = NULL WHERE id = ?",
-                (project_id,),
-            )
-        else:
-            cursor.execute(
-                "UPDATE projects SET phenomenon_data = ? WHERE id = ?",
-                (json.dumps(phenomenon_data, ensure_ascii=False), project_id),
-            )
-        conn.commit()
-        conn.close()
