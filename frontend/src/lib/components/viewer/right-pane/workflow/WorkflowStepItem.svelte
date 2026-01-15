@@ -36,8 +36,18 @@
         openAttachmentModal: { attachment: StepAttachment };
         addTextAttachment: void;
         paste: ClipboardEvent;
-        toggleSelection: MouseEvent;
+        checkboxClick: MouseEvent;
+        cardClick: MouseEvent;
     }>();
+
+    function handleCardClick(e: MouseEvent) {
+        // 먼저 cardClick 이벤트 발생시켜서 부모가 처리할 기회 제공
+        dispatch("cardClick", e);
+        // 이벤트가 stopPropagation 되지 않았으면 toggleExpand 실행
+        if (!e.defaultPrevented) {
+            dispatch("toggleExpand");
+        }
+    }
 
     function getStepDisplayText(): string {
         if (!stepDef) return "Unknown Step";
@@ -79,17 +89,17 @@
         <!-- Card Header -->
         <div
             class="p-2 cursor-pointer hover:bg-gray-50/50 flex items-start justify-between gap-2"
-            on:click={() => dispatch("toggleExpand")}
+            on:click={handleCardClick}
         >
-            <!-- Selection Checkbox -->
+            <!-- Selection Checkbox (only shown in selection mode) -->
             {#if showSelectionCheckbox}
                 <button
                     class="flex-shrink-0 w-4 h-4 rounded border-2 transition-all self-center flex items-center justify-center
                     {isSelected
                         ? 'bg-blue-500 border-blue-500'
                         : 'border-gray-300 hover:border-blue-400 bg-white'}"
-                    on:click|stopPropagation={(e) => dispatch("toggleSelection", e)}
-                    title="선택 (Ctrl+클릭: 추가, Shift+클릭: 범위)"
+                    on:click|stopPropagation={(e) => dispatch("checkboxClick", e)}
+                    title="선택 토글"
                 >
                     {#if isSelected}
                         <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
