@@ -68,6 +68,15 @@
     let dropTargetContainerId: string | null = null;  // For container-level drop
     let collapsedContainers: Set<string> = new Set();
 
+    // Insert guide state (for long hover insertion)
+    let hoverStepId: string | null = null;
+    let hoverStartTime: number = 0;
+    let insertGuideIndex: number | null = null;
+    let insertGuideContainerId: string | null | undefined = null;
+    let insertGuidePosition: 'top' | 'bottom' | null = null;
+    const INSERT_GUIDE_DELAY = 500; // ms to wait before showing insert guide
+    let hoverCheckTimer: ReturnType<typeof setTimeout> | null = null;
+
     const dragDropHandlers = createDragDropHandlers(
         () => dragState,
         (newState) => (dragState = { ...dragState, ...newState }),
@@ -106,24 +115,167 @@
 
     function handleContainerDragLeave() {
         dropTargetContainerId = null;
+        clearInsertGuide();
+    }
+
+    function clearInsertGuide() {
+        if (hoverCheckTimer) {
+            clearTimeout(hoverCheckTimer);
+            hoverCheckTimer = null;
+        }
+        hoverStepId = null;
+        hoverStartTime = 0;
+        insertGuideIndex = null;
+        insertGuideContainerId = null;
+        insertGuidePosition = null;
+    }
+
+    function handleStepHoverForInsert(e: DragEvent, stepId: string, stepIndex: number, stepContainerId: string | undefined) {
+        // Only track hover for cross-container drags
+        if (dragState.draggedIndex === null) return;
+        const draggedStep = workflowData.steps[dragState.draggedIndex];
+        const isCrossContainer = (draggedStep.containerId ?? null) !== (stepContainerId ?? null);
+        if (!isCrossContainer) {
+            clearInsertGuide();
+            return;
+        }
+
+        const target = e.currentTarget as HTMLElement;
+        const rect = target.getBoundingClientRect();
+        const offsetY = e.clientY - rect.top;
+        const isTopHalf = offsetY < rect.height / 2;
+        const position = isTopHalf ? 'top' : 'bottom';
+
+        // If hovering a different step or position, reset timer
+        if (hoverStepId !== stepId || insertGuidePosition !== position) {
+            clearInsertGuide();
+            hoverStepId = stepId;
+            hoverStartTime = Date.now();
+            insertGuidePosition = position;
+
+            hoverCheckTimer = setTimeout(() => {
+                // Show insert guide after delay
+                insertGuideIndex = position === 'top' ? stepIndex : stepIndex + 1;
+                insertGuideContainerId = stepContainerId;
+            }, INSERT_GUIDE_DELAY);
+        }
     }
 
     function handleContainerDrop(e: DragEvent, containerId: string | null) {
         e.preventDefault();
         if (dragState.draggedIndex === null) return;
 
-        const step = workflowData.steps[dragState.draggedIndex];
-        if (step.containerId !== containerId) {
-            // Move step to new container
-            const steps = workflowData.steps.map((s, i) =>
-                i === dragState.draggedIndex ? { ...s, containerId: containerId || undefined } : s
-            );
+        const draggedStep = workflowData.steps[dragState.draggedIndex];
+        const sourceContainerId = draggedStep.containerId ?? null;
+
+        // Same container - no action
+        if (sourceContainerId === containerId) {
+            dragState = { draggedIndex: null, dropTargetIndex: null };
+            dropTargetContainerId = null;
+            clearInsertGuide();
+            return;
+        }
+
+        // Check if insert guide is active - use specific position
+        if (insertGuideIndex !== null && insertGuideContainerId === (containerId ?? undefined)) {
+            const steps = [...workflowData.steps];
+            const [removed] = steps.splice(dragState.draggedIndex, 1);
+
+            let adjustedIndex = insertGuideIndex;
+            if (dragState.draggedIndex < insertGuideIndex) {
+                adjustedIndex -= 1;
+            }
+
+            removed.containerId = containerId || undefined;
+            steps.splice(adjustedIndex, 0, removed);
+
             workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
             dispatch("workflowChange", workflowData);
+
+            dragState = { draggedIndex: null, dropTargetIndex: null };
+            dropTargetContainerId = null;
+            clearInsertGuide();
+            return;
         }
+
+        // Default behavior: position based on container order
+        // Get container orders (uncategorized = -1)
+        const sourceOrder = sourceContainerId
+            ? sortedContainers.find(c => c.id === sourceContainerId)?.order ?? -1
+            : -1;
+        const targetOrder = containerId
+            ? sortedContainers.find(c => c.id === containerId)?.order ?? -1
+            : -1;
+
+        // Calculate target position based on container order
+        let newIndex: number;
+        if (targetOrder > sourceOrder) {
+            // Moving to higher order container -> first position of that container
+            const targetContainerSteps = containerId
+                ? workflowData.steps.filter(s => s.containerId === containerId)
+                : workflowData.steps.filter(s => !s.containerId);
+
+            if (targetContainerSteps.length > 0) {
+                // Insert before the first step of target container
+                newIndex = workflowData.steps.findIndex(s => s.id === targetContainerSteps[0].id);
+            } else {
+                // Empty container - find insertion point based on container order
+                // Find first step from a higher-order container
+                const higherContainerIds = sortedContainers
+                    .filter(c => c.order > targetOrder)
+                    .map(c => c.id);
+                const nextStep = workflowData.steps.find(s =>
+                    s.containerId && higherContainerIds.includes(s.containerId)
+                );
+                newIndex = nextStep
+                    ? workflowData.steps.findIndex(s => s.id === nextStep.id)
+                    : workflowData.steps.length;
+            }
+        } else {
+            // Moving to lower order container -> last position of that container
+            const targetContainerSteps = containerId
+                ? workflowData.steps.filter(s => s.containerId === containerId)
+                : workflowData.steps.filter(s => !s.containerId);
+
+            if (targetContainerSteps.length > 0) {
+                // Insert after the last step of target container
+                const lastStep = targetContainerSteps[targetContainerSteps.length - 1];
+                newIndex = workflowData.steps.findIndex(s => s.id === lastStep.id) + 1;
+            } else {
+                // Empty container - find insertion point
+                // Find first step from a higher-order container than target
+                const higherContainerIds = sortedContainers
+                    .filter(c => c.order > targetOrder)
+                    .map(c => c.id);
+                const nextStep = workflowData.steps.find(s =>
+                    s.containerId && higherContainerIds.includes(s.containerId)
+                );
+                newIndex = nextStep
+                    ? workflowData.steps.findIndex(s => s.id === nextStep.id)
+                    : workflowData.steps.length;
+            }
+        }
+
+        // Build new steps array
+        const steps = [...workflowData.steps];
+        const [removed] = steps.splice(dragState.draggedIndex, 1);
+
+        // Adjust target index if needed after removal
+        let adjustedIndex = newIndex;
+        if (dragState.draggedIndex < newIndex) {
+            adjustedIndex -= 1;
+        }
+
+        // Update container and insert at new position
+        removed.containerId = containerId || undefined;
+        steps.splice(adjustedIndex, 0, removed);
+
+        workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
 
         dragState = { draggedIndex: null, dropTargetIndex: null };
         dropTargetContainerId = null;
+        clearInsertGuide();
     }
 
     // Handle drop on a step within a container (combines reorder + container change)
@@ -197,7 +349,10 @@
     }
 
     onMount(() => window.addEventListener("keydown", handleKeyDown));
-    onDestroy(() => window.removeEventListener("keydown", handleKeyDown));
+    onDestroy(() => {
+        window.removeEventListener("keydown", handleKeyDown);
+        if (hoverCheckTimer) clearTimeout(hoverCheckTimer);
+    });
 
     function getStepDefinition(stepId: string): WorkflowStepRow | undefined {
         return workflowSteps.rows.find((r) => r.id === stepId);
@@ -605,32 +760,40 @@
                     {:else}
                         <!-- With containers: show grouped view -->
 
-                        <!-- Uncategorized Steps (always shown when containers exist) -->
-                        <div
-                            class="rounded-lg border transition-all {dropTargetContainerId === null && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
-                            on:dragover={(e) => handleContainerDragOver(e, null)}
-                            on:dragleave={handleContainerDragLeave}
-                            on:drop={(e) => handleContainerDrop(e, null)}
-                        >
-                            <div class="px-3 py-2 bg-gray-100 border-b border-gray-200 rounded-t-lg">
-                                <span class="text-xs font-medium text-gray-500">미분류</span>
-                                <span class="text-xs text-gray-400 ml-1">({uncategorizedSteps.length})</span>
-                            </div>
-                            <div class="p-2 space-y-2 relative min-h-[40px]">
-                                    {#if uncategorizedSteps.length > 0}
-                                        <div class="absolute left-[23px] top-2 bottom-2 w-px bg-gray-200 z-0"></div>
-                                    {/if}
-                                    {#each uncategorizedSteps as step (step.id)}
+                        <!-- Uncategorized Steps (only shown when there are uncategorized items) -->
+                        {#if uncategorizedSteps.length > 0}
+                            <div
+                                class="rounded-lg border transition-all {dropTargetContainerId === null && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
+                                on:dragover={(e) => handleContainerDragOver(e, null)}
+                                on:dragleave={handleContainerDragLeave}
+                                on:drop={(e) => handleContainerDrop(e, null)}
+                            >
+                                <div class="px-3 py-2 bg-gray-100 border-b border-gray-200 rounded-t-lg">
+                                    <span class="text-xs font-medium text-gray-500">미분류</span>
+                                    <span class="text-xs text-gray-400 ml-1">({uncategorizedSteps.length})</span>
+                                </div>
+                                <div class="p-2 space-y-2 relative min-h-[40px]">
+                                    <div class="absolute left-[23px] top-2 bottom-2 w-px bg-gray-200 z-0"></div>
+                                    {#each uncategorizedSteps as step, localIndex (step.id)}
                                         {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
                                         {@const stepDef = getStepDefinition(step.stepId)}
                                         {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
+                                        {@const showInsertGuideTop = insertGuideIndex === index && insertGuideContainerId === undefined && localIndex === 0}
+                                        {@const showInsertGuideBottom = insertGuideIndex === index + 1 && insertGuideContainerId === undefined}
+
+                                        <!-- Insert guide indicator (top) -->
+                                        {#if showInsertGuideTop}
+                                            <div class="relative h-1 -mt-1 mb-1">
+                                                <div class="absolute inset-x-0 h-1 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-300"></div>
+                                            </div>
+                                        {/if}
 
                                         <div
                                             draggable="true"
                                             on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; }}
+                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); }}
                                             on:drop={(e) => handleStepDropWithContainer(e, undefined)}
-                                            on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
+                                            on:dragover={(e) => { dragDropHandlers.handleDragOver(e, index); handleStepHoverForInsert(e, step.id, index, undefined); }}
                                         >
                                             <WorkflowStepItem
                                                 {step}
@@ -658,12 +821,17 @@
                                                 on:paste={(e) => handlePaste(e.detail, step.id)}
                                             />
                                         </div>
+
+                                        <!-- Insert guide indicator (bottom) -->
+                                        {#if showInsertGuideBottom}
+                                            <div class="relative h-1 mt-1 -mb-1">
+                                                <div class="absolute inset-x-0 h-1 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-300"></div>
+                                            </div>
+                                        {/if}
                                     {/each}
-                                    {#if uncategorizedSteps.length === 0}
-                                        <div class="text-xs text-gray-400 text-center py-2">드래그하여 여기에 놓기</div>
-                                    {/if}
+                                </div>
                             </div>
-                        </div>
+                        {/if}
 
                         <!-- Container Groups -->
                         {#each sortedContainers as container (container.id)}
@@ -690,17 +858,26 @@
                                         {#if containerSteps.length > 0}
                                             <div class="absolute left-[23px] top-2 bottom-2 w-px bg-blue-200 z-0"></div>
                                         {/if}
-                                        {#each containerSteps as step (step.id)}
+                                        {#each containerSteps as step, localIndex (step.id)}
                                             {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
                                             {@const stepDef = getStepDefinition(step.stepId)}
                                             {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
+                                            {@const showInsertGuideTop = insertGuideIndex === index && insertGuideContainerId === container.id && localIndex === 0}
+                                            {@const showInsertGuideBottom = insertGuideIndex === index + 1 && insertGuideContainerId === container.id}
+
+                                            <!-- Insert guide indicator (top) -->
+                                            {#if showInsertGuideTop}
+                                                <div class="relative h-1 -mt-1 mb-1">
+                                                    <div class="absolute inset-x-0 h-1 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-300"></div>
+                                                </div>
+                                            {/if}
 
                                             <div
                                                 draggable="true"
                                                 on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                                on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; }}
+                                                on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); }}
                                                 on:drop={(e) => handleStepDropWithContainer(e, container.id)}
-                                                on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
+                                                on:dragover={(e) => { dragDropHandlers.handleDragOver(e, index); handleStepHoverForInsert(e, step.id, index, container.id); }}
                                             >
                                                 <WorkflowStepItem
                                                     {step}
@@ -728,6 +905,13 @@
                                                     on:paste={(e) => handlePaste(e.detail, step.id)}
                                                 />
                                             </div>
+
+                                            <!-- Insert guide indicator (bottom) -->
+                                            {#if showInsertGuideBottom}
+                                                <div class="relative h-1 mt-1 -mb-1">
+                                                    <div class="absolute inset-x-0 h-1 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-300"></div>
+                                                </div>
+                                            {/if}
                                         {/each}
                                         {#if containerSteps.length === 0}
                                             <div class="text-xs text-gray-400 text-center py-2">드래그하여 여기에 놓기</div>
