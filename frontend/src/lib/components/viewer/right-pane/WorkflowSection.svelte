@@ -17,6 +17,7 @@
         WorkflowStepInstance,
         ProjectWorkflowData,
         StepAttachment,
+        StepContainer,
     } from "$lib/types/workflow";
     import {
         createEmptyWorkflowData,
@@ -35,6 +36,7 @@
     export let projectId: string = "";
     export let workflowData: ProjectWorkflowData = createEmptyWorkflowData();
     export let workflowSteps: WorkflowSteps = { columns: [], rows: [] };
+    export let stepContainers: StepContainer[] = [];
     export let savingWorkflow = false;
     export let captureMode = false;
     export let captureTargetStepId: string | null = null;
@@ -63,6 +65,8 @@
 
     // Drag & Drop State
     let dragState: DragDropState = { draggedIndex: null, dropTargetIndex: null };
+    let dropTargetContainerId: string | null = null;  // For container-level drop
+    let collapsedContainers: Set<string> = new Set();
 
     const dragDropHandlers = createDragDropHandlers(
         () => dragState,
@@ -76,6 +80,54 @@
         },
         () => captureMode && exitCaptureMode()
     );
+
+    // Container helpers
+    function toggleContainerCollapse(containerId: string) {
+        if (collapsedContainers.has(containerId)) {
+            collapsedContainers.delete(containerId);
+        } else {
+            collapsedContainers.add(containerId);
+        }
+        collapsedContainers = collapsedContainers;
+    }
+
+    function getStepsByContainer(containerId: string | null): WorkflowStepInstance[] {
+        return workflowData.steps.filter(s =>
+            containerId === null ? !s.containerId : s.containerId === containerId
+        );
+    }
+
+    function handleContainerDragOver(e: DragEvent, containerId: string | null) {
+        e.preventDefault();
+        if (dragState.draggedIndex !== null) {
+            dropTargetContainerId = containerId;
+        }
+    }
+
+    function handleContainerDragLeave() {
+        dropTargetContainerId = null;
+    }
+
+    function handleContainerDrop(e: DragEvent, containerId: string | null) {
+        e.preventDefault();
+        if (dragState.draggedIndex === null) return;
+
+        const step = workflowData.steps[dragState.draggedIndex];
+        if (step.containerId !== containerId) {
+            // Move step to new container
+            const steps = workflowData.steps.map((s, i) =>
+                i === dragState.draggedIndex ? { ...s, containerId: containerId || undefined } : s
+            );
+            workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
+            dispatch("workflowChange", workflowData);
+        }
+
+        dragState = { draggedIndex: null, dropTargetIndex: null };
+        dropTargetContainerId = null;
+    }
+
+    // Sort containers by order
+    $: sortedContainers = [...stepContainers].sort((a, b) => a.order - b.order);
 
     // Helpers
     function exitCaptureMode() {
@@ -452,61 +504,199 @@
                     {/if}
                 </div>
 
-                <!-- Step List -->
-                <div class="flex-1 overflow-y-auto p-3 space-y-2 relative flex flex-col">
-                    <div class="absolute left-[23px] top-3 bottom-3 w-px bg-gray-200 z-0"></div>
+                <!-- Step List with Containers -->
+                <div class="flex-1 overflow-y-auto p-3 space-y-3 relative flex flex-col">
+                    {#if sortedContainers.length === 0}
+                        <!-- No containers defined: show flat list -->
+                        <div class="relative">
+                            <div class="absolute left-[23px] top-0 bottom-0 w-px bg-gray-200 z-0"></div>
+                            {#each workflowData.steps as step, index (step.id)}
+                                {@const stepDef = getStepDefinition(step.stepId)}
+                                {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
 
-                    {#each workflowData.steps as step, index (step.id)}
-                        {@const stepDef = getStepDefinition(step.stepId)}
-                        {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
-
-                        <div
-                            draggable="true"
-                            on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                            on:dragend={dragDropHandlers.handleDragEnd}
-                            on:drop={dragDropHandlers.handleDrop}
-                            on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
-                        >
-                            <WorkflowStepItem
-                                {step}
-                                {index}
-                                {stepDef}
-                                {color}
-                                {workflowSteps}
-                                isExpanded={expandedStepId === step.id}
-                                isCapturing={captureTargetStepId === step.id}
-                                isAddingAttachment={addingAttachmentToStepId === step.id}
-                                isBeingDragged={dragState.draggedIndex === index}
-                                showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
-                                showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
-                                isLastStep={index === workflowData.steps.length - 1}
-                                {attachmentTextInput}
-                                on:toggleExpand={() => toggleStepExpand(step.id)}
-                                on:startCapture={() => startCaptureForStep(step.id)}
-                                on:toggleAttachment={() => toggleAttachmentSection(step.id)}
-                                on:moveUp={() => moveStepUp(index)}
-                                on:moveDown={() => moveStepDown(index)}
-                                on:remove={() => handleRemoveStep(step.id)}
-                                on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
-                                on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
-                                on:addTextAttachment={() => addTextAttachment(step.id)}
-                                on:paste={(e) => handlePaste(e.detail, step.id)}
-                            />
+                                <div
+                                    class="mb-2"
+                                    draggable="true"
+                                    on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
+                                    on:dragend={dragDropHandlers.handleDragEnd}
+                                    on:drop={dragDropHandlers.handleDrop}
+                                    on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
+                                >
+                                    <WorkflowStepItem
+                                        {step}
+                                        {index}
+                                        {stepDef}
+                                        {color}
+                                        {workflowSteps}
+                                        isExpanded={expandedStepId === step.id}
+                                        isCapturing={captureTargetStepId === step.id}
+                                        isAddingAttachment={addingAttachmentToStepId === step.id}
+                                        isBeingDragged={dragState.draggedIndex === index}
+                                        showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
+                                        showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
+                                        isLastStep={index === workflowData.steps.length - 1}
+                                        {attachmentTextInput}
+                                        on:toggleExpand={() => toggleStepExpand(step.id)}
+                                        on:startCapture={() => startCaptureForStep(step.id)}
+                                        on:toggleAttachment={() => toggleAttachmentSection(step.id)}
+                                        on:moveUp={() => moveStepUp(index)}
+                                        on:moveDown={() => moveStepDown(index)}
+                                        on:remove={() => handleRemoveStep(step.id)}
+                                        on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
+                                        on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
+                                        on:addTextAttachment={() => addTextAttachment(step.id)}
+                                        on:paste={(e) => handlePaste(e.detail, step.id)}
+                                    />
+                                </div>
+                            {/each}
                         </div>
-                    {/each}
+                    {:else}
+                        <!-- With containers: show grouped view -->
+
+                        <!-- Uncategorized Steps -->
+                        {@const uncategorizedSteps = getStepsByContainer(null)}
+                        {#if uncategorizedSteps.length > 0 || dragState.draggedIndex !== null}
+                            <div
+                                class="rounded-lg border transition-all {dropTargetContainerId === null && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
+                                on:dragover={(e) => handleContainerDragOver(e, null)}
+                                on:dragleave={handleContainerDragLeave}
+                                on:drop={(e) => handleContainerDrop(e, null)}
+                            >
+                                <div class="px-3 py-2 bg-gray-100 border-b border-gray-200 rounded-t-lg">
+                                    <span class="text-xs font-medium text-gray-500">미분류</span>
+                                    <span class="text-xs text-gray-400 ml-1">({uncategorizedSteps.length})</span>
+                                </div>
+                                <div class="p-2 space-y-2 relative min-h-[40px]">
+                                    {#if uncategorizedSteps.length > 0}
+                                        <div class="absolute left-[23px] top-2 bottom-2 w-px bg-gray-200 z-0"></div>
+                                    {/if}
+                                    {#each uncategorizedSteps as step (step.id)}
+                                        {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
+                                        {@const stepDef = getStepDefinition(step.stepId)}
+                                        {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
+
+                                        <div
+                                            draggable="true"
+                                            on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
+                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; }}
+                                            on:drop={dragDropHandlers.handleDrop}
+                                            on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
+                                        >
+                                            <WorkflowStepItem
+                                                {step}
+                                                {index}
+                                                {stepDef}
+                                                {color}
+                                                {workflowSteps}
+                                                isExpanded={expandedStepId === step.id}
+                                                isCapturing={captureTargetStepId === step.id}
+                                                isAddingAttachment={addingAttachmentToStepId === step.id}
+                                                isBeingDragged={dragState.draggedIndex === index}
+                                                showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
+                                                showDropIndicatorBottom={false}
+                                                isLastStep={index === workflowData.steps.length - 1}
+                                                {attachmentTextInput}
+                                                on:toggleExpand={() => toggleStepExpand(step.id)}
+                                                on:startCapture={() => startCaptureForStep(step.id)}
+                                                on:toggleAttachment={() => toggleAttachmentSection(step.id)}
+                                                on:moveUp={() => moveStepUp(index)}
+                                                on:moveDown={() => moveStepDown(index)}
+                                                on:remove={() => handleRemoveStep(step.id)}
+                                                on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
+                                                on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
+                                                on:addTextAttachment={() => addTextAttachment(step.id)}
+                                                on:paste={(e) => handlePaste(e.detail, step.id)}
+                                            />
+                                        </div>
+                                    {/each}
+                                    {#if uncategorizedSteps.length === 0}
+                                        <div class="text-xs text-gray-400 text-center py-2">드래그하여 여기에 놓기</div>
+                                    {/if}
+                                </div>
+                            </div>
+                        {/if}
+
+                        <!-- Container Groups -->
+                        {#each sortedContainers as container (container.id)}
+                            {@const containerSteps = getStepsByContainer(container.id)}
+                            {@const isCollapsed = collapsedContainers.has(container.id)}
+                            <div
+                                class="rounded-lg border transition-all {dropTargetContainerId === container.id && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
+                                on:dragover={(e) => handleContainerDragOver(e, container.id)}
+                                on:dragleave={handleContainerDragLeave}
+                                on:drop={(e) => handleContainerDrop(e, container.id)}
+                            >
+                                <button
+                                    class="w-full px-3 py-2 bg-gradient-to-r from-blue-50 to-white border-b border-gray-200 rounded-t-lg flex items-center gap-2 hover:bg-blue-100/50 transition-colors"
+                                    on:click={() => toggleContainerCollapse(container.id)}
+                                >
+                                    <svg class="w-3.5 h-3.5 text-gray-500 transition-transform {isCollapsed ? '' : 'rotate-90'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                    <span class="text-xs font-medium text-blue-700">{container.name}</span>
+                                    <span class="text-xs text-gray-400">({containerSteps.length})</span>
+                                </button>
+                                {#if !isCollapsed}
+                                    <div class="p-2 space-y-2 relative min-h-[40px]">
+                                        {#if containerSteps.length > 0}
+                                            <div class="absolute left-[23px] top-2 bottom-2 w-px bg-blue-200 z-0"></div>
+                                        {/if}
+                                        {#each containerSteps as step (step.id)}
+                                            {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
+                                            {@const stepDef = getStepDefinition(step.stepId)}
+                                            {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
+
+                                            <div
+                                                draggable="true"
+                                                on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
+                                                on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; }}
+                                                on:drop={dragDropHandlers.handleDrop}
+                                                on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
+                                            >
+                                                <WorkflowStepItem
+                                                    {step}
+                                                    {index}
+                                                    {stepDef}
+                                                    {color}
+                                                    {workflowSteps}
+                                                    isExpanded={expandedStepId === step.id}
+                                                    isCapturing={captureTargetStepId === step.id}
+                                                    isAddingAttachment={addingAttachmentToStepId === step.id}
+                                                    isBeingDragged={dragState.draggedIndex === index}
+                                                    showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
+                                                    showDropIndicatorBottom={false}
+                                                    isLastStep={index === workflowData.steps.length - 1}
+                                                    {attachmentTextInput}
+                                                    on:toggleExpand={() => toggleStepExpand(step.id)}
+                                                    on:startCapture={() => startCaptureForStep(step.id)}
+                                                    on:toggleAttachment={() => toggleAttachmentSection(step.id)}
+                                                    on:moveUp={() => moveStepUp(index)}
+                                                    on:moveDown={() => moveStepDown(index)}
+                                                    on:remove={() => handleRemoveStep(step.id)}
+                                                    on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
+                                                    on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
+                                                    on:addTextAttachment={() => addTextAttachment(step.id)}
+                                                    on:paste={(e) => handlePaste(e.detail, step.id)}
+                                                />
+                                            </div>
+                                        {/each}
+                                        {#if containerSteps.length === 0}
+                                            <div class="text-xs text-gray-400 text-center py-2">드래그하여 여기에 놓기</div>
+                                        {/if}
+                                    </div>
+                                {/if}
+                            </div>
+                        {/each}
+                    {/if}
 
                     {#if workflowData.steps.length === 0}
-                        <div class="absolute inset-0 flex flex-col items-center justify-center text-gray-300 pointer-events-none pb-8">
+                        <div class="flex flex-col items-center justify-center text-gray-300 py-8">
                             <span class="text-xs opacity-50">스텝을 추가하세요</span>
                         </div>
                     {/if}
 
                     <!-- Drop Zone for End of List -->
-                    <div
-                        class="flex-1 min-h-[50px]"
-                        on:dragover={(e) => dragDropHandlers.handleContainerDragOver(e, workflowData.steps.length)}
-                        on:drop={(e) => dragDropHandlers.handleContainerDrop(e, workflowData.steps.length)}
-                    ></div>
+                    <div class="flex-1 min-h-[20px]"></div>
                 </div>
 
                 <!-- Modals -->

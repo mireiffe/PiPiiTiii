@@ -21,6 +21,13 @@ export interface WorkflowSteps {
     rows: WorkflowStepRow[];
 }
 
+// Step Container Definition (settings)
+export interface StepContainer {
+    id: string;
+    name: string;
+    order: number;
+}
+
 // ========== Project Workflow Data ==========
 
 // Capture for a workflow step instance
@@ -48,6 +55,7 @@ export interface StepAttachment {
 export interface WorkflowStepInstance {
     id: string;
     stepId: string;  // Reference to WorkflowStepRow.id in settings
+    containerId?: string;  // Reference to StepContainer.id (optional, null = uncategorized)
     captures: StepCapture[];
     attachments: StepAttachment[];
     order: number;
@@ -82,6 +90,11 @@ export function generateStepCaptureId(): string {
 // Generate unique ID for attachments
 export function generateAttachmentId(): string {
     return `att_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Generate unique ID for containers
+export function generateContainerId(): string {
+    return `cont_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
 // Create a new step instance from a step definition

@@ -272,6 +272,12 @@ class WorkflowSteps(BaseModel):
     rows: List[WorkflowStepRow] = []
 
 
+class StepContainer(BaseModel):
+    id: str
+    name: str
+    order: int
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     workflow_llm: Optional[LLMConfig] = None
@@ -279,6 +285,7 @@ class Settings(BaseModel):
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
     workflow_steps: Optional[WorkflowSteps] = None
+    step_containers: Optional[List[StepContainer]] = None
 
 
 class WorkflowData(BaseModel):
@@ -755,6 +762,9 @@ def load_settings() -> dict:
             # Ensure workflow_steps exists (migration for existing settings)
             if "workflow_steps" not in settings:
                 settings["workflow_steps"] = get_default_workflow_steps()
+            # Ensure step_containers exists (migration for existing settings)
+            if "step_containers" not in settings:
+                settings["step_containers"] = []
             return settings
     else:
         return {
@@ -775,6 +785,7 @@ def load_settings() -> dict:
             "summary_fields": [],
             "use_thumbnails": True,
             "workflow_steps": get_default_workflow_steps(),
+            "step_containers": [],
         }
 
 
