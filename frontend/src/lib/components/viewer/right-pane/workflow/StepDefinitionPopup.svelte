@@ -207,7 +207,7 @@
                                 bind:value={newStepValues[column.id]}
                                 placeholder={column.name}
                                 class="flex-1 px-2 py-1 text-xs border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
-                                on:keypress={(e) => e.key === "Enter" && handleAddNewStep()}
+                                on:keydown={(e) => e.key === "Enter" && handleAddNewStep()}
                             />
                         </div>
                     {/each}
@@ -276,7 +276,7 @@
                                         bind:value={editStepValues[column.id]}
                                         placeholder={column.name}
                                         class="flex-1 px-2 py-1 text-xs border border-amber-200 rounded focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
-                                        on:keypress={(e) => e.key === "Enter" && handleUpdateStepDef()}
+                                        on:keydown={(e) => e.key === "Enter" && handleUpdateStepDef()}
                                     />
                                 </div>
                             {/each}
@@ -302,12 +302,6 @@
                         class="w-full text-left p-2.5 bg-white hover:bg-blue-50/80 rounded-lg group transition-all flex items-start gap-2.5 cursor-pointer border border-gray-100 hover:border-blue-200 hover:shadow-sm"
                         on:click={() => handleSelectStep(step)}
                     >
-                        <div
-                            class="shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-[10px] font-semibold group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors"
-                        >
-                            {idx + 1}
-                        </div>
-
                         <div class="flex-1 min-w-0">
                             <div class="flex items-start gap-1.5 mb-1">
                                 <span
@@ -320,7 +314,13 @@
                                 </span>
                             </div>
                             <div class="text-[10px] text-gray-400 pl-0.5 break-words leading-snug line-clamp-2">
-                                {step.values["system"] || step.values["expected_result"] || "-"}
+                              {[
+                                step.values["system"],
+                                step.values["access_target"],
+                                step.values["related_db_table"],
+                              ]
+                                .filter(Boolean)
+                                .join(" / ") || "-"}
                             </div>
                         </div>
 
@@ -343,7 +343,7 @@
                             </button>
                             <!-- Delete button -->
                             {#if usageCount > 0}
-                                <span class="p-1 text-gray-200 cursor-not-allowed" title="사용 중인 스텝은 설정에서 삭제해주세요">
+                                <span class="p-1 text-gray-200 cursor-not-allowed" title="사용 중인 스텝은 설정에서 삭제해주세요" on:click|stopPropagation>
                                     <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M12 15v2m0 0v2m0-2h2m-2 0H10m9.364-9.364l-2.829 2.829m0 0L14.5 12.5m2.036-2.035a3 3 0 10-4.07 4.07m4.07-4.07l-4.07 4.07M5.636 5.636l2.829 2.829m0 0l2.035 2.035m-2.035-2.035a3 3 0 104.07 4.07" />
                                     </svg>

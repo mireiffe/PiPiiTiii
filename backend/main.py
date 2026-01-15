@@ -466,11 +466,6 @@ async def upload_ppt(background_tasks: BackgroundTasks, file: UploadFile = File(
 
     return {"id": project_id, "message": "Upload successful, processing started"}
 
-    # Run parsing in background
-    background_tasks.add_task(run_parsing_task, file_path, project_dir, project_id)
-
-    return {"id": project_id, "message": "Upload successful, processing started"}
-
 
 @app.get("/api/project/{project_id}/status")
 def get_project_status(project_id: str):
@@ -498,49 +493,6 @@ def get_project(project_id: str):
         data = json.load(f)
 
     return data
-
-
-@app.post("/api/project/{project_id}/update")
-def update_project_shape(project_id: str, update: PositionUpdate):
-    project_dir = os.path.join(RESULT_DIR, project_id)
-    json_path = os.path.join(project_dir, f"{project_id}.json")
-
-    if not os.path.exists(json_path):
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Read-Modify-Write
-    # This is not efficient for high concurrency but fine for this prototype
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    # Find the slide and shape
-    # Shape index in JSON is unique per slide?
-    # parsing.py: shape_index=shape_index (1-based integer)
-    # But for groups it's "1_1".
-
-    target_slide = None
-    for slide in data.get("slides", []):
-        if slide.get("slide_index") == update.slide_index:
-            target_slide = slide
-            break
-
-    if not target_slide:
-        raise HTTPException(status_code=404, detail="Slide not found")
-
-    # Use shape_utils to update shape properties
-    found = update_shape_property(
-        target_slide.get("shapes", []),
-        str(update.shape_index),
-        {"left": update.left, "top": update.top},
-    )
-
-    if not found:
-        raise HTTPException(status_code=404, detail="Shape not found")
-
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-
-    return {"status": "success"}
 
 
 @app.post("/api/project/{project_id}/update_positions")
@@ -638,7 +590,6 @@ def reparse_all_project(project_id: str):
     ppt_path = file_resolver.resolve_ppt_path(ppt_path, project_id)
 
     try:
-        # Extract existing descriptions to preserve them
         # Extract existing descriptions to preserve them
         preserved_data = {}
         for slide in data.get("slides", []):
@@ -1163,14 +1114,6 @@ def download_project(project_id: str):
         finally:
             pythoncom.CoUninitialize()
 
-    # We should probably run this in a thread pool to avoid blocking
-    # But for simplicity and since we need to return the file, we might block or use run_in_executor
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    # Actually, we are in a sync route (def, not async def), so we can just run it.
-    # But to avoid blocking the main thread if we were async...
-    # Since this is `def`, FastAPI runs it in a threadpool automatically.
-
     success = reconstruct_task()
 
     if not success:
@@ -1331,41 +1274,6 @@ async def batch_generate_summary(request: BatchGenerateSummaryRequest):
     )
 
 
-@app.get("/api/project/{project_id}/attributes")
-def get_project_attributes(project_id: str):
-    """Get project attributes from database."""
-    try:
-        project = db.get_project(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-
-        # Get active attribute definitions
-        active_attrs = attr_manager.get_active_attributes()
-
-        # Build attributes list with values
-        attributes = []
-        for attr in active_attrs:
-            key = attr["key"]
-            value = project.get(key)
-            if value is not None and value != "":
-                attributes.append(
-                    {
-                        "key": key,
-                        "name": attr["display_name"],
-                        "value": str(value),
-                        "source": "project",
-                    }
-                )
-
-        return {"attributes": attributes}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to load attributes: {str(e)}"
-        )
-
-
 # ========== Attachments API ==========
 
 
@@ -1432,16 +1340,6 @@ def delete_attachment_image(image_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(e)}")
-
-
-@app.delete("/api/attachments/project/{project_id}")
-def delete_project_attachments(project_id: str):
-    """Delete all attachment images for a project."""
-    try:
-        deleted_count = attachments_db.delete_project_images(project_id)
-        return {"status": "success", "deleted_count": deleted_count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete attachments: {str(e)}")
 
 
 if __name__ == "__main__":

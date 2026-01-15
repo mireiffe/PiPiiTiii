@@ -33,6 +33,7 @@
     subtitle: "title",
     footer: {
       left: [
+        { key: "db_no", prefix: "DB No. " },
         { key: "slide_count", suffix: " slides" },
         { key: "author", prefix: "by " },
       ],
@@ -56,7 +57,7 @@
   let searchTerm = "";
 
   // Sorting state
-  let sortBy = "date";
+  let sortBy = "db_no";
   let sortDirection = "desc";
 
   // Dynamic filters
@@ -811,7 +812,7 @@
                   title={isPinned ? '고정 해제' : '상단에 고정'}
                 >
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M16 12V4h-2v2h-4V4H8v8c0 1.1.9 2 2 2h1v6h2v-6h1c1.1 0 2-.9 2-2z"/>
+                    <path d="M12 2C8.69 2 6 4.69 6 8c0 2.36 1.37 4.41 3.36 5.42L8 18h3v4l1 1 1-1v-4h3l-1.36-4.58C16.63 12.41 18 10.36 18 8c0-3.31-2.69-6-6-6zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
                   </svg>
                 </button>
 
@@ -847,7 +848,7 @@
                       {#if isPinned}
                         <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300" title="고정된 프로젝트">
                           <svg class="w-3 h-3 text-amber-600" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M16 12V4h-2v2h-4V4H8v8c0 1.1.9 2 2 2h1v6h2v-6h1c1.1 0 2-.9 2-2z"/>
+                            <path d="M12 2C8.69 2 6 4.69 6 8c0 2.36 1.37 4.41 3.36 5.42L8 18h3v4l1 1 1-1v-4h3l-1.36-4.58C16.63 12.41 18 10.36 18 8c0-3.31-2.69-6-6-6zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
                           </svg>
                           <span class="text-[10px] font-medium text-amber-700">고정됨</span>
                         </div>

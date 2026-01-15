@@ -183,11 +183,6 @@
         captureSlideElement = null;
     }
 
-    // Get capture overlays for a specific slide (no longer used, kept for potential future use)
-    function getCaptureOverlaysForSlide(slideIndex) {
-        return captureOverlays.filter((c) => c.slideIndex === slideIndex);
-    }
-
     // Calculate capture selection rectangle for display
     $: captureRect = isCapturing
         ? {

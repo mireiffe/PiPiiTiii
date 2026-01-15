@@ -126,7 +126,7 @@
                         bind:value={newColumnName}
                         placeholder="컬럼 이름"
                         class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        on:keypress={(e) => e.key === 'Enter' && addColumn()}
+                        on:keydown={(e) => e.key === 'Enter' && addColumn()}
                     />
                     <button
                         class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
