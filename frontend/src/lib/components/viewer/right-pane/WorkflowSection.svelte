@@ -160,8 +160,26 @@
     // Sort containers by order
     $: sortedContainers = [...stepContainers].sort((a, b) => a.order - b.order);
 
-    // Reactive uncategorized steps (must be reactive, not @const)
-    $: uncategorizedSteps = sortedContainers.length > 0 ? getStepsByContainer(null) : [];
+    // Reactive: pre-compute steps by container (workflowData.steps dependency is explicit)
+    $: stepsByContainerId = (() => {
+        const map: Record<string, WorkflowStepInstance[]> = { __uncategorized__: [] };
+        sortedContainers.forEach(c => { map[c.id] = []; });
+
+        workflowData.steps.forEach(step => {
+            const key = step.containerId ?? '__uncategorized__';
+            if (map[key]) {
+                map[key].push(step);
+            } else {
+                // containerId references a non-existent container, put in uncategorized
+                map.__uncategorized__.push(step);
+            }
+        });
+
+        return map;
+    })();
+
+    // Reactive uncategorized steps
+    $: uncategorizedSteps = sortedContainers.length > 0 ? (stepsByContainerId.__uncategorized__ || []) : [];
 
     // Helpers
     function exitCaptureMode() {
@@ -649,7 +667,7 @@
 
                         <!-- Container Groups -->
                         {#each sortedContainers as container (container.id)}
-                            {@const containerSteps = getStepsByContainer(container.id)}
+                            {@const containerSteps = stepsByContainerId[container.id] || []}
                             {@const isCollapsed = collapsedContainers.has(container.id)}
                             <div
                                 class="rounded-lg border transition-all {dropTargetContainerId === container.id && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
