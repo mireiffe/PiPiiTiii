@@ -82,45 +82,82 @@
     let lastClickedStepId: string | null = null;
     let showMoveToContainerDropdown = false;
     let moveDropdownPosition = { top: 0, left: 0 };
+    let selectionModeActive = false;  // 체크박스 표시 여부
 
     // Selection helpers
-    function toggleStepSelection(stepId: string, event: MouseEvent) {
+    // 체크박스 직접 클릭: 항상 토글 (중복 선택)
+    function handleCheckboxClick(stepId: string, event: MouseEvent) {
         event.stopPropagation();
 
-        if (event.shiftKey && lastClickedStepId) {
-            // Shift+click: range selection
-            const stepIds = workflowData.steps.map(s => s.id);
-            const lastIndex = stepIds.indexOf(lastClickedStepId);
-            const currentIndex = stepIds.indexOf(stepId);
+        if (selectedStepIds.has(stepId)) {
+            selectedStepIds.delete(stepId);
+        } else {
+            selectedStepIds.add(stepId);
+        }
+        selectedStepIds = selectedStepIds;
+        lastClickedStepId = stepId;
 
-            if (lastIndex !== -1 && currentIndex !== -1) {
-                const start = Math.min(lastIndex, currentIndex);
-                const end = Math.max(lastIndex, currentIndex);
+        // 선택이 모두 해제되면 선택 모드 종료
+        if (selectedStepIds.size === 0) {
+            selectionModeActive = false;
+        }
+    }
 
-                for (let i = start; i <= end; i++) {
-                    selectedStepIds.add(stepIds[i]);
+    // 카드 본문 클릭 처리 (Ctrl 키 여부에 따라 다르게 동작)
+    function handleCardCtrlClick(stepId: string, event: MouseEvent) {
+        if (event.ctrlKey || event.metaKey) {
+            event.stopPropagation();
+            event.preventDefault();
+
+            // 선택 모드 활성화
+            selectionModeActive = true;
+
+            // Shift+Ctrl: 범위 선택
+            if (event.shiftKey && lastClickedStepId) {
+                const stepIds = workflowData.steps.map(s => s.id);
+                const lastIndex = stepIds.indexOf(lastClickedStepId);
+                const currentIndex = stepIds.indexOf(stepId);
+
+                if (lastIndex !== -1 && currentIndex !== -1) {
+                    const start = Math.min(lastIndex, currentIndex);
+                    const end = Math.max(lastIndex, currentIndex);
+
+                    for (let i = start; i <= end; i++) {
+                        selectedStepIds.add(stepIds[i]);
+                    }
+                    selectedStepIds = selectedStepIds;
+                }
+            } else {
+                // Ctrl 클릭: 토글 선택
+                if (selectedStepIds.has(stepId)) {
+                    selectedStepIds.delete(stepId);
+                } else {
+                    selectedStepIds.add(stepId);
                 }
                 selectedStepIds = selectedStepIds;
-            }
-        } else if (event.ctrlKey || event.metaKey) {
-            // Ctrl/Cmd+click: toggle single selection
-            if (selectedStepIds.has(stepId)) {
-                selectedStepIds.delete(stepId);
-            } else {
-                selectedStepIds.add(stepId);
-            }
-            selectedStepIds = selectedStepIds;
-            lastClickedStepId = stepId;
-        } else {
-            // Regular click: single selection
-            if (selectedStepIds.has(stepId) && selectedStepIds.size === 1) {
-                selectedStepIds.clear();
-                lastClickedStepId = null;
-            } else {
-                selectedStepIds = new Set([stepId]);
                 lastClickedStepId = stepId;
             }
+
+            // 선택이 모두 해제되면 선택 모드 종료
+            if (selectedStepIds.size === 0) {
+                selectionModeActive = false;
+            }
+
+            return true; // handled
         }
+
+        // 선택 모드에서 일반 클릭: 단일 선택
+        if (selectionModeActive) {
+            event.stopPropagation();
+            event.preventDefault();
+
+            selectedStepIds = new Set([stepId]);
+            lastClickedStepId = stepId;
+
+            return true; // handled
+        }
+
+        return false; // not handled, let normal expand happen
     }
 
     function clearSelection() {
@@ -128,6 +165,7 @@
         selectedStepIds = selectedStepIds;
         lastClickedStepId = null;
         showMoveToContainerDropdown = false;
+        selectionModeActive = false;
     }
 
     function selectAll() {
@@ -973,7 +1011,7 @@
                                                 isLastStep={index === workflowData.steps.length - 1}
                                                 {attachmentTextInput}
                                                 isSelected={selectedStepIds.has(step.id)}
-                                                showSelectionCheckbox={true}
+                                                showSelectionCheckbox={selectionModeActive}
                                                 on:toggleExpand={() => toggleStepExpand(step.id)}
                                                 on:startCapture={() => startCaptureForStep(step.id)}
                                                 on:toggleAttachment={() => toggleAttachmentSection(step.id)}
@@ -984,7 +1022,8 @@
                                                 on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
                                                 on:addTextAttachment={() => addTextAttachment(step.id)}
                                                 on:paste={(e) => handlePaste(e.detail, step.id)}
-                                                on:toggleSelection={(e) => toggleStepSelection(step.id, e.detail)}
+                                                on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
+                                                on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
                                             />
                                         </div>
 
@@ -1060,7 +1099,7 @@
                                                     isLastStep={index === workflowData.steps.length - 1}
                                                     {attachmentTextInput}
                                                     isSelected={selectedStepIds.has(step.id)}
-                                                    showSelectionCheckbox={true}
+                                                    showSelectionCheckbox={selectionModeActive}
                                                     on:toggleExpand={() => toggleStepExpand(step.id)}
                                                     on:startCapture={() => startCaptureForStep(step.id)}
                                                     on:toggleAttachment={() => toggleAttachmentSection(step.id)}
@@ -1071,7 +1110,8 @@
                                                     on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
                                                     on:addTextAttachment={() => addTextAttachment(step.id)}
                                                     on:paste={(e) => handlePaste(e.detail, step.id)}
-                                                    on:toggleSelection={(e) => toggleStepSelection(step.id, e.detail)}
+                                                    on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
+                                                    on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
                                                 />
                                             </div>
 
