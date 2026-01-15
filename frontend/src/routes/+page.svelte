@@ -57,7 +57,7 @@
   let searchTerm = "";
 
   // Sorting state
-  let sortBy = "date";
+  let sortBy = "db_no";
   let sortDirection = "desc";
 
   // Dynamic filters
