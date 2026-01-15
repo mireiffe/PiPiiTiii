@@ -553,20 +553,19 @@
                     {:else}
                         <!-- With containers: show grouped view -->
 
-                        <!-- Uncategorized Steps -->
+                        <!-- Uncategorized Steps (always shown when containers exist) -->
                         {@const uncategorizedSteps = getStepsByContainer(null)}
-                        {#if uncategorizedSteps.length > 0 || dragState.draggedIndex !== null}
-                            <div
-                                class="rounded-lg border transition-all {dropTargetContainerId === null && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
-                                on:dragover={(e) => handleContainerDragOver(e, null)}
-                                on:dragleave={handleContainerDragLeave}
-                                on:drop={(e) => handleContainerDrop(e, null)}
-                            >
-                                <div class="px-3 py-2 bg-gray-100 border-b border-gray-200 rounded-t-lg">
-                                    <span class="text-xs font-medium text-gray-500">미분류</span>
-                                    <span class="text-xs text-gray-400 ml-1">({uncategorizedSteps.length})</span>
-                                </div>
-                                <div class="p-2 space-y-2 relative min-h-[40px]">
+                        <div
+                            class="rounded-lg border transition-all {dropTargetContainerId === null && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
+                            on:dragover={(e) => handleContainerDragOver(e, null)}
+                            on:dragleave={handleContainerDragLeave}
+                            on:drop={(e) => handleContainerDrop(e, null)}
+                        >
+                            <div class="px-3 py-2 bg-gray-100 border-b border-gray-200 rounded-t-lg">
+                                <span class="text-xs font-medium text-gray-500">미분류</span>
+                                <span class="text-xs text-gray-400 ml-1">({uncategorizedSteps.length})</span>
+                            </div>
+                            <div class="p-2 space-y-2 relative min-h-[40px]">
                                     {#if uncategorizedSteps.length > 0}
                                         <div class="absolute left-[23px] top-2 bottom-2 w-px bg-gray-200 z-0"></div>
                                     {/if}
@@ -612,9 +611,8 @@
                                     {#if uncategorizedSteps.length === 0}
                                         <div class="text-xs text-gray-400 text-center py-2">드래그하여 여기에 놓기</div>
                                     {/if}
-                                </div>
                             </div>
-                        {/if}
+                        </div>
 
                         <!-- Container Groups -->
                         {#each sortedContainers as container (container.id)}
