@@ -17,8 +17,9 @@ import os
 import sys
 import json
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add backend directory to path for imports
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
 
 from database import Database
 from attachments_db import AttachmentsDatabase
@@ -26,9 +27,8 @@ from attachments_db import AttachmentsDatabase
 
 def migrate_attachments():
     # Database paths
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(base_dir, "backend", "data", "projects.db")
-    attachments_db_path = os.path.join(base_dir, "backend", "data", "attachments.db")
+    db_path = os.path.join(BASE_DIR, "backend", "data", "projects.db")
+    attachments_db_path = os.path.join(BASE_DIR, "backend", "data", "attachments.db")
 
     print(f"Projects DB: {db_path}")
     print(f"Attachments DB: {attachments_db_path}")
