@@ -33,6 +33,7 @@
     subtitle: "title",
     footer: {
       left: [
+        { key: "db_no", prefix: "DB No. " },
         { key: "slide_count", suffix: " slides" },
         { key: "author", prefix: "by " },
       ],
