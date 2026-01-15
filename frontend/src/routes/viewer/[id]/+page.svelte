@@ -46,6 +46,9 @@
     let useThumbnails = false;
     let loadingSettings = false;
 
+    // Left pane toggle (persisted in localStorage)
+    let leftPaneExpanded = true;
+
     // Scale factor to fit slide in view
     let scale = 1;
     let containerWidth = 0;
@@ -145,6 +148,12 @@
     }
 
     onMount(async () => {
+        // Load left pane state from localStorage
+        const savedLeftPaneState = localStorage.getItem("viewer-left-pane-expanded");
+        if (savedLeftPaneState !== null) {
+            leftPaneExpanded = savedLeftPaneState === "true";
+        }
+
         // Set rightPane width to 35% of window width (min 600px, max 800px)
         const calculatedWidth = Math.min(
             800,
@@ -904,6 +913,11 @@
             downloading = false;
         }
     }
+
+    function toggleLeftPane() {
+        leftPaneExpanded = !leftPaneExpanded;
+        localStorage.setItem("viewer-left-pane-expanded", String(leftPaneExpanded));
+    }
 </script>
 
 <div class="flex h-screen bg-gray-100 overflow-hidden">
@@ -913,7 +927,9 @@
         {projectId}
         {currentSlideIndex}
         {useThumbnails}
+        expanded={leftPaneExpanded}
         on:select={(e) => selectSlide(e.detail.index)}
+        on:toggle={toggleLeftPane}
     />
 
     <!-- Right Pane (Order swapped in DOM but visually controlled by flex and order if needed, but here it is absolute or flex item? It's flex-col layout) -->
