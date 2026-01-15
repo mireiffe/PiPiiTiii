@@ -314,7 +314,13 @@
                                 </span>
                             </div>
                             <div class="text-[10px] text-gray-400 pl-0.5 break-words leading-snug line-clamp-2">
-                                {step.values["system"] || step.values["expected_result"] || "-"}
+                              {[
+                                step.values["system"],
+                                step.values["access_target"],
+                                step.values["related_db_table"],
+                              ]
+                                .filter(Boolean)
+                                .join(" / ") || "-"}
                             </div>
                         </div>
 
