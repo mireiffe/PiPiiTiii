@@ -126,8 +126,42 @@
         dropTargetContainerId = null;
     }
 
+    // Handle drop on a step within a container (combines reorder + container change)
+    function handleStepDropWithContainer(e: DragEvent, targetContainerId: string | undefined) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const { draggedIndex, dropTargetIndex } = dragState;
+        if (draggedIndex === null || dropTargetIndex === null) return;
+
+        const steps = [...workflowData.steps];
+        const draggedStep = steps[draggedIndex];
+
+        // Update container if different
+        const newContainerId = targetContainerId || undefined;
+        if (draggedStep.containerId !== newContainerId) {
+            steps[draggedIndex] = { ...draggedStep, containerId: newContainerId };
+        }
+
+        // Reorder
+        const [removed] = steps.splice(draggedIndex, 1);
+        let target = dropTargetIndex;
+        if (draggedIndex < target) target -= 1;
+        if (target !== draggedIndex || draggedStep.containerId !== newContainerId) {
+            steps.splice(target, 0, removed);
+            workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
+            dispatch("workflowChange", workflowData);
+        }
+
+        dragState = { draggedIndex: null, dropTargetIndex: null };
+        dropTargetContainerId = null;
+    }
+
     // Sort containers by order
     $: sortedContainers = [...stepContainers].sort((a, b) => a.order - b.order);
+
+    // Reactive uncategorized steps (must be reactive, not @const)
+    $: uncategorizedSteps = sortedContainers.length > 0 ? getStepsByContainer(null) : [];
 
     // Helpers
     function exitCaptureMode() {
@@ -554,7 +588,6 @@
                         <!-- With containers: show grouped view -->
 
                         <!-- Uncategorized Steps (always shown when containers exist) -->
-                        {@const uncategorizedSteps = getStepsByContainer(null)}
                         <div
                             class="rounded-lg border transition-all {dropTargetContainerId === null && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
                             on:dragover={(e) => handleContainerDragOver(e, null)}
@@ -578,7 +611,7 @@
                                             draggable="true"
                                             on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
                                             on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; }}
-                                            on:drop={dragDropHandlers.handleDrop}
+                                            on:drop={(e) => handleStepDropWithContainer(e, undefined)}
                                             on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
                                         >
                                             <WorkflowStepItem
@@ -648,7 +681,7 @@
                                                 draggable="true"
                                                 on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
                                                 on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; }}
-                                                on:drop={dragDropHandlers.handleDrop}
+                                                on:drop={(e) => handleStepDropWithContainer(e, container.id)}
                                                 on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
                                             >
                                                 <WorkflowStepItem
