@@ -22,6 +22,8 @@
     export let showDropIndicatorBottom = false;
     export let isLastStep = false;
     export let attachmentTextInput = "";
+    export let isSelected = false;
+    export let showSelectionCheckbox = false;
 
     const dispatch = createEventDispatcher<{
         toggleExpand: void;
@@ -34,6 +36,7 @@
         openAttachmentModal: { attachment: StepAttachment };
         addTextAttachment: void;
         paste: ClipboardEvent;
+        toggleSelection: MouseEvent;
     }>();
 
     function getStepDisplayText(): string {
@@ -70,16 +73,35 @@
     <div
         class="bg-white rounded-lg border shadow-sm overflow-hidden transition-all duration-200 group
         {isExpanded ? 'ring-1 ring-blue-500/20 shadow-md border-blue-300' : 'border-gray-200 hover:border-blue-300'}
-        {isBeingDragged ? 'shadow-none border-blue-200 bg-blue-50/20 ring-0' : ''}"
+        {isBeingDragged ? 'shadow-none border-blue-200 bg-blue-50/20 ring-0' : ''}
+        {isSelected ? 'ring-2 ring-blue-400 border-blue-400 bg-blue-50/30' : ''}"
     >
         <!-- Card Header -->
         <div
             class="p-2 cursor-pointer hover:bg-gray-50/50 flex items-start justify-between gap-2"
             on:click={() => dispatch("toggleExpand")}
         >
+            <!-- Selection Checkbox -->
+            {#if showSelectionCheckbox}
+                <button
+                    class="flex-shrink-0 w-4 h-4 rounded border-2 transition-all self-center flex items-center justify-center
+                    {isSelected
+                        ? 'bg-blue-500 border-blue-500'
+                        : 'border-gray-300 hover:border-blue-400 bg-white'}"
+                    on:click|stopPropagation={(e) => dispatch("toggleSelection", e)}
+                    title="선택 (Ctrl+클릭: 추가, Shift+클릭: 범위)"
+                >
+                    {#if isSelected}
+                        <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                    {/if}
+                </button>
+            {/if}
+
             <!-- Drag Handle -->
             <div
-                class="flex items-center pr-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity self-center"
+                class="flex items-center pr-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 {showSelectionCheckbox ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity self-center"
             >
                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="9" cy="6" r="2" /><circle cx="15" cy="6" r="2" />

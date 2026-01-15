@@ -77,6 +77,105 @@
     const INSERT_GUIDE_DELAY = 500; // ms to wait before showing insert guide
     let hoverCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
+    // Multi-selection state
+    let selectedStepIds: Set<string> = new Set();
+    let lastClickedStepId: string | null = null;
+    let showMoveToContainerDropdown = false;
+    let moveDropdownPosition = { top: 0, left: 0 };
+
+    // Selection helpers
+    function toggleStepSelection(stepId: string, event: MouseEvent) {
+        event.stopPropagation();
+
+        if (event.shiftKey && lastClickedStepId) {
+            // Shift+click: range selection
+            const stepIds = workflowData.steps.map(s => s.id);
+            const lastIndex = stepIds.indexOf(lastClickedStepId);
+            const currentIndex = stepIds.indexOf(stepId);
+
+            if (lastIndex !== -1 && currentIndex !== -1) {
+                const start = Math.min(lastIndex, currentIndex);
+                const end = Math.max(lastIndex, currentIndex);
+
+                for (let i = start; i <= end; i++) {
+                    selectedStepIds.add(stepIds[i]);
+                }
+                selectedStepIds = selectedStepIds;
+            }
+        } else if (event.ctrlKey || event.metaKey) {
+            // Ctrl/Cmd+click: toggle single selection
+            if (selectedStepIds.has(stepId)) {
+                selectedStepIds.delete(stepId);
+            } else {
+                selectedStepIds.add(stepId);
+            }
+            selectedStepIds = selectedStepIds;
+            lastClickedStepId = stepId;
+        } else {
+            // Regular click: single selection
+            if (selectedStepIds.has(stepId) && selectedStepIds.size === 1) {
+                selectedStepIds.clear();
+                lastClickedStepId = null;
+            } else {
+                selectedStepIds = new Set([stepId]);
+                lastClickedStepId = stepId;
+            }
+        }
+    }
+
+    function clearSelection() {
+        selectedStepIds.clear();
+        selectedStepIds = selectedStepIds;
+        lastClickedStepId = null;
+        showMoveToContainerDropdown = false;
+    }
+
+    function selectAll() {
+        workflowData.steps.forEach(step => selectedStepIds.add(step.id));
+        selectedStepIds = selectedStepIds;
+    }
+
+    function openMoveDropdown(event: MouseEvent) {
+        const button = event.currentTarget as HTMLElement;
+        const rect = button.getBoundingClientRect();
+        moveDropdownPosition = {
+            top: rect.bottom + 4,
+            left: rect.left
+        };
+        showMoveToContainerDropdown = true;
+    }
+
+    function moveSelectedToContainer(targetContainerId: string | null) {
+        if (selectedStepIds.size === 0) return;
+
+        const steps = [...workflowData.steps];
+
+        // Update containerId for all selected steps
+        steps.forEach((step, index) => {
+            if (selectedStepIds.has(step.id)) {
+                steps[index] = {
+                    ...step,
+                    containerId: targetContainerId || undefined
+                };
+            }
+        });
+
+        workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
+
+        clearSelection();
+    }
+
+    // Close dropdown when clicking outside
+    function handleDropdownClickOutside(event: MouseEvent) {
+        if (showMoveToContainerDropdown) {
+            const target = event.target as HTMLElement;
+            if (!target.closest('.move-dropdown')) {
+                showMoveToContainerDropdown = false;
+            }
+        }
+    }
+
     const dragDropHandlers = createDragDropHandlers(
         () => dragState,
         (newState) => (dragState = { ...dragState, ...newState }),
@@ -628,7 +727,7 @@
     }
 </script>
 
-<svelte:window on:click={handleClickOutside} />
+<svelte:window on:click={handleClickOutside} on:click={handleDropdownClickOutside} />
 
 <div class="border-b border-gray-200 bg-white flex flex-col {isExpanded ? 'flex-1 min-h-0' : ''}">
     <AccordionHeader
@@ -687,6 +786,70 @@
                     }}
                 />
             {:else}
+                <!-- Selection Toolbar (shown when items are selected) -->
+                {#if selectedStepIds.size > 0}
+                    <div class="px-3 py-2 bg-blue-50 border-b border-blue-200 flex items-center gap-2 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium text-blue-700">
+                                {selectedStepIds.size}개 선택됨
+                            </span>
+                            <button
+                                class="text-xs text-blue-500 hover:text-blue-700 underline"
+                                on:click={selectAll}
+                            >
+                                전체 선택
+                            </button>
+                            <button
+                                class="text-xs text-gray-500 hover:text-gray-700 underline"
+                                on:click={clearSelection}
+                            >
+                                선택 해제
+                            </button>
+                        </div>
+                        <div class="flex-1"></div>
+                        {#if sortedContainers.length > 0}
+                            <div class="relative move-dropdown">
+                                <button
+                                    class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors shadow-sm"
+                                    on:click={openMoveDropdown}
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                    </svg>
+                                    Container로 이동
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {#if showMoveToContainerDropdown}
+                                    <div
+                                        class="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px] z-50 max-h-[300px] overflow-y-auto"
+                                    >
+                                        <button
+                                            class="w-full px-3 py-2 text-left text-xs hover:bg-gray-100 flex items-center gap-2"
+                                            on:click={() => moveSelectedToContainer(null)}
+                                        >
+                                            <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+                                            미분류
+                                        </button>
+                                        <div class="border-t border-gray-100 my-1"></div>
+                                        {#each sortedContainers as container}
+                                            <button
+                                                class="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2"
+                                                on:click={() => moveSelectedToContainer(container.id)}
+                                            >
+                                                <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                                                {container.name}
+                                            </button>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
+
                 <!-- Add Step Button -->
                 <div class="p-3 pb-0 bg-gray-50/50 border-b border-gray-100 relative">
                     <button
@@ -809,6 +972,8 @@
                                                 showDropIndicatorBottom={false}
                                                 isLastStep={index === workflowData.steps.length - 1}
                                                 {attachmentTextInput}
+                                                isSelected={selectedStepIds.has(step.id)}
+                                                showSelectionCheckbox={true}
                                                 on:toggleExpand={() => toggleStepExpand(step.id)}
                                                 on:startCapture={() => startCaptureForStep(step.id)}
                                                 on:toggleAttachment={() => toggleAttachmentSection(step.id)}
@@ -819,6 +984,7 @@
                                                 on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
                                                 on:addTextAttachment={() => addTextAttachment(step.id)}
                                                 on:paste={(e) => handlePaste(e.detail, step.id)}
+                                                on:toggleSelection={(e) => toggleStepSelection(step.id, e.detail)}
                                             />
                                         </div>
 
@@ -893,6 +1059,8 @@
                                                     showDropIndicatorBottom={false}
                                                     isLastStep={index === workflowData.steps.length - 1}
                                                     {attachmentTextInput}
+                                                    isSelected={selectedStepIds.has(step.id)}
+                                                    showSelectionCheckbox={true}
                                                     on:toggleExpand={() => toggleStepExpand(step.id)}
                                                     on:startCapture={() => startCaptureForStep(step.id)}
                                                     on:toggleAttachment={() => toggleAttachmentSection(step.id)}
@@ -903,6 +1071,7 @@
                                                     on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
                                                     on:addTextAttachment={() => addTextAttachment(step.id)}
                                                     on:paste={(e) => handlePaste(e.detail, step.id)}
+                                                    on:toggleSelection={(e) => toggleStepSelection(step.id, e.detail)}
                                                 />
                                             </div>
 
