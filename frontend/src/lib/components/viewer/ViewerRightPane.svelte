@@ -24,6 +24,7 @@
     export let selectedShapeId = null;
     export let editingDescription = "";
     export let project;
+    export let projectId = "";
 
     // Workflow step-based data
     export let workflowData = { steps: [] };
@@ -91,7 +92,7 @@
         <!-- Workflow Section -->
         <WorkflowSection
             isExpanded={expandedSection === "workflow"}
-            projectId={project?.id || ""}
+            {projectId}
             {workflowData}
             workflowSteps={settings?.workflow_steps || {
                 columns: [],
