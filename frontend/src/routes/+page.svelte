@@ -93,6 +93,41 @@
   /** @type {Set<string>} */
   let workflowWarningProjects = new Set();
 
+  // Pinned projects (stored in localStorage)
+  const PINNED_STORAGE_KEY = "pipiiitiii_pinned_projects";
+  /** @type {Set<string>} */
+  let pinnedProjectIds = new Set();
+
+  function loadPinnedProjects() {
+    try {
+      const stored = localStorage.getItem(PINNED_STORAGE_KEY);
+      if (stored) {
+        pinnedProjectIds = new Set(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error("Failed to load pinned projects", e);
+    }
+  }
+
+  function savePinnedProjects() {
+    try {
+      localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify([...pinnedProjectIds]));
+    } catch (e) {
+      console.error("Failed to save pinned projects", e);
+    }
+  }
+
+  function togglePinProject(projectId, event) {
+    event.stopPropagation();
+    if (pinnedProjectIds.has(projectId)) {
+      pinnedProjectIds.delete(projectId);
+    } else {
+      pinnedProjectIds.add(projectId);
+    }
+    pinnedProjectIds = pinnedProjectIds; // Trigger reactivity
+    savePinnedProjects();
+  }
+
   $: displayNameMap = {
     ...BUILT_IN_DISPLAY_NAMES,
     ...filters.reduce((acc, filter) => {
@@ -188,6 +223,12 @@
       return true;
     })
     .sort((a, b) => {
+      // Pinned projects always come first
+      const aPinned = pinnedProjectIds.has(a.id);
+      const bPinned = pinnedProjectIds.has(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+
       let valA, valB;
 
       if (sortBy === "date") {
@@ -231,6 +272,9 @@
     });
 
   onMount(async () => {
+    // Load pinned projects from localStorage first
+    loadPinnedProjects();
+
     try {
       const [projectsRes, filtersRes, settingsRes] = await Promise.all([
         fetchProjects(),
@@ -754,40 +798,67 @@
               {@const isChecked = selectedProjectIds.has(project.id)}
               {@const summaryStatus = summaryStatusMap[project.id]}
               {@const hasWorkflowWarning = workflowWarningProjects.has(project.id)}
+              {@const isPinned = pinnedProjectIds.has(project.id)}
 
-              <button
-                class="w-full text-left p-4 rounded-xl transition-all duration-200 border bg-white flex flex-col gap-2 group relative
-                  {selectionMode && isChecked
-                  ? 'border-purple-400 ring-1 ring-purple-300 bg-purple-50/50'
-                  : isSelected
-                  ? 'border-blue-500 ring-1 ring-blue-500 shadow-md z-10'
-                  : 'border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300'}
-                  {batchGenerating && batchProgress.currentProjectId === project.id ? 'animate-pulse' : ''}"
-                on:click={() => selectionMode ? toggleProjectSelection(project.id) : selectProject(project)}
-              >
-                <!-- Selection Checkbox (shown in selection mode) -->
-                {#if selectionMode}
-                  <div class="absolute -left-1 -top-1 z-10">
-                    <div class="w-6 h-6 rounded-full flex items-center justify-center transition-all
-                                {isChecked ? 'bg-purple-500' : 'bg-white border-2 border-gray-300'}">
-                      {#if isChecked}
-                        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                        </svg>
-                      {/if}
+              <div class="relative group">
+                <!-- Pin Button (outside the card button to avoid nesting) -->
+                <button
+                  class="absolute -right-1 -top-1 z-20 w-7 h-7 rounded-full flex items-center justify-center transition-all
+                         {isPinned
+                         ? 'bg-amber-500 text-white shadow-md hover:bg-amber-600'
+                         : 'bg-white border-2 border-gray-200 text-gray-400 opacity-0 group-hover:opacity-100 hover:border-amber-400 hover:text-amber-500'}"
+                  on:click={(e) => togglePinProject(project.id, e)}
+                  title={isPinned ? '고정 해제' : '상단에 고정'}
+                >
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 3a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 5.323V4a1 1 0 011-1z" />
+                  </svg>
+                </button>
+
+                <button
+                  class="w-full text-left p-4 rounded-xl transition-all duration-200 border bg-white flex flex-col gap-2 relative
+                    {selectionMode && isChecked
+                    ? 'border-purple-400 ring-1 ring-purple-300 bg-purple-50/50'
+                    : isPinned
+                    ? 'border-amber-400 ring-1 ring-amber-300 bg-amber-50/30 shadow-md'
+                    : isSelected
+                    ? 'border-blue-500 ring-1 ring-blue-500 shadow-md z-10'
+                    : 'border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300'}
+                    {batchGenerating && batchProgress.currentProjectId === project.id ? 'animate-pulse' : ''}"
+                  on:click={() => selectionMode ? toggleProjectSelection(project.id) : selectProject(project)}
+                >
+                  <!-- Selection Checkbox (shown in selection mode) -->
+                  {#if selectionMode}
+                    <div class="absolute -left-1 -top-1 z-10">
+                      <div class="w-6 h-6 rounded-full flex items-center justify-center transition-all
+                                  {isChecked ? 'bg-purple-500' : 'bg-white border-2 border-gray-300'}">
+                        {#if isChecked}
+                          <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                          </svg>
+                        {/if}
+                      </div>
                     </div>
-                  </div>
-                {/if}
+                  {/if}
 
-                <div class="flex justify-between items-start w-full">
-                  <div class="flex items-center gap-2 min-w-0 flex-1">
-                    <h3
-                      class="font-bold text-gray-800 text-lg truncate pr-2 group-hover:text-blue-700 transition-colors"
-                    >
-                      {getFieldValue(project, CARD_CONFIG.header.title) ||
-                        "Untitled"}
-                    </h3>
-                    <!-- Summary Status Indicator -->
+                  <div class="flex justify-between items-start w-full">
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                      <!-- Pinned Badge -->
+                      {#if isPinned}
+                        <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300" title="고정된 프로젝트">
+                          <svg class="w-3 h-3 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 3a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 5.323V4a1 1 0 011-1z" />
+                          </svg>
+                          <span class="text-[10px] font-medium text-amber-700">고정됨</span>
+                        </div>
+                      {/if}
+                      <h3
+                        class="font-bold text-gray-800 text-lg truncate pr-2 group-hover:text-blue-700 transition-colors"
+                      >
+                        {getFieldValue(project, CARD_CONFIG.header.title) ||
+                          "Untitled"}
+                      </h3>
+                      <!-- Summary Status Indicator -->
                     {#if summaryStatus?.has_summary}
                       {#if summaryStatus.is_outdated}
                         <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200" title="프롬프트가 변경되어 재생성이 필요합니다">
@@ -885,7 +956,8 @@
                     </div>
                   {/if}
                 </div>
-              </button>
+                </button>
+              </div>
             {/each}
           </div>
         {/if}
