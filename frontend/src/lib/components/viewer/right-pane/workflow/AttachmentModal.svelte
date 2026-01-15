@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
-	import type { StepAttachment } from '$lib/types/project';
+	import type { StepAttachment } from '$lib/types/workflow';
+	import { getAttachmentImageUrl } from '$lib/api/project';
 	import { createEventDispatcher } from 'svelte';
 
 	const dispatch = createEventDispatcher<{
@@ -12,7 +13,10 @@
 	export let attachment: StepAttachment;
 	export let caption: string = '';
 
-	let textContent = attachment.data;
+	let textContent = attachment.data || '';
+
+	// Get image URL from attachments.db
+	$: imageUrl = attachment.imageId ? getAttachmentImageUrl(attachment.imageId) : '';
 
 	function handleSave() {
 		dispatch('save', { caption, text: textContent });
@@ -65,7 +69,7 @@
 			{#if attachment.type === 'image'}
 				<div class="rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
 					<img
-						src={attachment.data}
+						src={imageUrl}
 						alt="Attachment"
 						class="w-full max-h-[400px] object-contain"
 					/>

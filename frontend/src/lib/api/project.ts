@@ -193,3 +193,47 @@ export interface AttributeDefinition {
 export async function fetchAllAttributes() {
     return apiFetch("/api/attributes");
 }
+
+// ========== Attachments API ==========
+
+/**
+ * Upload an attachment image to the separate BLOB database.
+ * @param imageId - Unique ID for the image (typically the attachment ID)
+ * @param projectId - The project this image belongs to
+ * @param base64Data - Base64 encoded image data (with or without data URL prefix)
+ */
+export async function uploadAttachmentImage(
+    imageId: string,
+    projectId: string,
+    base64Data: string
+) {
+    return apiFetch("/api/attachments/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            image_id: imageId,
+            project_id: projectId,
+            data: base64Data,
+        }),
+    });
+}
+
+/**
+ * Get the URL for an attachment image.
+ * @param imageId - The image ID to retrieve
+ */
+export function getAttachmentImageUrl(imageId: string): string {
+    // Use the API base URL from the client
+    const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    return `${apiBase}/api/attachments/image/${imageId}`;
+}
+
+/**
+ * Delete an attachment image from the BLOB database.
+ * @param imageId - The image ID to delete
+ */
+export async function deleteAttachmentImage(imageId: string) {
+    return apiFetch(`/api/attachments/image/${imageId}`, {
+        method: "DELETE",
+    });
+}

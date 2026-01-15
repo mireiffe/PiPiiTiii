@@ -16,11 +16,18 @@
         createStepInstance,
         createStepCapture,
         createAttachment,
+        generateAttachmentId,
     } from "$lib/types/workflow";
     import TimelineGraph from "./workflow/TimelineGraph.svelte";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
+    import {
+        uploadAttachmentImage,
+        getAttachmentImageUrl,
+        deleteAttachmentImage,
+    } from "$lib/api/project";
 
     export let isExpanded = false;
+    export let projectId: string = "";  // Required for image uploads
     export let workflowData: ProjectWorkflowData = createEmptyWorkflowData();
     export let workflowSteps: WorkflowSteps = { columns: [], rows: [] };
     export let savingWorkflow = false;
@@ -434,9 +441,25 @@
         addingAttachmentToStepId = null;
     }
 
-    function removeAttachment(stepId: string, attachmentId: string) {
+    async function removeAttachment(stepId: string, attachmentId: string) {
         const stepIndex = workflowData.steps.findIndex((s) => s.id === stepId);
         if (stepIndex === -1) return;
+
+        // Find the attachment to check if it's an image
+        const attachment = workflowData.steps[stepIndex].attachments.find(
+            (a) => a.id === attachmentId,
+        );
+
+        // If it's an image attachment, delete from backend
+        if (attachment?.type === "image" && attachment.imageId) {
+            try {
+                await deleteAttachmentImage(attachment.imageId);
+            } catch (error) {
+                console.error("Failed to delete image from backend:", error);
+                // Continue with local removal even if backend deletion fails
+            }
+        }
+
         workflowData.steps[stepIndex].attachments = workflowData.steps[
             stepIndex
         ].attachments.filter((a) => a.id !== attachmentId);
@@ -533,27 +556,52 @@
         pendingImageCaption = "";
     }
 
-    function confirmAddImage() {
-        if (!pendingImageStepId || !pendingImageData) return;
+    let isUploadingImage = false;
+
+    async function confirmAddImage() {
+        if (!pendingImageStepId || !pendingImageData || !projectId) return;
 
         const stepIndex = workflowData.steps.findIndex(
             (s) => s.id === pendingImageStepId,
         );
         if (stepIndex === -1) return;
 
-        const attachment = createAttachment(
-            "image",
-            pendingImageData,
-            pendingImageCaption.trim() || undefined,
-        );
-        workflowData.steps[stepIndex].attachments = [
-            ...workflowData.steps[stepIndex].attachments,
-            attachment,
-        ];
-        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
-        dispatch("workflowChange", workflowData);
+        isUploadingImage = true;
+        try {
+            // Generate a unique image ID
+            const imageId = generateAttachmentId();
 
-        closeImageAddModal();
+            // Upload image to backend
+            const response = await uploadAttachmentImage(
+                imageId,
+                projectId,
+                pendingImageData,
+            );
+
+            if (!response.ok) {
+                throw new Error("Failed to upload image");
+            }
+
+            // Create attachment with imageId reference (not base64 data)
+            const attachment = createAttachment(
+                "image",
+                imageId,  // Now stores imageId, not base64
+                pendingImageCaption.trim() || undefined,
+            );
+            workflowData.steps[stepIndex].attachments = [
+                ...workflowData.steps[stepIndex].attachments,
+                attachment,
+            ];
+            workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+            dispatch("workflowChange", workflowData);
+
+            closeImageAddModal();
+        } catch (error) {
+            console.error("Failed to upload image:", error);
+            alert("이미지 업로드에 실패했습니다.");
+        } finally {
+            isUploadingImage = false;
+        }
     }
 
     export function getCaptureOverlays() {
@@ -1410,9 +1458,9 @@
                                                                         attachment,
                                                                     )}
                                                             >
-                                                                {#if attachment.type === "image"}
+                                                                {#if attachment.type === "image" && attachment.imageId}
                                                                     <img
-                                                                        src={attachment.data}
+                                                                        src={getAttachmentImageUrl(attachment.imageId)}
                                                                         alt="att"
                                                                         class="w-full h-12 object-cover"
                                                                     />
@@ -1505,6 +1553,7 @@
                     <ImageAddModal
                         imageData={pendingImageData}
                         caption={pendingImageCaption}
+                        isUploading={isUploadingImage}
                         on:confirm={(e) => {
                             pendingImageCaption = e.detail.caption;
                             confirmAddImage();

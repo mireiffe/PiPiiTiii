@@ -9,8 +9,10 @@
 
 	export let imageData: string;
 	export let caption: string = '';
+	export let isUploading: boolean = false;
 
 	function handleConfirm() {
+		if (isUploading) return;
 		dispatch('confirm', { caption });
 	}
 
@@ -81,14 +83,16 @@
 			<button
 				class="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
 				on:click={handleCancel}
+				disabled={isUploading}
 			>
 				취소
 			</button>
 			<button
-				class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+				class="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 				on:click={handleConfirm}
+				disabled={isUploading}
 			>
-				추가
+				{isUploading ? '업로드 중...' : '추가'}
 			</button>
 		</div>
 	</div>
