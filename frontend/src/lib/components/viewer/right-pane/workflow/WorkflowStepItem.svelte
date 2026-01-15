@@ -190,7 +190,7 @@
                                 bind:value={attachmentTextInput}
                                 class="w-full pl-2 pr-8 py-1.5 text-[11px] border border-amber-200 rounded focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
                                 placeholder="내용 입력 또는 이미지 붙여넣기 (Ctrl+V)"
-                                on:keypress={(e) => e.key === "Enter" && dispatch("addTextAttachment")}
+                                on:keydown={(e) => e.key === "Enter" && dispatch("addTextAttachment")}
                                 on:paste={(e) => dispatch("paste", e)}
                                 autofocus
                             />
