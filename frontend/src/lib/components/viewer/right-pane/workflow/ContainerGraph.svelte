@@ -7,10 +7,16 @@
         WorkflowStepInstance,
         WorkflowStepRow,
         StepContainer,
-        ContainerColumn,
         ContainerLayoutRow,
+        PhaseType,
+        SupportRelation,
     } from "$lib/types/workflow";
-    import { getContainerColumns, getContainerLayoutRows } from "$lib/types/workflow";
+    import {
+        getContainerLayoutRows,
+        isStepSupporter,
+        getSupportSteps,
+        getPhaseById,
+    } from "$lib/types/workflow";
 
     export let workflowData: ProjectWorkflowData;
     export let workflowSteps: WorkflowSteps;
@@ -99,14 +105,19 @@
         color: typeof CONTAINER_COLORS[0];
         steps: StepLayout[];
         colorIndex: number;
-        columns: ColumnLayout[];  // For multi-column branch layout
+        supportGroups: SupportGroupLayout[];  // For phase-based support layout
     }
 
-    interface ColumnLayout {
-        columnIndex: number;
-        x: number;
-        steps: StepLayout[];
-        branchInfo?: { parentStepId: string };  // Connection info
+    interface SupportGroupLayout {
+        mainStep: StepLayout;
+        supporters: SupporterLayout[];
+    }
+
+    interface SupporterLayout {
+        step: StepLayout;
+        phaseId: string;
+        phaseColor?: string;
+        phaseName?: string;
     }
 
     interface StepLayout {
@@ -119,17 +130,10 @@
         height: number;
         isExpanded: boolean;
         globalIndex: number;
-        columnIndex: number;  // Which column this step belongs to
-        isBranchStart: boolean;  // Is this the first step of a branch?
+        isSupporter: boolean;  // Is this step supporting another?
         hideBadge: boolean;  // Hide step number badge
-        pairedWith?: string;  // ID of paired step (for branch starts)
-    }
-
-    // Junction point for branch connections
-    interface JunctionPoint {
-        x: number;
-        y: number;
-        connectedStepIds: string[];  // IDs of steps connected at this junction
+        supportTargetId?: string;  // ID of step being supported (if supporter)
+        phaseColor?: string;  // Phase color (if supporter)
     }
 
     function calculateLayout(): { containers: ContainerLayout[], totalWidth: number, totalHeight: number } {
@@ -140,105 +144,108 @@
         let maxHeight = 0;
         let globalStepIndex = 0;
 
-        const COLUMN_GAP = 16;  // Gap between columns within a container
-        const PAIRED_GAP = 40;   // Gap between paired steps in same row (first row only)
+        const SUPPORTER_INDENT = 30;  // Indentation for supporter steps
+        const SUPPORTER_WIDTH = STEP_NODE_WIDTH - 20;  // Slightly narrower
 
-        // Helper to build row-based layout for a container
-        function buildContainerLayout(containerId: string | undefined): { columns: ColumnLayout[], totalWidth: number, maxHeight: number } {
-            const { rows, columns: rawColumns } = getContainerLayoutRows(containerId, workflowData.steps, workflowData.containerBranches);
-            const columnLayouts: ColumnLayout[] = [];
+        // Helper to build layout for a container using new phase system
+        function buildContainerLayout(containerId: string | undefined): { supportGroups: SupportGroupLayout[], allSteps: StepLayout[], totalWidth: number, maxHeight: number } {
+            const layoutRows = getContainerLayoutRows(
+                containerId,
+                workflowData.steps,
+                workflowData.supportRelations,
+                workflowData.phaseTypes
+            );
+            const supportGroups: SupportGroupLayout[] = [];
+            const allSteps: StepLayout[] = [];
 
-            if (rows.length === 0) {
-                return { columns: [{ columnIndex: 0, x: CONTAINER_PADDING, steps: [] }], totalWidth: CONTAINER_MIN_WIDTH, maxHeight: 140 };
+            if (layoutRows.length === 0) {
+                return { supportGroups: [], allSteps: [], totalWidth: CONTAINER_MIN_WIDTH, maxHeight: 140 };
             }
 
-            const numColumns = rawColumns.length;
-            const columnWidth = STEP_NODE_WIDTH;
-
-            // Initialize column layouts
-            for (let colIdx = 0; colIdx < numColumns; colIdx++) {
-                const colX = CONTAINER_PADDING + colIdx * (columnWidth + (colIdx > 0 ? PAIRED_GAP : COLUMN_GAP));
-                columnLayouts.push({
-                    columnIndex: colIdx,
-                    x: colX,
-                    steps: [],
-                    branchInfo: rawColumns[colIdx].branchInfo ? { parentStepId: rawColumns[colIdx].branchInfo!.parentStepId } : undefined,
-                });
-            }
-
-            // Calculate positions row by row
             let currentY = CONTAINER_HEADER_HEIGHT + CONTAINER_PADDING;
 
-            rows.forEach((row, rowIdx) => {
-                let rowMaxHeight = STEP_NODE_HEIGHT;
+            layoutRows.forEach((row) => {
+                const mainStep = row.mainStep;
+                const isExpanded = expandedStepId === mainStep.id;
+                const mainH = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
 
-                // First pass: calculate heights
-                row.cells.forEach(cell => {
-                    if (cell.step) {
-                        const isExpanded = expandedStepId === cell.step.id;
-                        const h = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
-                        rowMaxHeight = Math.max(rowMaxHeight, h);
-                    }
+                const mainStepLayout: StepLayout = {
+                    id: mainStep.id,
+                    step: mainStep,
+                    info: getStepInfo(mainStep),
+                    x: CONTAINER_PADDING,
+                    y: currentY,
+                    width: STEP_NODE_WIDTH,
+                    height: mainH,
+                    isExpanded,
+                    globalIndex: globalStepIndex++,
+                    isSupporter: false,
+                    hideBadge: false,
+                };
+                allSteps.push(mainStepLayout);
+
+                currentY += mainH + STEP_GAP / 2;
+
+                // Process supporters
+                const supporterLayouts: SupporterLayout[] = [];
+                row.supporters.forEach((supporter) => {
+                    const supStep = supporter.step;
+                    const supExpanded = expandedStepId === supStep.id;
+                    const supH = supExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT - 10;
+                    const phase = supporter.phase;
+
+                    const supStepLayout: StepLayout = {
+                        id: supStep.id,
+                        step: supStep,
+                        info: getStepInfo(supStep),
+                        x: CONTAINER_PADDING + SUPPORTER_INDENT,
+                        y: currentY,
+                        width: SUPPORTER_WIDTH,
+                        height: supH,
+                        isExpanded: supExpanded,
+                        globalIndex: globalStepIndex++,
+                        isSupporter: true,
+                        hideBadge: true,
+                        supportTargetId: mainStep.id,
+                        phaseColor: phase?.color,
+                    };
+                    allSteps.push(supStepLayout);
+
+                    supporterLayouts.push({
+                        step: supStepLayout,
+                        phaseId: supporter.relation.phaseId,
+                        phaseColor: phase?.color,
+                        phaseName: phase?.name,
+                    });
+
+                    currentY += supH + STEP_GAP / 2;
                 });
 
-                // Second pass: create step layouts
-                row.cells.forEach(cell => {
-                    if (cell.step) {
-                        const isExpanded = expandedStepId === cell.step.id;
-                        const h = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
-                        const colLayout = columnLayouts[cell.columnIndex];
-
-                        // For first row with multiple columns, use tighter spacing
-                        let stepX = colLayout.x;
-                        if (rowIdx === 0 && numColumns > 1) {
-                            stepX = CONTAINER_PADDING + cell.columnIndex * (columnWidth + PAIRED_GAP);
-                        }
-
-                        const stepLayout: StepLayout = {
-                            id: cell.step.id,
-                            step: cell.step,
-                            info: getStepInfo(cell.step),
-                            x: stepX,
-                            y: currentY,
-                            width: columnWidth,
-                            height: h,
-                            isExpanded,
-                            globalIndex: globalStepIndex++,
-                            columnIndex: cell.columnIndex,
-                            isBranchStart: cell.isBranchStart,
-                            hideBadge: cell.hideBadge ?? false,
-                            pairedWith: rowIdx === 0 && cell.columnIndex > 0
-                                ? row.cells[0]?.step?.id
-                                : undefined,
-                        };
-
-                        colLayout.steps.push(stepLayout);
-                    }
+                supportGroups.push({
+                    mainStep: mainStepLayout,
+                    supporters: supporterLayouts,
                 });
 
-                currentY += rowMaxHeight + STEP_GAP;
+                currentY += STEP_GAP / 2;
             });
 
-            // Calculate total dimensions
-            const totalHeight = currentY + CONTAINER_PADDING - STEP_GAP;
-            let maxX = CONTAINER_PADDING;
-            columnLayouts.forEach(col => {
-                col.steps.forEach(step => {
-                    maxX = Math.max(maxX, step.x + step.width);
-                });
-            });
-            const totalWidth = Math.max(CONTAINER_MIN_WIDTH, maxX + CONTAINER_PADDING);
+            const totalHeight = currentY + CONTAINER_PADDING;
+            const totalWidth = Math.max(CONTAINER_MIN_WIDTH, CONTAINER_PADDING * 2 + STEP_NODE_WIDTH);
 
-            return { columns: columnLayouts, totalWidth, maxHeight: totalHeight };
+            return { supportGroups, allSteps, totalWidth, maxHeight: totalHeight };
         }
 
         // Uncategorized steps first (if any)
-        const { rows: uncatRows } = getContainerLayoutRows(undefined, workflowData.steps, workflowData.containerBranches);
-        const hasUncategorized = uncatRows.length > 0 && uncatRows.some(r => r.cells.some(c => c.step !== null));
+        const uncatRows = getContainerLayoutRows(
+            undefined,
+            workflowData.steps,
+            workflowData.supportRelations,
+            workflowData.phaseTypes
+        );
+        const hasUncategorized = uncatRows.length > 0;
 
         if (hasUncategorized || sortedContainers.length === 0) {
-            const { columns, totalWidth, maxHeight: colMaxHeight } = buildContainerLayout(undefined);
-            const allSteps = columns.flatMap(col => col.steps);
+            const { supportGroups, allSteps, totalWidth, maxHeight: colMaxHeight } = buildContainerLayout(undefined);
 
             containers.push({
                 id: '__uncategorized__',
@@ -250,7 +257,7 @@
                 color: UNCATEGORIZED_COLOR,
                 steps: allSteps,
                 colorIndex: -1,
-                columns,
+                supportGroups,
             });
 
             currentX += totalWidth + CONTAINER_GAP;
@@ -259,8 +266,7 @@
 
         // Named containers
         sortedContainers.forEach((container, cIndex) => {
-            const { columns, totalWidth, maxHeight: colMaxHeight } = buildContainerLayout(container.id);
-            const allSteps = columns.flatMap(col => col.steps);
+            const { supportGroups, allSteps, totalWidth, maxHeight: colMaxHeight } = buildContainerLayout(container.id);
 
             const containerHeight = allSteps.length > 0 ? colMaxHeight : 140;
 
@@ -274,7 +280,7 @@
                 color: CONTAINER_COLORS[cIndex % CONTAINER_COLORS.length],
                 steps: allSteps,
                 colorIndex: cIndex,
-                columns,
+                supportGroups,
             });
 
             currentX += totalWidth + CONTAINER_GAP;
@@ -577,13 +583,13 @@
             .attr('fill', d => d.color.text)
             .text(d => d.steps.length);
 
-        // Draw step connections within containers (with branch support)
+        // Draw step connections within containers (with support/phase system)
         containerGroups.each(function(containerData, containerIdx) {
             const group = d3.select(this);
-            const columns = containerData.columns;
+            const supportGroups = containerData.supportGroups;
             const lineGroup = group.append('g').attr('class', 'step-connections');
 
-            // Arrow marker for steps
+            // Arrow marker for main flow
             defs.append('marker')
                 .attr('id', `arrow-step-${containerIdx}`)
                 .attr('viewBox', '0 -4 8 8')
@@ -597,155 +603,77 @@
                 .attr('fill', containerData.color.border)
                 .attr('fill-opacity', 0.5);
 
-            // Arrow marker for branch return connections (purple, pointing down)
-            defs.append('marker')
-                .attr('id', `arrow-branch-return-${containerIdx}`)
-                .attr('viewBox', '0 -4 8 8')
-                .attr('refX', 6)
-                .attr('refY', 0)
-                .attr('markerWidth', 5)
-                .attr('markerHeight', 5)
-                .attr('orient', 'auto')
-                .append('path')
-                .attr('d', 'M0,-4L8,0L0,4Z')
-                .attr('fill', '#a855f7')
-                .attr('fill-opacity', 0.7);
+            // 1. Draw connections between main flow steps
+            for (let i = 0; i < supportGroups.length - 1; i++) {
+                const from = supportGroups[i].mainStep;
+                const to = supportGroups[i + 1].mainStep;
 
-            // 1. Draw horizontal connection between paired steps (FIRST ROW ONLY)
-            // Find paired steps - only the first row (branch starts paired with parent)
-            const pairedSteps: StepLayout[][] = [];
-            if (columns.length > 1) {
-                // Find the minimum y value (first row)
-                const minY = Math.min(...containerData.steps.map(s => s.y));
+                const x1 = from.x + from.width / 2;
+                const y1 = from.y + from.height + 2;
+                const x2 = to.x + to.width / 2;
+                const y2 = to.y - 2;
 
-                // Only get steps in the first row
-                const firstRowSteps = containerData.steps
-                    .filter(step => Math.round(step.y) === Math.round(minY))
-                    .sort((a, b) => a.x - b.x);
+                // Account for supporters between
+                const hasSupport = supportGroups[i].supporters.length > 0;
 
-                if (firstRowSteps.length > 1) {
-                    pairedSteps.push(firstRowSteps);
-                }
-            }
-
-            // Draw paired step connections (horizontal solid line)
-            pairedSteps.forEach(stepsInRow => {
-                for (let i = 0; i < stepsInRow.length - 1; i++) {
-                    const from = stepsInRow[i];
-                    const to = stepsInRow[i + 1];
-
-                    const x1 = from.x + from.width;
-                    const y1 = from.y + from.height / 2;
-                    const x2 = to.x;
-                    const y2 = to.y + to.height / 2;
-
-                    // Solid horizontal line with purple color
-                    lineGroup.append('line')
-                        .attr('x1', x1 + 2)
-                        .attr('y1', y1)
-                        .attr('x2', x2 - 2)
-                        .attr('y2', y2)
-                        .attr('stroke', '#a855f7')
-                        .attr('stroke-width', 3)
-                        .attr('stroke-opacity', 0.7)
-                        .attr('stroke-linecap', 'round');
-
-                    // Add small circles at connection points
-                    lineGroup.append('circle')
-                        .attr('cx', x1 + 2)
-                        .attr('cy', y1)
-                        .attr('r', 3)
-                        .attr('fill', '#a855f7')
-                        .attr('opacity', 0.8);
-                    lineGroup.append('circle')
-                        .attr('cx', x2 - 2)
-                        .attr('cy', y2)
-                        .attr('r', 3)
-                        .attr('fill', '#a855f7')
-                        .attr('opacity', 0.8);
-                }
-            });
-
-            // 2. Draw vertical connections within each column (skip first step in branches)
-            columns.forEach((column, colIdx) => {
-                const colSteps = column.steps;
-                const startIdx = 0;  // Start from first step
-
-                for (let i = startIdx; i < colSteps.length - 1; i++) {
-                    const from = colSteps[i];
-                    const to = colSteps[i + 1];
-
-                    const x1 = from.x + from.width / 2;
-                    const y1 = from.y + from.height + 2;
-                    const x2 = to.x + to.width / 2;
-                    const y2 = to.y - 2;
-
-                    const path = d3.path();
-                    path.moveTo(x1, y1);
+                const path = d3.path();
+                path.moveTo(x1, y1);
+                if (hasSupport) {
+                    // Curve around supporters
+                    const midY = y2 - 10;
+                    path.lineTo(x1, midY);
+                    path.bezierCurveTo(x1, y2 - 5, x2, y2 - 5, x2, y2);
+                } else {
                     const midY = (y1 + y2) / 2;
                     path.bezierCurveTo(x1, midY, x2, midY, x2, y2);
-
-                    lineGroup.append('path')
-                        .attr('d', path.toString())
-                        .attr('fill', 'none')
-                        .attr('stroke', containerData.color.border)
-                        .attr('stroke-width', 2)
-                        .attr('stroke-opacity', 0.4)
-                        .attr('stroke-linecap', 'round')
-                        .attr('marker-end', `url(#arrow-step-${containerIdx})`);
                 }
-            });
 
-            // 3. Draw return arrows: from last step of column 0 to the junction point
-            // Junction point is at the center of the horizontal line between paired steps
-            if (columns.length > 1 && columns[0].steps.length > 1 && pairedSteps.length > 0) {
-                const col0Steps = columns[0].steps;
-                const lastStepCol0 = col0Steps[col0Steps.length - 1];
-                const firstRowSteps = pairedSteps[0];  // First paired row
+                lineGroup.append('path')
+                    .attr('d', path.toString())
+                    .attr('fill', 'none')
+                    .attr('stroke', containerData.color.border)
+                    .attr('stroke-width', 2)
+                    .attr('stroke-opacity', 0.4)
+                    .attr('stroke-linecap', 'round')
+                    .attr('marker-end', `url(#arrow-step-${containerIdx})`);
+            }
 
-                if (firstRowSteps && firstRowSteps.length >= 2) {
-                    // Junction point: center of the horizontal line
-                    const junctionX = (firstRowSteps[0].x + firstRowSteps[0].width + firstRowSteps[1].x) / 2;
-                    const junctionY = firstRowSteps[0].y + firstRowSteps[0].height / 2;
+            // 2. Draw support connections (from main step to each supporter)
+            supportGroups.forEach(sg => {
+                sg.supporters.forEach(supporter => {
+                    const main = sg.mainStep;
+                    const sup = supporter.step;
+                    const phaseColor = supporter.phaseColor || '#a855f7';
 
-                    // Arrow from last step of col 0 to junction
-                    const x1 = lastStepCol0.x + lastStepCol0.width + 4;
-                    const y1 = lastStepCol0.y + lastStepCol0.height / 2;
-                    const x2 = junctionX;
-                    const y2 = junctionY + 8;  // Slightly below junction
+                    const x1 = main.x + 10;
+                    const y1 = main.y + main.height;
+                    const x2 = sup.x - 2;
+                    const y2 = sup.y + sup.height / 2;
 
+                    // Horizontal dashed line with phase color
                     const path = d3.path();
                     path.moveTo(x1, y1);
+                    path.lineTo(x1, y2);
+                    path.lineTo(x2, y2);
 
-                    // Bezier curve going up and right to junction
-                    const ctrlX1 = x1 + 30;
-                    const ctrlY1 = y1 - 20;
-                    const ctrlX2 = x2 + 20;
-                    const ctrlY2 = y2 + 40;
-                    path.bezierCurveTo(ctrlX1, ctrlY1, ctrlX2, ctrlY2, x2, y2);
-
-                    // Return arrow with dashed purple line
                     lineGroup.append('path')
                         .attr('d', path.toString())
                         .attr('fill', 'none')
-                        .attr('stroke', '#a855f7')
+                        .attr('stroke', phaseColor)
                         .attr('stroke-width', 2)
-                        .attr('stroke-opacity', 0.5)
-                        .attr('stroke-dasharray', '6,4')
-                        .attr('stroke-linecap', 'round')
-                        .attr('marker-end', `url(#arrow-branch-return-${containerIdx})`);
+                        .attr('stroke-opacity', 0.6)
+                        .attr('stroke-dasharray', '4,3')
+                        .attr('stroke-linecap', 'round');
 
-                    // Junction indicator
+                    // Small circle at connection point
                     lineGroup.append('circle')
-                        .attr('cx', junctionX)
-                        .attr('cy', junctionY)
-                        .attr('r', 5)
-                        .attr('fill', '#a855f7')
-                        .attr('stroke', 'white')
-                        .attr('stroke-width', 2)
-                        .attr('opacity', 0.8);
-                }
-            }
+                        .attr('cx', x1)
+                        .attr('cy', y1)
+                        .attr('r', 3)
+                        .attr('fill', phaseColor)
+                        .attr('opacity', 0.7);
+                });
+            });
         });
 
         // Draw step nodes
@@ -826,27 +754,27 @@
                     toggleStepExpand(d.id);
                 });
 
-            // Step index badge with gradient (or branch indicator)
+            // Step index badge with gradient (or support indicator)
             stepGroups.each(function(d) {
                 const g = d3.select(this);
 
-                if (d.isBranchStart) {
-                    // Branch start indicator - purple circle with parallel arrow icon
+                if (d.isSupporter) {
+                    // Support indicator - colored circle with + icon
                     g.append('circle')
                         .attr('cx', 18)
                         .attr('cy', 18)
                         .attr('r', 12)
-                        .attr('fill', '#a855f7');
+                        .attr('fill', d.phaseColor || '#a855f7');
 
-                    // Parallel arrow icon (>>)
+                    // Plus icon (+) for support
                     g.append('text')
                         .attr('x', 18)
-                        .attr('y', 22)
+                        .attr('y', 23)
                         .attr('text-anchor', 'middle')
-                        .attr('font-size', '11px')
+                        .attr('font-size', '14px')
                         .attr('font-weight', '700')
                         .attr('fill', 'white')
-                        .text('»');
+                        .text('+');
                 } else if (!d.hideBadge) {
                     // Normal step badge with gradient
                     const badgeGradId = `badge-${d.id.replace(/[^a-zA-Z0-9]/g, '')}`;

@@ -25,7 +25,9 @@
     export let isSelected = false;
     export let showSelectionCheckbox = false;
     export let hideBadge = false;  // Hide the step number badge
-    export let branchIndicator = false;  // Show branch start indicator instead of number
+    export let supportIndicator = false;  // Show support indicator (this step supports another)
+    export let phaseColor: string | undefined = undefined;  // Phase color for supporter
+    export let phaseName: string | undefined = undefined;  // Phase name for supporter
 
     const dispatch = createEventDispatcher<{
         toggleExpand: void;
@@ -40,7 +42,7 @@
         paste: ClipboardEvent;
         checkboxClick: MouseEvent;
         cardClick: MouseEvent;
-        removeBranch: void;
+        removeSupport: void;
     }>();
 
     function handleCardClick(e: MouseEvent) {
@@ -74,23 +76,24 @@
         ></div>
     {/if}
 
-    <!-- Step Number Badge (or Branch Indicator) -->
-    {#if branchIndicator}
-        <!-- Branch start indicator with remove button -->
-        <div class="absolute left-0 top-2.5 group/branch">
+    <!-- Step Number Badge (or Support Indicator) -->
+    {#if supportIndicator}
+        <!-- Support indicator with phase color -->
+        <div class="absolute left-0 top-2.5 group/support">
             <div
-                class="w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-all duration-200 bg-purple-500"
-                title="병렬 분기"
+                class="w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-all duration-200"
+                style="background-color: {phaseColor || '#a855f7'}"
+                title="{phaseName || '위상'} 지원"
             >
                 <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
                 </svg>
             </div>
-            <!-- Branch remove button (appears on hover) -->
+            <!-- Support remove button (appears on hover) -->
             <button
-                class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-md transition-all duration-200 opacity-0 scale-75 group-hover/branch:opacity-100 group-hover/branch:scale-100 z-10"
-                title="분기 해제"
-                on:click|stopPropagation={() => dispatch("removeBranch")}
+                class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-md transition-all duration-200 opacity-0 scale-75 group-hover/support:opacity-100 group-hover/support:scale-100 z-10"
+                title="지원 해제"
+                on:click|stopPropagation={() => dispatch("removeSupport")}
             >
                 <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
