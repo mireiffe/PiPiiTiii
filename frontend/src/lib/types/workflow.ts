@@ -286,6 +286,8 @@ export function validateSupportCreation(
 
 /**
  * Add a support relation to workflow data
+ * NOTE: If the supporter step was previously a target (had other steps supporting it),
+ * those relations are automatically removed to prevent nested phase structures.
  */
 export function addSupportRelation(
     workflowData: ProjectWorkflowData,
@@ -295,9 +297,16 @@ export function addSupportRelation(
 ): ProjectWorkflowData {
     const newRelation = createSupportRelation(supporterStepId, targetStepId, phaseId);
 
+    // Remove any relations where the new supporter was previously a target
+    // This prevents nested phase structures (e.g., if 5 supports 4, and 4 becomes supporter of 3,
+    // we must release 5 because we don't allow nested phases)
+    const cleanedRelations = (workflowData.supportRelations ?? []).filter(
+        r => r.targetStepId !== supporterStepId
+    );
+
     return {
         ...workflowData,
-        supportRelations: [...(workflowData.supportRelations ?? []), newRelation],
+        supportRelations: [...cleanedRelations, newRelation],
         updatedAt: new Date().toISOString(),
     };
 }
