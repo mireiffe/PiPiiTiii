@@ -73,28 +73,24 @@
     let pendingImageCaption = "";
     let isUploadingImage = false;
 
-    // Drag & Drop State
+    // Drag & Drop State - Unified mode system
+    // Only one drag mode is active at a time to avoid UI conflicts
+    type DragMode = 'reorder' | 'insert' | 'branch' | null;
+    let dragMode: DragMode = null;
     let dragState: DragDropState = { draggedIndex: null, dropTargetIndex: null };
-    let dropTargetContainerId: string | null = null;  // For container-level drop
+    let dropTargetContainerId: string | null = null;  // For container-level drop (insert mode)
     let collapsedContainers: Set<string> = new Set();
 
-    // Insert guide state (for long hover insertion)
-    let hoverStepId: string | null = null;
-    let hoverStartTime: number = 0;
+    // Insert guide state (for cross-container insertion)
     let insertGuideIndex: number | null = null;
     let insertGuideContainerId: string | null | undefined = null;
-    let insertGuidePosition: 'top' | 'bottom' | null = null;
-    const INSERT_GUIDE_DELAY = 500; // ms to wait before showing insert guide
-    let hoverCheckTimer: ReturnType<typeof setTimeout> | null = null;
+    let insertHoverTimer: ReturnType<typeof setTimeout> | null = null;
+    const INSERT_GUIDE_DELAY = 400; // ms to wait before showing insert guide
 
     // Branch creation state (for multi-column flow)
-    let branchHoverStepId: string | null = null;  // Step being hovered for branch creation
-    let branchHoverSide: 'left' | 'right' | null = null;  // Which side of the step
-    let branchHoverStartTime: number = 0;
-    let branchGuideVisible = false;  // Show the branch creation guide
     let branchGuideTargetStepId: string | null = null;  // Target step for branch placement
     let branchHoverTimer: ReturnType<typeof setTimeout> | null = null;
-    const BRANCH_GUIDE_DELAY = 600; // ms to wait before showing branch guide (slightly longer)
+    const BRANCH_GUIDE_DELAY = 500; // ms to wait before showing branch guide
 
     // Multi-selection state
     let selectedStepIds: Set<string> = new Set();
@@ -265,7 +261,13 @@
     function handleContainerDragOver(e: DragEvent, containerId: string | null) {
         e.preventDefault();
         if (dragState.draggedIndex !== null) {
-            dropTargetContainerId = containerId;
+            const draggedStep = workflowData.steps[dragState.draggedIndex];
+            const isCrossContainer = (draggedStep.containerId ?? null) !== containerId;
+
+            // Only show container highlight for cross-container drags
+            if (isCrossContainer && dragMode !== 'branch') {
+                dropTargetContainerId = containerId;
+            }
         }
     }
 
@@ -274,33 +276,59 @@
         clearInsertGuide();
     }
 
-    function clearInsertGuide() {
-        if (hoverCheckTimer) {
-            clearTimeout(hoverCheckTimer);
-            hoverCheckTimer = null;
+    // Clear all drag guides and reset mode
+    function clearAllDragGuides() {
+        // Clear insert guide
+        if (insertHoverTimer) {
+            clearTimeout(insertHoverTimer);
+            insertHoverTimer = null;
         }
-        hoverStepId = null;
-        hoverStartTime = 0;
         insertGuideIndex = null;
         insertGuideContainerId = null;
-        insertGuidePosition = null;
+        lastHoverStepId = null;
+        lastHoverPosition = null;
+
+        // Clear branch guide
+        if (branchHoverTimer) {
+            clearTimeout(branchHoverTimer);
+            branchHoverTimer = null;
+        }
+        branchGuideTargetStepId = null;
+
+        // Reset mode
+        dragMode = null;
+        dropTargetContainerId = null;
     }
 
-    // Branch creation handlers
+    function clearInsertGuide() {
+        if (insertHoverTimer) {
+            clearTimeout(insertHoverTimer);
+            insertHoverTimer = null;
+        }
+        insertGuideIndex = null;
+        insertGuideContainerId = null;
+        if (dragMode === 'insert') {
+            dragMode = null;
+            dropTargetContainerId = null;
+        }
+    }
+
     function clearBranchGuide() {
         if (branchHoverTimer) {
             clearTimeout(branchHoverTimer);
             branchHoverTimer = null;
         }
-        branchHoverStepId = null;
-        branchHoverSide = null;
-        branchHoverStartTime = 0;
-        branchGuideVisible = false;
         branchGuideTargetStepId = null;
+        if (dragMode === 'branch') {
+            dragMode = null;
+        }
     }
 
     function handleStepHoverForBranch(e: DragEvent, targetStepId: string, targetContainerId: string | undefined) {
         if (dragState.draggedIndex === null) return;
+
+        // If already in insert mode with visible guide, don't switch to branch
+        if (dragMode === 'insert' && insertGuideIndex !== null) return;
 
         const draggedStep = workflowData.steps[dragState.draggedIndex];
         const draggedContainerId = draggedStep.containerId ?? '__uncategorized__';
@@ -308,7 +336,7 @@
 
         // Only allow branch creation within the same container
         if (draggedContainerId !== targetContainerKey) {
-            clearBranchGuide();
+            if (dragMode === 'branch') clearBranchGuide();
             return;
         }
 
@@ -319,7 +347,7 @@
 
         // Only show branch guide when hovering on right side
         if (!isRightSide) {
-            clearBranchGuide();
+            if (dragMode === 'branch') clearBranchGuide();
             return;
         }
 
@@ -332,25 +360,27 @@
         );
 
         if (validationError) {
-            clearBranchGuide();
+            if (dragMode === 'branch') clearBranchGuide();
             return;
         }
 
-        // If already hovering this step on right side, check if timer should fire
-        if (branchHoverStepId === targetStepId && branchHoverSide === 'right') {
+        // If already targeting this step, skip
+        if (branchGuideTargetStepId === targetStepId && branchHoverTimer) {
             return;  // Timer already running
         }
 
-        // Start new hover
-        clearBranchGuide();
-        branchHoverStepId = targetStepId;
-        branchHoverSide = 'right';
-        branchHoverStartTime = Date.now();
+        // Clear previous timer and start new one
+        if (branchHoverTimer) {
+            clearTimeout(branchHoverTimer);
+            branchHoverTimer = null;
+        }
 
         branchHoverTimer = setTimeout(() => {
-            // Show branch guide with bounce animation
-            branchGuideVisible = true;
+            dragMode = 'branch';
             branchGuideTargetStepId = targetStepId;
+            // Clear other guides
+            insertGuideIndex = null;
+            insertGuideContainerId = null;
         }, BRANCH_GUIDE_DELAY);
     }
 
@@ -358,8 +388,9 @@
         e.preventDefault();
         e.stopPropagation();
 
-        if (dragState.draggedIndex === null || !branchGuideVisible) {
-            clearBranchGuide();
+        if (dragState.draggedIndex === null || dragMode !== 'branch' || !branchGuideTargetStepId) {
+            clearAllDragGuides();
+            dragState = { draggedIndex: null, dropTargetIndex: null };
             return;
         }
 
@@ -375,7 +406,7 @@
 
         if (validationError) {
             alert(validationError);
-            clearBranchGuide();
+            clearAllDragGuides();
             dragState = { draggedIndex: null, dropTargetIndex: null };
             return;
         }
@@ -385,9 +416,8 @@
         dispatch("workflowChange", workflowData);
 
         // Reset state
-        clearBranchGuide();
+        clearAllDragGuides();
         dragState = { draggedIndex: null, dropTargetIndex: null };
-        dropTargetContainerId = null;
     }
 
     function handleRemoveBranch(containerId: string | undefined, branchId: string) {
@@ -395,13 +425,31 @@
         dispatch("workflowChange", workflowData);
     }
 
+    // Find and remove branch by its start step ID
+    function handleRemoveBranchByStepId(stepId: string, containerId: string | undefined) {
+        const containerKey = containerId ?? '__uncategorized__';
+        const branches = workflowData.containerBranches?.[containerKey] ?? [];
+        const branch = branches.find(b => b.branchStartStepId === stepId);
+        if (branch) {
+            handleRemoveBranch(containerId, branch.id);
+        }
+    }
+
+    // Track hover position for insert guide
+    let lastHoverStepId: string | null = null;
+    let lastHoverPosition: 'top' | 'bottom' | null = null;
+
     function handleStepHoverForInsert(e: DragEvent, stepId: string, stepIndex: number, stepContainerId: string | undefined) {
         // Only track hover for cross-container drags
         if (dragState.draggedIndex === null) return;
+
+        // If branch mode is active, don't activate insert mode
+        if (dragMode === 'branch') return;
+
         const draggedStep = workflowData.steps[dragState.draggedIndex];
         const isCrossContainer = (draggedStep.containerId ?? null) !== (stepContainerId ?? null);
         if (!isCrossContainer) {
-            clearInsertGuide();
+            if (dragMode === 'insert') clearInsertGuide();
             return;
         }
 
@@ -412,16 +460,23 @@
         const position = isTopHalf ? 'top' : 'bottom';
 
         // If hovering a different step or position, reset timer
-        if (hoverStepId !== stepId || insertGuidePosition !== position) {
-            clearInsertGuide();
-            hoverStepId = stepId;
-            hoverStartTime = Date.now();
-            insertGuidePosition = position;
+        if (lastHoverStepId !== stepId || lastHoverPosition !== position) {
+            // Clear previous timer
+            if (insertHoverTimer) {
+                clearTimeout(insertHoverTimer);
+                insertHoverTimer = null;
+            }
 
-            hoverCheckTimer = setTimeout(() => {
-                // Show insert guide after delay
+            lastHoverStepId = stepId;
+            lastHoverPosition = position;
+
+            insertHoverTimer = setTimeout(() => {
+                dragMode = 'insert';
+                dropTargetContainerId = stepContainerId ?? null;
                 insertGuideIndex = position === 'top' ? stepIndex : stepIndex + 1;
                 insertGuideContainerId = stepContainerId;
+                // Clear branch guide if any
+                branchGuideTargetStepId = null;
             }, INSERT_GUIDE_DELAY);
         }
     }
@@ -436,13 +491,12 @@
         // Same container - no action
         if (sourceContainerId === containerId) {
             dragState = { draggedIndex: null, dropTargetIndex: null };
-            dropTargetContainerId = null;
-            clearInsertGuide();
+            clearAllDragGuides();
             return;
         }
 
         // Check if insert guide is active - use specific position
-        if (insertGuideIndex !== null && insertGuideContainerId === (containerId ?? undefined)) {
+        if (dragMode === 'insert' && insertGuideIndex !== null && insertGuideContainerId === (containerId ?? undefined)) {
             const steps = [...workflowData.steps];
             const [removed] = steps.splice(dragState.draggedIndex, 1);
 
@@ -458,8 +512,7 @@
             dispatch("workflowChange", workflowData);
 
             dragState = { draggedIndex: null, dropTargetIndex: null };
-            dropTargetContainerId = null;
-            clearInsertGuide();
+            clearAllDragGuides();
             return;
         }
 
@@ -539,8 +592,7 @@
         dispatch("workflowChange", workflowData);
 
         dragState = { draggedIndex: null, dropTargetIndex: null };
-        dropTargetContainerId = null;
-        clearInsertGuide();
+        clearAllDragGuides();
     }
 
     // Handle drop on a step within a container (combines reorder + container change)
@@ -549,7 +601,11 @@
         e.stopPropagation();
 
         const { draggedIndex, dropTargetIndex } = dragState;
-        if (draggedIndex === null || dropTargetIndex === null) return;
+        if (draggedIndex === null || dropTargetIndex === null) {
+            clearAllDragGuides();
+            dragState = { draggedIndex: null, dropTargetIndex: null };
+            return;
+        }
 
         const steps = [...workflowData.steps];
         const draggedStep = steps[draggedIndex];
@@ -571,7 +627,7 @@
         }
 
         dragState = { draggedIndex: null, dropTargetIndex: null };
-        dropTargetContainerId = null;
+        clearAllDragGuides();
     }
 
     // Sort containers by order
@@ -639,7 +695,7 @@
     onMount(() => window.addEventListener("keydown", handleKeyDown));
     onDestroy(() => {
         window.removeEventListener("keydown", handleKeyDown);
-        if (hoverCheckTimer) clearTimeout(hoverCheckTimer);
+        if (insertHoverTimer) clearTimeout(insertHoverTimer);
         if (branchHoverTimer) clearTimeout(branchHoverTimer);
     });
 
@@ -1144,7 +1200,7 @@
                                         <div
                                             draggable="true"
                                             on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); }}
+                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
                                             on:drop={(e) => handleStepDropWithContainer(e, undefined)}
                                             on:dragover={(e) => { dragDropHandlers.handleDragOver(e, index); handleStepHoverForInsert(e, step.id, index, undefined); }}
                                         >
@@ -1245,7 +1301,7 @@
                                                                     {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
                                                                     {@const stepDef = getStepDefinition(step.stepId)}
                                                                     {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
-                                                                    {@const showBranchGuide = branchGuideVisible && branchGuideTargetStepId === step.id}
+                                                                    {@const showBranchGuide = dragMode === 'branch' && branchGuideTargetStepId === step.id}
 
                                                                     <!-- Connection line between paired steps -->
                                                                     {#if cellIdx > 0}
@@ -1271,9 +1327,9 @@
                                                                         <div
                                                                             draggable="true"
                                                                             on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); clearBranchGuide(); }}
+                                                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
                                                                             on:drop={(e) => {
-                                                                                if (branchGuideVisible && branchGuideTargetStepId === step.id) {
+                                                                                if (dragMode === 'branch' && branchGuideTargetStepId === step.id) {
                                                                                     handleBranchDrop(e, step.id, container.id);
                                                                                 } else {
                                                                                     handleStepDropWithContainer(e, container.id);
@@ -1316,6 +1372,7 @@
                                                                                 on:paste={(e) => handlePaste(e.detail, step.id)}
                                                                                 on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
                                                                                 on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
+                                                                                on:removeBranch={() => handleRemoveBranchByStepId(step.id, container.id)}
                                                                             />
                                                                         </div>
                                                                     </div>
@@ -1340,7 +1397,7 @@
                                                                         {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
                                                                         {@const stepDef = getStepDefinition(step.stepId)}
                                                                         {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
-                                                                        {@const showBranchGuide = branchGuideVisible && branchGuideTargetStepId === step.id}
+                                                                        {@const showBranchGuide = dragMode === 'branch' && branchGuideTargetStepId === step.id}
 
                                                                         {#if showBranchGuide}
                                                                             <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
@@ -1357,9 +1414,9 @@
                                                                         <div
                                                                             draggable="true"
                                                                             on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); clearBranchGuide(); }}
+                                                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
                                                                             on:drop={(e) => {
-                                                                                if (branchGuideVisible && branchGuideTargetStepId === step.id) {
+                                                                                if (dragMode === 'branch' && branchGuideTargetStepId === step.id) {
                                                                                     handleBranchDrop(e, step.id, container.id);
                                                                                 } else {
                                                                                     handleStepDropWithContainer(e, container.id);
@@ -1400,6 +1457,7 @@
                                                                                 on:paste={(e) => handlePaste(e.detail, step.id)}
                                                                                 on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
                                                                                 on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
+                                                                                on:removeBranch={() => handleRemoveBranchByStepId(step.id, container.id)}
                                                                             />
                                                                         </div>
                                                                     {/if}
@@ -1421,7 +1479,7 @@
                                                     {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
                                                     {@const showInsertGuideTop = insertGuideIndex === index && insertGuideContainerId === container.id && localIndex === 0}
                                                     {@const showInsertGuideBottom = insertGuideIndex === index + 1 && insertGuideContainerId === container.id}
-                                                    {@const showBranchGuide = branchGuideVisible && branchGuideTargetStepId === step.id}
+                                                    {@const showBranchGuide = dragMode === 'branch' && branchGuideTargetStepId === step.id}
 
                                                     <!-- Insert guide indicator (top) -->
                                                     {#if showInsertGuideTop}
@@ -1450,9 +1508,9 @@
                                                         <div
                                                             draggable="true"
                                                             on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); clearBranchGuide(); }}
+                                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
                                                             on:drop={(e) => {
-                                                                if (branchGuideVisible && branchGuideTargetStepId === step.id) {
+                                                                if (dragMode === 'branch' && branchGuideTargetStepId === step.id) {
                                                                     handleBranchDrop(e, step.id, container.id);
                                                                 } else {
                                                                     handleStepDropWithContainer(e, container.id);
@@ -1493,6 +1551,7 @@
                                                                 on:paste={(e) => handlePaste(e.detail, step.id)}
                                                                 on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
                                                                 on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
+                                                                on:removeBranch={() => handleRemoveBranchByStepId(step.id, container.id)}
                                                             />
                                                         </div>
                                                     </div>
