@@ -14,11 +14,19 @@
         WorkflowSteps,
         WorkflowStepInstance,
         WorkflowStepRow,
+        PhaseType,
+    } from "$lib/types/workflow";
+    import {
+        getContainerLayoutRows,
+        isStepSupporter,
+        getSupportInfo,
+        getPhaseById,
     } from "$lib/types/workflow";
     import TimelineNode from "./TimelineNode.svelte";
 
     export let workflowData: ProjectWorkflowData;
     export let workflowSteps: WorkflowSteps;
+    export let globalPhases: PhaseType[] = [];
     export let onNodeClick: ((stepId: string) => void) | undefined = undefined;
 
     let nodes = writable<Node[]>([]);
@@ -71,6 +79,11 @@
         updateGraph(workflowData);
     }
 
+    // Layout constants for supporters
+    const SUPPORTER_NODE_WIDTH = 200;
+    const SUPPORTER_NODE_OFFSET_X = 40;  // How far supporter is from main step (horizontally)
+    const SUPPORTER_NODE_OFFSET_Y = 80;  // Vertical offset from main step
+
     function updateGraph(data: ProjectWorkflowData) {
         const newNodes: Node[] = [];
         const newEdges: Edge[] = [];
@@ -100,9 +113,25 @@
             return;
         }
 
-        // Create timeline backbone nodes (invisible anchor points)
+        // Build layout using phase system - get main flow steps and their supporters
+        const layoutRows = getContainerLayoutRows(
+            undefined,  // All steps (no container filter)
+            data.steps,
+            data.supportRelations,
+            globalPhases
+        );
+
+        // If no layout rows (all steps are supporters with no targets), fallback to flat list
+        const mainFlowSteps = layoutRows.length > 0
+            ? layoutRows.map(row => row.mainStep)
+            : data.steps.filter(step => !isStepSupporter(step.id, data.supportRelations));
+
+        // If still empty, show all steps
+        const stepsToShow = mainFlowSteps.length > 0 ? mainFlowSteps : data.steps;
+
+        // Create timeline backbone
         const timelineStartY = PADDING_TOP;
-        const timelineEndY = PADDING_TOP + (data.steps.length - 1) * NODE_GAP_Y + 60;
+        let currentY = PADDING_TOP;
 
         // Timeline start marker
         newNodes.push({
@@ -125,26 +154,31 @@
             selectable: false,
         });
 
-        // Create step nodes alternating left and right
-        data.steps.forEach((step, index) => {
-            const color = STEP_COLORS[index % STEP_COLORS.length];
-            const isLeft = index % 2 === 0;
-            const y = PADDING_TOP + index * NODE_GAP_Y;
+        let mainStepIndex = 0;
+        let prevDotId: string | null = null;
+
+        // Process layout rows (main steps with their supporters)
+        layoutRows.forEach((row, rowIndex) => {
+            const step = row.mainStep;
+            const stepGlobalIndex = data.steps.findIndex(s => s.id === step.id);
+            const color = STEP_COLORS[mainStepIndex % STEP_COLORS.length];
+            const isLeft = mainStepIndex % 2 === 0;
+            const y = currentY;
             const x = isLeft
-                ? TIMELINE_X - NODE_WIDTH - 50  // Left side
-                : TIMELINE_X + 50;               // Right side
+                ? TIMELINE_X - NODE_WIDTH - 50
+                : TIMELINE_X + 50;
 
             const info = getStepInfo(step);
             const captureCount = step.captures.length;
             const attachmentCount = step.attachments.length;
 
-            // Timeline dot (anchor point on timeline)
+            // Timeline dot
             const dotId = `dot-${step.id}`;
             newNodes.push({
                 id: dotId,
                 type: "default",
                 position: { x: TIMELINE_X - TIMELINE_DOT_SIZE / 2, y: y + 30 },
-                data: { label: String(index + 1) },
+                data: { label: String(mainStepIndex + 1) },
                 style: `
                     background: ${color.border};
                     border: 3px solid white;
@@ -164,13 +198,13 @@
                 selectable: false,
             });
 
-            // Step node
+            // Main step node
             newNodes.push({
                 id: step.id,
                 type: "timeline",
                 position: { x, y },
                 data: {
-                    stepIndex: index,
+                    stepIndex: mainStepIndex,
                     category: info.category,
                     purpose: info.purpose,
                     system: info.system,
@@ -186,7 +220,7 @@
                 draggable: false,
             });
 
-            // Edge from dot to step node
+            // Edge from dot to main step node
             newEdges.push({
                 id: `e-dot-${step.id}`,
                 source: dotId,
@@ -198,10 +232,9 @@
             });
 
             // Connect dots vertically (timeline backbone)
-            if (index > 0) {
-                const prevDotId = `dot-${data.steps[index - 1].id}`;
+            if (prevDotId) {
                 newEdges.push({
-                    id: `e-timeline-${index}`,
+                    id: `e-timeline-${rowIndex}`,
                     source: prevDotId,
                     target: dotId,
                     type: "straight",
@@ -217,38 +250,190 @@
                     style: `stroke: #374151; stroke-width: 4px;`,
                 });
             }
+
+            prevDotId = dotId;
+
+            // Add supporter nodes for this main step
+            let supporterY = y + SUPPORTER_NODE_OFFSET_Y;
+            row.supporters.forEach((supporter, supIndex) => {
+                const supStep = supporter.step;
+                const supInfo = getStepInfo(supStep);
+                const phase = supporter.phase;
+                const phaseColor = phase?.color || '#a855f7';
+
+                // Position supporter on the same side as main step, but offset
+                const supX = isLeft
+                    ? x - SUPPORTER_NODE_OFFSET_X  // Further left
+                    : x + SUPPORTER_NODE_OFFSET_X; // Further right
+
+                // Supporter node (smaller, with phase badge)
+                newNodes.push({
+                    id: supStep.id,
+                    type: "timeline",
+                    position: { x: supX, y: supporterY },
+                    data: {
+                        stepIndex: -1,  // No main index
+                        category: supInfo.category,
+                        purpose: supInfo.purpose,
+                        system: supInfo.system,
+                        target: supInfo.target,
+                        expectedResult: supInfo.expectedResult,
+                        captureCount: supStep.captures.length,
+                        attachmentCount: supStep.attachments.length,
+                        color: { bg: '#f3e8ff', border: phaseColor, text: '#6b21a8', line: phaseColor },
+                        isLeft,
+                        isSupporter: true,
+                        phaseColor,
+                        phaseName: phase?.name || '위상',
+                    },
+                    sourcePosition: isLeft ? Position.Right : Position.Left,
+                    targetPosition: isLeft ? Position.Right : Position.Left,
+                    draggable: false,
+                });
+
+                // Edge from main step to supporter (dashed, with phase color)
+                newEdges.push({
+                    id: `e-support-${step.id}-${supStep.id}`,
+                    source: step.id,
+                    target: supStep.id,
+                    type: "smoothstep",
+                    sourceHandle: null,
+                    targetHandle: null,
+                    style: `stroke: ${phaseColor}; stroke-width: 2px; stroke-dasharray: 5,3;`,
+                    animated: true,
+                });
+
+                supporterY += 70;  // Stack supporters vertically
+            });
+
+            // Calculate next Y position based on supporters
+            const supportersHeight = row.supporters.length * 70;
+            currentY += NODE_GAP_Y + Math.max(0, supportersHeight - 20);
+            mainStepIndex++;
         });
+
+        // If layoutRows is empty but we have steps (fallback case)
+        if (layoutRows.length === 0 && stepsToShow.length > 0) {
+            stepsToShow.forEach((step, index) => {
+                const color = STEP_COLORS[index % STEP_COLORS.length];
+                const isLeft = index % 2 === 0;
+                const y = currentY;
+                const x = isLeft
+                    ? TIMELINE_X - NODE_WIDTH - 50
+                    : TIMELINE_X + 50;
+
+                const info = getStepInfo(step);
+
+                const dotId = `dot-${step.id}`;
+                newNodes.push({
+                    id: dotId,
+                    type: "default",
+                    position: { x: TIMELINE_X - TIMELINE_DOT_SIZE / 2, y: y + 30 },
+                    data: { label: String(index + 1) },
+                    style: `
+                        background: ${color.border};
+                        border: 3px solid white;
+                        border-radius: 50%;
+                        width: ${TIMELINE_DOT_SIZE}px;
+                        height: ${TIMELINE_DOT_SIZE}px;
+                        font-size: 9px;
+                        font-weight: 700;
+                        color: white;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                        z-index: 10;
+                    `,
+                    draggable: false,
+                    selectable: false,
+                });
+
+                newNodes.push({
+                    id: step.id,
+                    type: "timeline",
+                    position: { x, y },
+                    data: {
+                        stepIndex: index,
+                        category: info.category,
+                        purpose: info.purpose,
+                        system: info.system,
+                        target: info.target,
+                        expectedResult: info.expectedResult,
+                        captureCount: step.captures.length,
+                        attachmentCount: step.attachments.length,
+                        color,
+                        isLeft,
+                    },
+                    sourcePosition: isLeft ? Position.Right : Position.Left,
+                    targetPosition: isLeft ? Position.Right : Position.Left,
+                    draggable: false,
+                });
+
+                newEdges.push({
+                    id: `e-dot-${step.id}`,
+                    source: dotId,
+                    target: step.id,
+                    type: "straight",
+                    sourceHandle: null,
+                    targetHandle: null,
+                    style: `stroke: ${color.border}; stroke-width: 2px;`,
+                });
+
+                if (prevDotId) {
+                    newEdges.push({
+                        id: `e-timeline-${index}`,
+                        source: prevDotId,
+                        target: dotId,
+                        type: "straight",
+                        style: `stroke: #374151; stroke-width: 4px;`,
+                    });
+                } else {
+                    newEdges.push({
+                        id: `e-timeline-start`,
+                        source: "timeline-start",
+                        target: dotId,
+                        type: "straight",
+                        style: `stroke: #374151; stroke-width: 4px;`,
+                    });
+                }
+
+                prevDotId = dotId;
+                currentY += NODE_GAP_Y;
+            });
+        }
 
         // Timeline end marker
-        const lastDotId = `dot-${data.steps[data.steps.length - 1].id}`;
-        newNodes.push({
-            id: "timeline-end",
-            type: "default",
-            position: { x: TIMELINE_X - 8, y: timelineEndY + 30 },
-            data: { label: "●" },
-            style: `
-                background: transparent;
-                border: none;
-                font-size: 16px;
-                color: #374151;
-                width: 16px;
-                padding: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            `,
-            draggable: false,
-            selectable: false,
-        });
+        if (prevDotId) {
+            const timelineEndY = currentY + 30;
+            newNodes.push({
+                id: "timeline-end",
+                type: "default",
+                position: { x: TIMELINE_X - 8, y: timelineEndY },
+                data: { label: "●" },
+                style: `
+                    background: transparent;
+                    border: none;
+                    font-size: 16px;
+                    color: #374151;
+                    width: 16px;
+                    padding: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                `,
+                draggable: false,
+                selectable: false,
+            });
 
-        // Connect last dot to end marker
-        newEdges.push({
-            id: `e-timeline-end`,
-            source: lastDotId,
-            target: "timeline-end",
-            type: "straight",
-            style: `stroke: #374151; stroke-width: 4px;`,
-        });
+            newEdges.push({
+                id: `e-timeline-end`,
+                source: prevDotId,
+                target: "timeline-end",
+                type: "straight",
+                style: `stroke: #374151; stroke-width: 4px;`,
+            });
+        }
 
         nodes.set(newNodes);
         edges.set(newEdges);
