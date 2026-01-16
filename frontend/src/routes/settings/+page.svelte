@@ -1,16 +1,15 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fetchSettings, updateSettings, fetchAllAttributes } from "$lib/api/project";
-    import type { WorkflowSteps, StepContainer, PhaseType } from "$lib/types/workflow";
+    import type { WorkflowSteps, PhaseType } from "$lib/types/workflow";
     import LLMSettingsSection from "$lib/components/settings/LLMSettingsSection.svelte";
     import SummaryFieldsSection from "$lib/components/settings/SummaryFieldsSection.svelte";
     import PhenomenonAttributesSection from "$lib/components/settings/PhenomenonAttributesSection.svelte";
     import WorkflowStepsSection from "$lib/components/settings/WorkflowStepsSection.svelte";
-    import StepContainersSection from "$lib/components/settings/StepContainersSection.svelte";
     import PhaseSettingsSection from "$lib/components/settings/PhaseSettingsSection.svelte";
 
     // Navigation sections
-    type SectionId = "llm" | "summary" | "phenomenon" | "workflow" | "containers" | "phases";
+    type SectionId = "llm" | "summary" | "phenomenon" | "workflow" | "phases";
 
     interface NavSection {
         id: SectionId;
@@ -23,7 +22,6 @@
         { id: "summary", label: "PPT 요약 필드", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
         { id: "phenomenon", label: "발생현상 속성", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" },
         { id: "workflow", label: "Workflow 스텝", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
-        { id: "containers", label: "Step Containers", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
         { id: "phases", label: "위상 (Phase)", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
     ];
 
@@ -57,7 +55,6 @@
         use_thumbnails: boolean;
         phenomenon_attributes: string[];
         workflow_steps: WorkflowSteps;
-        step_containers: StepContainer[];
         phase_types: PhaseType[];
     }
 
@@ -83,7 +80,6 @@
         use_thumbnails: true,
         phenomenon_attributes: [],
         workflow_steps: { columns: [], rows: [] },
-        step_containers: [],
         phase_types: [],
     };
 
@@ -133,7 +129,6 @@
                     use_thumbnails: data.use_thumbnails ?? true,
                     phenomenon_attributes: data.phenomenon_attributes || [],
                     workflow_steps: data.workflow_steps || { columns: DEFAULT_COLUMNS, rows: [] },
-                    step_containers: data.step_containers || [],
                     phase_types: data.phase_types || [],
                 };
 
@@ -228,11 +223,6 @@
         expandedRowId = expandedRowId === e.detail.rowId ? null : e.detail.rowId;
     }
 
-    // Step containers handlers
-    function handleStepContainersUpdate(e: CustomEvent<{ containers: StepContainer[] }>) {
-        settings.step_containers = e.detail.containers;
-    }
-
     // Phase types handlers
     function handlePhaseTypesUpdate(e: CustomEvent<{ phases: PhaseType[] }>) {
         settings.phase_types = e.detail.phases;
@@ -323,14 +313,6 @@
                             {expandedRowId}
                             on:update={handleWorkflowStepsUpdate}
                             on:toggleRowExpand={handleToggleRowExpand}
-                        />
-                    </div>
-
-                    <!-- Step Containers 설정 -->
-                    <div id="section-containers">
-                        <StepContainersSection
-                            containers={settings.step_containers}
-                            on:update={handleStepContainersUpdate}
                         />
                     </div>
 

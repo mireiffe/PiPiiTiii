@@ -17,10 +17,8 @@
         PhaseType,
     } from "$lib/types/workflow";
     import {
-        getContainerLayoutRows,
+        getLayoutRows,
         isStepSupporter,
-        getSupportInfo,
-        getPhaseById,
     } from "$lib/types/workflow";
     import TimelineNode from "./TimelineNode.svelte";
 
@@ -114,8 +112,7 @@
         }
 
         // Build layout using phase system - get main flow steps and their supporters
-        const layoutRows = getContainerLayoutRows(
-            undefined,  // All steps (no container filter)
+        const layoutRows = getLayoutRows(
             data.steps,
             data.supportRelations,
             globalPhases
