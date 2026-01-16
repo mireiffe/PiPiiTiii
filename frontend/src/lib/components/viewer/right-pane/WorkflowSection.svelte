@@ -243,6 +243,11 @@
             return;
         }
 
+        // If already in support mode for this step, keep it active (don't check position)
+        if (dragMode === 'support' && supportGuideTargetStepId === targetStepId) {
+            return;  // Already active, maintain it
+        }
+
         const target = e.currentTarget as HTMLElement;
         const rect = target.getBoundingClientRect();
         const offsetX = e.clientX - rect.left;
