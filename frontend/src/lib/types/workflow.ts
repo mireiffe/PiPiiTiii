@@ -28,32 +28,60 @@ export interface StepContainer {
     order: number;
 }
 
-// ========== Container Branch (Multi-Column Flow) ==========
+// ========== Phase System (Support Steps) ==========
 
-// Branch point within a container
-// When a step starts a new branch, it and subsequent steps in that container
-// are displayed in a new column to the right of the parent step
-export interface ContainerBranch {
+// Phase type definition - defines types of phases (main is always implicit)
+export interface PhaseType {
     id: string;
-    branchStartStepId: string;  // The step that starts this branch
-    parentStepId: string;       // The step this branch is positioned next to (on the right)
+    name: string;
+    color: string;  // CSS color for visual distinction
+    order: number;  // Display order
+}
+
+// Support relation - when a step supports another step in a specific phase
+export interface SupportRelation {
+    id: string;
+    supporterStepId: string;  // The step that provides support
+    targetStepId: string;     // The step being supported
+    phaseId: string;          // Which phase this support belongs to
     createdAt: string;
 }
 
-// Generate unique ID for branches
-export function generateBranchId(): string {
-    return `branch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+// Generate unique ID for phases
+export function generatePhaseId(): string {
+    return `phase_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Create a new branch
-export function createContainerBranch(
-    branchStartStepId: string,
-    parentStepId: string
-): ContainerBranch {
+// Generate unique ID for support relations
+export function generateSupportId(): string {
+    return `support_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Create a new phase type
+export function createPhaseType(
+    name: string,
+    color: string,
+    order: number
+): PhaseType {
     return {
-        id: generateBranchId(),
-        branchStartStepId,
-        parentStepId,
+        id: generatePhaseId(),
+        name,
+        color,
+        order,
+    };
+}
+
+// Create a new support relation
+export function createSupportRelation(
+    supporterStepId: string,
+    targetStepId: string,
+    phaseId: string
+): SupportRelation {
+    return {
+        id: generateSupportId(),
+        supporterStepId,
+        targetStepId,
+        phaseId,
         createdAt: new Date().toISOString(),
     };
 }
@@ -95,9 +123,10 @@ export interface WorkflowStepInstance {
 // Project's Workflow Data
 export interface ProjectWorkflowData {
     steps: WorkflowStepInstance[];
-    // Container branches for multi-column layout
-    // Key: containerId (or '__uncategorized__' for uncategorized steps)
-    containerBranches?: Record<string, ContainerBranch[]>;
+    // Phase types (user-defined phases, 'main' phase is implicit)
+    phaseTypes?: PhaseType[];
+    // Support relations - steps that support other steps in specific phases
+    supportRelations?: SupportRelation[];
     createdAt?: string;
     updatedAt?: string;
 }
@@ -189,316 +218,293 @@ export function createAttachment(
     return attachment;
 }
 
-// ========== Branch Utility Functions ==========
+// ========== Phase/Support Utility Functions ==========
 
 /**
- * Get the column index for a step within a container
- * Column 0 is the default (left-most), higher indices are branches to the right
+ * Get all support steps for a given target step
  */
-export function getStepColumnIndex(
+export function getSupportSteps(
+    targetStepId: string,
+    supportRelations: SupportRelation[] | undefined
+): SupportRelation[] {
+    return (supportRelations ?? []).filter(r => r.targetStepId === targetStepId);
+}
+
+/**
+ * Check if a step is a supporter (not in main flow, supports another step)
+ */
+export function isStepSupporter(
     stepId: string,
-    containerId: string | undefined,
-    steps: WorkflowStepInstance[],
-    containerBranches?: Record<string, ContainerBranch[]>
-): number {
-    const containerKey = containerId ?? '__uncategorized__';
-    const branches = containerBranches?.[containerKey] ?? [];
-
-    if (branches.length === 0) return 0;
-
-    // Get steps in this container in order
-    const containerSteps = steps.filter(s =>
-        (s.containerId ?? '__uncategorized__') === containerKey
-    );
-
-    const stepIndex = containerSteps.findIndex(s => s.id === stepId);
-    if (stepIndex === -1) return 0;
-
-    // Find which branch this step belongs to (if any)
-    // A step belongs to a branch if it is the branch start or comes after it in the container
-    let currentColumn = 0;
-
-    for (const branch of branches) {
-        const branchStartIndex = containerSteps.findIndex(s => s.id === branch.branchStartStepId);
-        if (branchStartIndex !== -1 && stepIndex >= branchStartIndex) {
-            currentColumn++;
-        }
-    }
-
-    return currentColumn;
+    supportRelations: SupportRelation[] | undefined
+): boolean {
+    return (supportRelations ?? []).some(r => r.supporterStepId === stepId);
 }
 
 /**
- * Get all steps organized by columns within a container
+ * Get the support relation info for a supporter step
  */
-export interface ContainerColumn {
-    columnIndex: number;
-    steps: WorkflowStepInstance[];
-    branchInfo?: ContainerBranch;  // Info about the branch that starts this column (if not column 0)
+export function getSupportInfo(
+    stepId: string,
+    supportRelations: SupportRelation[] | undefined
+): SupportRelation | undefined {
+    return (supportRelations ?? []).find(r => r.supporterStepId === stepId);
 }
 
 /**
- * Layout row for rendering - supports paired (side-by-side) display
- * When branches exist, first steps of each branch are paired with parent
+ * Get main flow steps (steps that are not supporting other steps)
  */
-export interface ContainerLayoutRow {
-    type: 'single' | 'paired';
-    // For single: one step
-    // For paired: first step is parent, rest are branch starts
-    cells: {
-        columnIndex: number;
-        step: WorkflowStepInstance | null;  // null for empty cell
-        isBranchStart: boolean;
-        hideBadge?: boolean;  // Hide the step number badge
-    }[];
+export function getMainFlowSteps(
+    steps: WorkflowStepInstance[],
+    supportRelations: SupportRelation[] | undefined
+): WorkflowStepInstance[] {
+    const supporterIds = new Set((supportRelations ?? []).map(r => r.supporterStepId));
+    return steps.filter(s => !supporterIds.has(s.id));
 }
 
 /**
- * Get container layout as rows for rendering
- * Branch first steps are placed in the same row as their parent step
- */
-export function getContainerLayoutRows(
-    containerId: string | undefined,
-    steps: WorkflowStepInstance[],
-    containerBranches?: Record<string, ContainerBranch[]>
-): { rows: ContainerLayoutRow[], columns: ContainerColumn[] } {
-    const columns = getContainerColumns(containerId, steps, containerBranches);
-
-    if (columns.length === 0 || columns.every(c => c.steps.length === 0)) {
-        return { rows: [], columns };
-    }
-
-    // For single column, just return simple rows
-    if (columns.length === 1) {
-        const rows: ContainerLayoutRow[] = columns[0].steps.map(step => ({
-            type: 'single' as const,
-            cells: [{ columnIndex: 0, step, isBranchStart: false }]
-        }));
-        return { rows, columns };
-    }
-
-    // Build paired rows
-    // First row: parent step (col 0, index 0) paired with branch start steps
-    // Subsequent rows: remaining steps in each column
-    const rows: ContainerLayoutRow[] = [];
-
-    // Find the maximum column height (excluding first step which goes to row 0)
-    const maxHeight = Math.max(...columns.map((col, idx) =>
-        idx === 0 ? col.steps.length : col.steps.length - 1  // branch columns have first step in row 0
-    ));
-
-    // Row 0: Parent step + all branch first steps
-    const firstRow: ContainerLayoutRow = {
-        type: 'paired',
-        cells: columns.map((col, colIdx) => ({
-            columnIndex: colIdx,
-            step: col.steps[0] ?? null,
-            isBranchStart: colIdx > 0,
-            hideBadge: colIdx > 0,  // Hide badge for branch start steps
-        }))
-    };
-    rows.push(firstRow);
-
-    // Subsequent rows: steps from index 1 onwards (for col 0) or index 1 onwards (for branch cols)
-    for (let rowIdx = 1; rowIdx <= maxHeight; rowIdx++) {
-        const row: ContainerLayoutRow = {
-            type: 'paired',
-            cells: columns.map((col, colIdx) => {
-                // For column 0, use rowIdx directly
-                // For branch columns, use rowIdx (since first step is in row 0)
-                const stepIdx = rowIdx;
-                const step = col.steps[stepIdx] ?? null;
-                return {
-                    columnIndex: colIdx,
-                    step,
-                    isBranchStart: false,
-                };
-            })
-        };
-        // Only add row if it has at least one step
-        if (row.cells.some(c => c.step !== null)) {
-            rows.push(row);
-        }
-    }
-
-    return { rows, columns };
-}
-
-export function getContainerColumns(
-    containerId: string | undefined,
-    steps: WorkflowStepInstance[],
-    containerBranches?: Record<string, ContainerBranch[]>
-): ContainerColumn[] {
-    const containerKey = containerId ?? '__uncategorized__';
-    const branches = containerBranches?.[containerKey] ?? [];
-
-    // Get steps in this container in order
-    const containerSteps = steps.filter(s =>
-        (s.containerId ?? '__uncategorized__') === containerKey
-    );
-
-    if (containerSteps.length === 0) {
-        return [{ columnIndex: 0, steps: [] }];
-    }
-
-    if (branches.length === 0) {
-        return [{ columnIndex: 0, steps: containerSteps }];
-    }
-
-    // Sort branches by their start position
-    const sortedBranches = [...branches].sort((a, b) => {
-        const aIdx = containerSteps.findIndex(s => s.id === a.branchStartStepId);
-        const bIdx = containerSteps.findIndex(s => s.id === b.branchStartStepId);
-        return aIdx - bIdx;
-    });
-
-    // Build columns
-    const columns: ContainerColumn[] = [];
-    let currentColumnSteps: WorkflowStepInstance[] = [];
-    let branchIndex = 0;
-
-    for (let i = 0; i < containerSteps.length; i++) {
-        const step = containerSteps[i];
-
-        // Check if this step starts a new branch
-        if (branchIndex < sortedBranches.length &&
-            step.id === sortedBranches[branchIndex].branchStartStepId) {
-            // Save current column
-            if (i > 0) {
-                columns.push({
-                    columnIndex: columns.length,
-                    steps: currentColumnSteps,
-                    branchInfo: columns.length > 0 ? sortedBranches[columns.length - 1] : undefined,
-                });
-            }
-            // Start new column
-            currentColumnSteps = [step];
-            branchIndex++;
-        } else {
-            currentColumnSteps.push(step);
-        }
-    }
-
-    // Add last column
-    columns.push({
-        columnIndex: columns.length,
-        steps: currentColumnSteps,
-        branchInfo: columns.length > 0 ? sortedBranches[columns.length - 1] : undefined,
-    });
-
-    return columns;
-}
-
-/**
- * Validate if a branch can be created (left-to-right order only)
+ * Validate if a support relation can be created
  * Returns null if valid, or an error message if invalid
  */
-export function validateBranchCreation(
-    branchStartStepId: string,
-    parentStepId: string,
-    containerId: string | undefined,
-    steps: WorkflowStepInstance[]
+export function validateSupportCreation(
+    supporterStepId: string,
+    targetStepId: string,
+    steps: WorkflowStepInstance[],
+    supportRelations: SupportRelation[] | undefined
 ): string | null {
-    const containerKey = containerId ?? '__uncategorized__';
+    // Can't support yourself
+    if (supporterStepId === targetStepId) {
+        return "자기 자신을 지원할 수 없습니다.";
+    }
 
-    // Get steps in this container in order
-    const containerSteps = steps.filter(s =>
-        (s.containerId ?? '__uncategorized__') === containerKey
-    );
+    // Both steps must exist
+    const supporter = steps.find(s => s.id === supporterStepId);
+    const target = steps.find(s => s.id === targetStepId);
 
-    const branchStartIndex = containerSteps.findIndex(s => s.id === branchStartStepId);
-    const parentIndex = containerSteps.findIndex(s => s.id === parentStepId);
-
-    if (branchStartIndex === -1 || parentIndex === -1) {
+    if (!supporter || !target) {
         return "스텝을 찾을 수 없습니다.";
     }
 
-    // Branch start must come AFTER parent (left-to-right order)
-    if (branchStartIndex <= parentIndex) {
-        return "분기는 왼쪽에서 오른쪽 순서로만 생성할 수 있습니다.";
+    // Target can't be a supporter (no chaining)
+    if (isStepSupporter(targetStepId, supportRelations)) {
+        return "이미 지원 중인 스텝은 대상이 될 수 없습니다.";
+    }
+
+    // Supporter can't already be supporting
+    if (isStepSupporter(supporterStepId, supportRelations)) {
+        return "이미 다른 스텝을 지원 중입니다.";
     }
 
     return null;
 }
 
 /**
- * Add a branch to workflow data
+ * Add a support relation to workflow data
  */
-export function addBranch(
+export function addSupportRelation(
     workflowData: ProjectWorkflowData,
-    containerId: string | undefined,
-    branchStartStepId: string,
-    parentStepId: string
+    supporterStepId: string,
+    targetStepId: string,
+    phaseId: string
 ): ProjectWorkflowData {
-    const containerKey = containerId ?? '__uncategorized__';
-    const branches = workflowData.containerBranches ?? {};
-    const containerBranches = branches[containerKey] ?? [];
-
-    const newBranch = createContainerBranch(branchStartStepId, parentStepId);
+    const newRelation = createSupportRelation(supporterStepId, targetStepId, phaseId);
 
     return {
         ...workflowData,
-        containerBranches: {
-            ...branches,
-            [containerKey]: [...containerBranches, newBranch],
-        },
+        supportRelations: [...(workflowData.supportRelations ?? []), newRelation],
         updatedAt: new Date().toISOString(),
     };
 }
 
 /**
- * Remove a branch from workflow data
+ * Remove a support relation from workflow data
  */
-export function removeBranch(
+export function removeSupportRelation(
     workflowData: ProjectWorkflowData,
-    containerId: string | undefined,
-    branchId: string
+    supportRelationId: string
 ): ProjectWorkflowData {
-    const containerKey = containerId ?? '__uncategorized__';
-    const branches = workflowData.containerBranches ?? {};
-    const containerBranches = branches[containerKey] ?? [];
-
     return {
         ...workflowData,
-        containerBranches: {
-            ...branches,
-            [containerKey]: containerBranches.filter(b => b.id !== branchId),
-        },
+        supportRelations: (workflowData.supportRelations ?? []).filter(r => r.id !== supportRelationId),
         updatedAt: new Date().toISOString(),
     };
 }
 
 /**
- * Clean up orphaned branches (when steps are deleted or moved)
+ * Remove support relation by supporter step ID
  */
-export function cleanupOrphanedBranches(
+export function removeSupportByStepId(
+    workflowData: ProjectWorkflowData,
+    supporterStepId: string
+): ProjectWorkflowData {
+    return {
+        ...workflowData,
+        supportRelations: (workflowData.supportRelations ?? []).filter(r => r.supporterStepId !== supporterStepId),
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Clean up orphaned support relations (when steps are deleted)
+ */
+export function cleanupOrphanedSupports(
     workflowData: ProjectWorkflowData
 ): ProjectWorkflowData {
-    if (!workflowData.containerBranches) return workflowData;
+    if (!workflowData.supportRelations) return workflowData;
 
     const stepIds = new Set(workflowData.steps.map(s => s.id));
-    const stepContainerMap = new Map(workflowData.steps.map(s => [s.id, s.containerId ?? '__uncategorized__']));
-
-    const cleanedBranches: Record<string, ContainerBranch[]> = {};
-
-    for (const [containerKey, branches] of Object.entries(workflowData.containerBranches)) {
-        cleanedBranches[containerKey] = branches.filter(branch => {
-            // Both steps must exist
-            if (!stepIds.has(branch.branchStartStepId) || !stepIds.has(branch.parentStepId)) {
-                return false;
-            }
-            // Both steps must be in this container
-            if (stepContainerMap.get(branch.branchStartStepId) !== containerKey ||
-                stepContainerMap.get(branch.parentStepId) !== containerKey) {
-                return false;
-            }
-            return true;
-        });
-    }
 
     return {
         ...workflowData,
-        containerBranches: cleanedBranches,
+        supportRelations: workflowData.supportRelations.filter(r =>
+            stepIds.has(r.supporterStepId) && stepIds.has(r.targetStepId)
+        ),
         updatedAt: new Date().toISOString(),
     };
+}
+
+/**
+ * Add a phase type to workflow data
+ */
+export function addPhaseType(
+    workflowData: ProjectWorkflowData,
+    name: string,
+    color: string
+): ProjectWorkflowData {
+    const existingPhases = workflowData.phaseTypes ?? [];
+    const order = existingPhases.length;
+    const newPhase = createPhaseType(name, color, order);
+
+    return {
+        ...workflowData,
+        phaseTypes: [...existingPhases, newPhase],
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Remove a phase type from workflow data
+ * Also removes all support relations using this phase
+ */
+export function removePhaseType(
+    workflowData: ProjectWorkflowData,
+    phaseId: string
+): ProjectWorkflowData {
+    return {
+        ...workflowData,
+        phaseTypes: (workflowData.phaseTypes ?? []).filter(p => p.id !== phaseId),
+        supportRelations: (workflowData.supportRelations ?? []).filter(r => r.phaseId !== phaseId),
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Update a phase type
+ */
+export function updatePhaseType(
+    workflowData: ProjectWorkflowData,
+    phaseId: string,
+    updates: Partial<Pick<PhaseType, 'name' | 'color'>>
+): ProjectWorkflowData {
+    return {
+        ...workflowData,
+        phaseTypes: (workflowData.phaseTypes ?? []).map(p =>
+            p.id === phaseId ? { ...p, ...updates } : p
+        ),
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+// ========== Container Layout Functions (for Phase System) ==========
+
+/**
+ * Get steps grouped by target step for a container
+ * Returns main flow steps with their supporters
+ */
+export interface StepWithSupports {
+    step: WorkflowStepInstance;
+    supporters: {
+        step: WorkflowStepInstance;
+        relation: SupportRelation;
+        phase: PhaseType | undefined;
+    }[];
+}
+
+export function getContainerStepsWithSupports(
+    containerId: string | undefined,
+    steps: WorkflowStepInstance[],
+    supportRelations: SupportRelation[] | undefined,
+    phaseTypes: PhaseType[] | undefined
+): StepWithSupports[] {
+    const containerKey = containerId ?? '__uncategorized__';
+
+    // Get steps in this container
+    const containerSteps = steps.filter(s =>
+        (s.containerId ?? '__uncategorized__') === containerKey
+    );
+
+    // Separate main flow from supporters
+    const mainFlowSteps = getMainFlowSteps(containerSteps, supportRelations);
+
+    return mainFlowSteps.map(step => {
+        const supports = getSupportSteps(step.id, supportRelations);
+        return {
+            step,
+            supporters: supports.map(rel => ({
+                step: containerSteps.find(s => s.id === rel.supporterStepId)!,
+                relation: rel,
+                phase: (phaseTypes ?? []).find(p => p.id === rel.phaseId),
+            })).filter(s => s.step !== undefined),
+        };
+    });
+}
+
+/**
+ * Layout row for rendering with phase support
+ */
+export interface ContainerLayoutRow {
+    mainStep: WorkflowStepInstance;
+    supporters: {
+        step: WorkflowStepInstance;
+        relation: SupportRelation;
+        phase: PhaseType | undefined;
+    }[];
+}
+
+/**
+ * Get container layout rows for rendering
+ */
+export function getContainerLayoutRows(
+    containerId: string | undefined,
+    steps: WorkflowStepInstance[],
+    supportRelations: SupportRelation[] | undefined,
+    phaseTypes: PhaseType[] | undefined
+): ContainerLayoutRow[] {
+    const stepsWithSupports = getContainerStepsWithSupports(
+        containerId,
+        steps,
+        supportRelations,
+        phaseTypes
+    );
+
+    return stepsWithSupports.map(({ step, supporters }) => ({
+        mainStep: step,
+        supporters,
+    }));
+}
+
+/**
+ * Get all phase types from workflow data (including implicit 'main' phase info)
+ */
+export function getAllPhaseTypes(workflowData: ProjectWorkflowData): PhaseType[] {
+    return workflowData.phaseTypes ?? [];
+}
+
+/**
+ * Get phase by ID
+ */
+export function getPhaseById(
+    phaseId: string,
+    phaseTypes: PhaseType[] | undefined
+): PhaseType | undefined {
+    return (phaseTypes ?? []).find(p => p.id === phaseId);
 }
