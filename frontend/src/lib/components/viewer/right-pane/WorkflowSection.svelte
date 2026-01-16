@@ -216,6 +216,22 @@
         }
     }
 
+    // Handle dragleave - only clear if actually leaving the element (not moving to child)
+    function handleDragLeave(e: DragEvent, stepId: string) {
+        const currentTarget = e.currentTarget as HTMLElement;
+        const relatedTarget = e.relatedTarget as Node | null;
+
+        // If moving to a child element, don't clear
+        if (relatedTarget && currentTarget.contains(relatedTarget)) {
+            return;
+        }
+
+        // Only clear if this was the target step
+        if (supportGuideTargetStepId === stepId) {
+            clearSupportGuide();
+        }
+    }
+
     function handleStepHoverForSupport(e: DragEvent, targetStepId: string) {
         if (dragState.draggedIndex === null) return;
 
@@ -810,7 +826,7 @@
                                         dragDropHandlers.handleDragOver(e, index);
                                         handleStepHoverForSupport(e, step.id);
                                     }}
-                                    on:dragleave={() => clearSupportGuide()}
+                                    on:dragleave={(e) => handleDragLeave(e, step.id)}
                                 >
                                     <WorkflowStepItem
                                         {step}
