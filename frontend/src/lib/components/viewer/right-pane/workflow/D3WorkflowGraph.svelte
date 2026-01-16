@@ -25,15 +25,18 @@
 
     // State
     let hoveredStepId: string | null = null;
+    let selectedNodeId: string | null = null;
     let width = 0;
     let height = 0;
+    let currentNodes: NodeLayout[] = [];
 
     // Layout constants - Horizontal flow (left to right)
     const NODE_WIDTH = 200;
     const NODE_HEIGHT = 90;
     const NODE_GAP_X = 60;  // Gap between main flow nodes
     const SUPPORT_GAP_Y = 100;  // Vertical gap for support nodes
-    const MARGIN = { top: 120, right: 80, bottom: 120, left: 80 };
+    const MARGIN = { top: 80, right: 80, bottom: 80, left: 40 };
+    const VISIBLE_NODES = 4;  // Number of nodes visible in initial view
 
     // Color palette for steps
     const STEP_COLORS = [
@@ -220,6 +223,7 @@
         if (!svg || !mainGroup) return;
 
         const { nodes, edges, totalWidth, totalHeight } = calculateLayout();
+        currentNodes = nodes;
 
         // Clear previous content
         mainGroup.selectAll('*').remove();
@@ -520,13 +524,12 @@
                     .attr('transform', `translate(${d.x}, ${d.y})`);
             })
             .on('click', function(event, d) {
+                selectedNodeId = d.id;
+                focusNode(d.id);
                 if (onNodeClick) {
                     onNodeClick(d.id);
                 }
             });
-
-        // Update SVG viewBox for proper sizing
-        svg.attr('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
     }
 
     function initSvg() {
@@ -540,21 +543,28 @@
         // Clear any existing SVG
         d3.select(svgContainer).selectAll('svg').remove();
 
-        // Create SVG
+        // Create SVG with fixed dimensions
         svg = d3.select(svgContainer)
             .append('svg')
-            .attr('width', '100%')
-            .attr('height', '100%')
-            .attr('preserveAspectRatio', 'xMidYMid meet');
+            .attr('width', width)
+            .attr('height', height);
 
         // Main group for transforms
         mainGroup = svg.append('g').attr('class', 'main-group');
 
-        // Setup zoom
+        // Setup zoom - only horizontal panning
         zoom = d3.zoom<SVGSVGElement, unknown>()
-            .scaleExtent([0.3, 2])
+            .scaleExtent([0.5, 2])
             .on('zoom', (event) => {
-                mainGroup.attr('transform', event.transform);
+                // Get current transform
+                const transform = event.transform;
+                // Lock Y translation to center the graph vertically
+                const { totalHeight } = calculateLayout();
+                const fixedY = (height - totalHeight * transform.k) / 2;
+                const constrainedTransform = d3.zoomIdentity
+                    .translate(transform.x, fixedY)
+                    .scale(transform.k);
+                mainGroup.attr('transform', constrainedTransform.toString());
             });
 
         svg.call(zoom);
@@ -562,48 +572,88 @@
         // Initial render
         render();
 
-        // Fit to view
-        fitToView();
+        // Set initial view to show first ~4 nodes
+        setInitialView();
     }
 
-    function fitToView() {
-        if (!svg || !mainGroup) return;
+    function setInitialView() {
+        if (!svg || !mainGroup || currentNodes.length === 0) return;
 
-        const { totalWidth, totalHeight } = calculateLayout();
         const rect = svgContainer.getBoundingClientRect();
         const containerWidth = rect.width || 800;
         const containerHeight = rect.height || 400;
 
-        const scale = Math.min(
-            containerWidth / totalWidth,
-            containerHeight / totalHeight,
-            1
-        ) * 0.9;
+        // Calculate scale to show VISIBLE_NODES nodes
+        const visibleWidth = VISIBLE_NODES * (NODE_WIDTH + NODE_GAP_X);
+        const scale = Math.min(containerWidth / visibleWidth, 1.2);
 
-        const translateX = (containerWidth - totalWidth * scale) / 2;
-        const translateY = (containerHeight - totalHeight * scale) / 2;
+        // Calculate Y to center main flow vertically
+        const { totalHeight } = calculateLayout();
+        const mainFlowY = MARGIN.top + SUPPORT_GAP_Y;
+        const centerY = (containerHeight / 2) - (mainFlowY + NODE_HEIGHT / 2) * scale;
+
+        // Start from the first node with some padding
+        const startX = 20;
+
+        svg.call(
+            zoom.transform,
+            d3.zoomIdentity.translate(startX, centerY).scale(scale)
+        );
+    }
+
+    function focusNode(nodeId: string) {
+        if (!svg || !mainGroup) return;
+
+        const node = currentNodes.find(n => n.id === nodeId);
+        if (!node) return;
+
+        const rect = svgContainer.getBoundingClientRect();
+        const containerWidth = rect.width || 800;
+        const containerHeight = rect.height || 400;
+
+        // Get current scale
+        const currentTransform = d3.zoomTransform(svg.node()!);
+        const scale = currentTransform.k;
+
+        // Calculate X to center the node horizontally
+        const nodeCenterX = node.x + node.width / 2;
+        const targetX = (containerWidth / 2) - nodeCenterX * scale;
+
+        // Keep Y fixed (centered on main flow)
+        const { totalHeight } = calculateLayout();
+        const mainFlowY = MARGIN.top + SUPPORT_GAP_Y;
+        const targetY = (containerHeight / 2) - (mainFlowY + NODE_HEIGHT / 2) * scale;
 
         svg.transition()
-            .duration(300)
+            .duration(400)
+            .ease(d3.easeCubicOut)
             .call(
                 zoom.transform,
-                d3.zoomIdentity.translate(translateX, translateY).scale(scale)
+                d3.zoomIdentity.translate(targetX, targetY).scale(scale)
             );
+    }
+
+    function fitToView() {
+        setInitialView();
     }
 
     // Reactive update when data changes
     $: if (svg && mainGroup && workflowData) {
         render();
-        fitToView();
+        setInitialView();
     }
 
     onMount(() => {
         initSvg();
 
         // Handle resize
-        const resizeObserver = new ResizeObserver(() => {
-            if (svgContainer) {
-                fitToView();
+        const resizeObserver = new ResizeObserver((entries) => {
+            if (svgContainer && svg) {
+                const rect = entries[0].contentRect;
+                width = rect.width;
+                height = rect.height;
+                svg.attr('width', width).attr('height', height);
+                setInitialView();
             }
         });
         if (svgContainer) {
