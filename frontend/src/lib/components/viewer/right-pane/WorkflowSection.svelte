@@ -6,7 +6,7 @@
     import ImageAddModal from "./workflow/ImageAddModal.svelte";
     import StepDefinitionPopup from "./workflow/StepDefinitionPopup.svelte";
     import WorkflowStepItem from "./workflow/WorkflowStepItem.svelte";
-    import TimelineGraph from "./workflow/TimelineGraph.svelte";
+    import D3WorkflowGraph from "./workflow/D3WorkflowGraph.svelte";
     import {
         createDragDropHandlers,
         type DragDropState,
@@ -735,7 +735,7 @@
             class="flex-1 flex flex-col min-h-[400px] bg-gray-50/50 relative overflow-hidden"
         >
             {#if viewMode === "graph"}
-                <TimelineGraph
+                <D3WorkflowGraph
                     {workflowData}
                     {workflowSteps}
                     {globalPhases}
