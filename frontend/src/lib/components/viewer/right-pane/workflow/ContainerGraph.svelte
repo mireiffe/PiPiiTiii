@@ -1025,7 +1025,7 @@
         });
 
         // Empty state with animation
-        const hasNoContainers = sortedContainers.length === 0;
+        const hasNoContainers = getSortedContainers().length === 0;
         const hasSteps = workflowData.steps.length > 0;
         const showEmptyState = containers.length === 0 || (containers.length === 1 && containers[0].steps.length === 0 && !hasSteps);
 
