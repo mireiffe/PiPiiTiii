@@ -40,6 +40,7 @@
         paste: ClipboardEvent;
         checkboxClick: MouseEvent;
         cardClick: MouseEvent;
+        removeBranch: void;
     }>();
 
     function handleCardClick(e: MouseEvent) {
@@ -75,14 +76,26 @@
 
     <!-- Step Number Badge (or Branch Indicator) -->
     {#if branchIndicator}
-        <!-- Branch start indicator -->
-        <div
-            class="absolute left-0 top-2.5 w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-all duration-200 bg-purple-500"
-            title="병렬 분기"
-        >
-            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-            </svg>
+        <!-- Branch start indicator with remove button -->
+        <div class="absolute left-0 top-2.5 group/branch">
+            <div
+                class="w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-all duration-200 bg-purple-500"
+                title="병렬 분기"
+            >
+                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+            </div>
+            <!-- Branch remove button (appears on hover) -->
+            <button
+                class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-md transition-all duration-200 opacity-0 scale-75 group-hover/branch:opacity-100 group-hover/branch:scale-100 z-10"
+                title="분기 해제"
+                on:click|stopPropagation={() => dispatch("removeBranch")}
+            >
+                <svg class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
         </div>
     {:else if !hideBadge}
         <div
