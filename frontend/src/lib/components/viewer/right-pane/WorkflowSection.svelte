@@ -1171,46 +1171,150 @@
                 <!-- Step List with Containers -->
                 <div class="flex-1 overflow-y-auto p-3 space-y-3 relative flex flex-col">
                     {#if sortedContainers.length === 0}
-                        <!-- No containers defined: show flat list -->
+                        <!-- No containers defined: show flat list with phase support -->
+                        {@const flatLayoutRows = containerLayoutMap['__uncategorized__'] || []}
                         <div class="relative">
                             <div class="absolute left-[23px] top-0 bottom-0 w-px bg-gray-200 z-0"></div>
-                            {#each workflowData.steps as step, index (step.id)}
+                            {#each flatLayoutRows as row, rowIndex (row.mainStep.id)}
+                                {@const step = row.mainStep}
+                                {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
                                 {@const stepDef = getStepDefinition(step.stepId)}
                                 {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
+                                {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === step.id}
 
-                                <div
-                                    class="mb-2"
-                                    draggable="true"
-                                    on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                    on:dragend={dragDropHandlers.handleDragEnd}
-                                    on:drop={dragDropHandlers.handleDrop}
-                                    on:dragover={(e) => dragDropHandlers.handleDragOver(e, index)}
-                                >
-                                    <WorkflowStepItem
-                                        {step}
-                                        {index}
-                                        {stepDef}
-                                        {color}
-                                        {workflowSteps}
-                                        isExpanded={expandedStepId === step.id}
-                                        isCapturing={captureTargetStepId === step.id}
-                                        isAddingAttachment={addingAttachmentToStepId === step.id}
-                                        isBeingDragged={dragState.draggedIndex === index}
-                                        showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
-                                        showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
-                                        isLastStep={index === workflowData.steps.length - 1}
-                                        {attachmentTextInput}
-                                        on:toggleExpand={() => toggleStepExpand(step.id)}
-                                        on:startCapture={() => startCaptureForStep(step.id)}
-                                        on:toggleAttachment={() => toggleAttachmentSection(step.id)}
-                                        on:moveUp={() => moveStepUp(index)}
-                                        on:moveDown={() => moveStepDown(index)}
-                                        on:remove={() => handleRemoveStep(step.id)}
-                                        on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
-                                        on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
-                                        on:addTextAttachment={() => addTextAttachment(step.id)}
-                                        on:paste={(e) => handlePaste(e.detail, step.id)}
-                                    />
+                                <div class="relative mb-2">
+                                    <!-- Support creation guide -->
+                                    {#if showSupportGuide}
+                                        <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                                            <div class="support-guide-indicator">
+                                                <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
+                                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+                                                    </svg>
+                                                </div>
+                                                <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
+                                                    위상 지원
+                                                </span>
+                                            </div>
+                                        </div>
+                                    {/if}
+
+                                    <div
+                                        draggable="true"
+                                        on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
+                                        on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
+                                        on:drop={(e) => {
+                                            if (dragMode === 'support' && supportGuideTargetStepId === step.id) {
+                                                handleSupportDrop(e, step.id);
+                                            } else {
+                                                dragDropHandlers.handleDrop(e);
+                                            }
+                                        }}
+                                        on:dragover={(e) => {
+                                            dragDropHandlers.handleDragOver(e, index);
+                                            handleStepHoverForSupport(e, step.id);
+                                        }}
+                                        on:dragleave={() => clearSupportGuide()}
+                                    >
+                                        <WorkflowStepItem
+                                            {step}
+                                            {index}
+                                            {stepDef}
+                                            {color}
+                                            {workflowSteps}
+                                            isExpanded={expandedStepId === step.id}
+                                            isCapturing={captureTargetStepId === step.id}
+                                            isAddingAttachment={addingAttachmentToStepId === step.id}
+                                            isBeingDragged={dragState.draggedIndex === index}
+                                            showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
+                                            showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
+                                            isLastStep={index === workflowData.steps.length - 1}
+                                            {attachmentTextInput}
+                                            on:toggleExpand={() => toggleStepExpand(step.id)}
+                                            on:startCapture={() => startCaptureForStep(step.id)}
+                                            on:toggleAttachment={() => toggleAttachmentSection(step.id)}
+                                            on:moveUp={() => moveStepUp(index)}
+                                            on:moveDown={() => moveStepDown(index)}
+                                            on:remove={() => handleRemoveStep(step.id)}
+                                            on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
+                                            on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
+                                            on:addTextAttachment={() => addTextAttachment(step.id)}
+                                            on:paste={(e) => handlePaste(e.detail, step.id)}
+                                        />
+                                    </div>
+
+                                    <!-- Supporter steps (indented, with phase indicator) -->
+                                    {#if row.supporters.length > 0}
+                                        <div class="ml-8 mt-1 space-y-1 border-l-2 border-purple-200 pl-2">
+                                            {#each row.supporters as supporter (supporter.step.id)}
+                                                {@const supStep = supporter.step}
+                                                {@const supIndex = workflowData.steps.findIndex(s => s.id === supStep.id)}
+                                                {@const supStepDef = getStepDefinition(supStep.stepId)}
+                                                {@const supColor = EVIDENCE_COLORS[supIndex % EVIDENCE_COLORS.length]}
+
+                                                <div class="relative group">
+                                                    <!-- Phase badge -->
+                                                    <div
+                                                        class="absolute -left-5 top-2 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white shadow-sm"
+                                                        style="background-color: {supporter.phase?.color || '#a855f7'}"
+                                                        title="{supporter.phase?.name || '위상'}"
+                                                    >
+                                                        P
+                                                    </div>
+
+                                                    <!-- Remove support button -->
+                                                    <button
+                                                        class="absolute -left-6 top-6 w-3 h-3 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
+                                                        title="지원 해제"
+                                                        on:click|stopPropagation={() => handleRemoveSupport(supStep.id)}
+                                                    >
+                                                        <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+
+                                                    <div
+                                                        draggable="true"
+                                                        on:dragstart={(e) => dragDropHandlers.handleDragStart(e, supIndex)}
+                                                        on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
+                                                        on:drop={dragDropHandlers.handleDrop}
+                                                        on:dragover={(e) => dragDropHandlers.handleDragOver(e, supIndex)}
+                                                    >
+                                                        <WorkflowStepItem
+                                                            step={supStep}
+                                                            index={supIndex}
+                                                            stepDef={supStepDef}
+                                                            color={supColor}
+                                                            {workflowSteps}
+                                                            isExpanded={expandedStepId === supStep.id}
+                                                            isCapturing={captureTargetStepId === supStep.id}
+                                                            isAddingAttachment={addingAttachmentToStepId === supStep.id}
+                                                            isBeingDragged={dragState.draggedIndex === supIndex}
+                                                            showDropIndicatorTop={false}
+                                                            showDropIndicatorBottom={false}
+                                                            isLastStep={supIndex === workflowData.steps.length - 1}
+                                                            {attachmentTextInput}
+                                                            hideBadge={true}
+                                                            supportIndicator={true}
+                                                            phaseColor={supporter.phase?.color}
+                                                            phaseName={supporter.phase?.name}
+                                                            on:toggleExpand={() => toggleStepExpand(supStep.id)}
+                                                            on:startCapture={() => startCaptureForStep(supStep.id)}
+                                                            on:toggleAttachment={() => toggleAttachmentSection(supStep.id)}
+                                                            on:moveUp={() => moveStepUp(supIndex)}
+                                                            on:moveDown={() => moveStepDown(supIndex)}
+                                                            on:remove={() => handleRemoveStep(supStep.id)}
+                                                            on:removeCapture={(e) => removeCapture(supStep.id, e.detail.captureId)}
+                                                            on:openAttachmentModal={(e) => openAttachmentModal(supStep.id, e.detail.attachment)}
+                                                            on:addTextAttachment={() => addTextAttachment(supStep.id)}
+                                                            on:paste={(e) => handlePaste(e.detail, supStep.id)}
+                                                            on:removeSupport={() => handleRemoveSupport(supStep.id)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {/if}
                                 </div>
                             {/each}
                         </div>
