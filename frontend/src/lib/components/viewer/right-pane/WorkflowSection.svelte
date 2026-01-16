@@ -874,29 +874,9 @@
                                             {@const supIndex = workflowData.steps.findIndex(s => s.id === supStep.id)}
                                             {@const supStepDef = getStepDefinition(supStep.stepId)}
                                             {@const supColor = EVIDENCE_COLORS[supIndex % EVIDENCE_COLORS.length]}
-                                            {@const phaseShortName = supporter.phase?.name?.charAt(0).toUpperCase() || 'P'}
-                                            {@const supporterDisplayNumber = `${mainStepNumber}_${phaseShortName}${row.supporters.length > 1 ? supLocalIdx + 1 : ''}`}
+                                            {@const supporterDisplayNumber = supporter.phase?.name || '위상'}
 
                                             <div class="relative group">
-                                                <!-- Phase badge -->
-                                                <div
-                                                    class="absolute -left-5 top-2 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white shadow-sm"
-                                                    style="background-color: {supporter.phase?.color || '#a855f7'}"
-                                                    title="{supporter.phase?.name || '위상'}"
-                                                >
-                                                    P
-                                                </div>
-
-                                                <!-- Remove support button -->
-                                                <button
-                                                    class="absolute -left-6 top-6 w-3 h-3 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
-                                                    title="지원 해제"
-                                                    on:click|stopPropagation={() => handleRemoveSupport(supStep.id)}
-                                                >
-                                                    <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
 
                                                 <div
                                                     draggable="true"

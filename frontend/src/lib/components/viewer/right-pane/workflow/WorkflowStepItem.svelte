@@ -62,7 +62,7 @@
 </script>
 
 <div
-    class="step-item relative z-10 pl-7 transition-all duration-200"
+    class="step-item relative z-10 transition-all duration-200 {supportIndicator ? 'pl-14' : 'pl-7'}"
     style={isBeingDragged ? "opacity: 0.5;" : ""}
 >
     {#if showDropIndicatorTop}
@@ -79,14 +79,14 @@
 
     <!-- Step Number Badge (or Support Indicator) -->
     {#if supportIndicator}
-        <!-- Support indicator with phase color and display number -->
+        <!-- Support indicator with phase color and phase name -->
         <div class="absolute left-0 top-2.5 group/support">
             <div
-                class="min-w-5 h-5 px-1 rounded-full flex items-center justify-center shadow-sm transition-all duration-200 text-[8px] font-bold text-white"
+                class="h-5 px-1.5 rounded-full flex items-center justify-center shadow-sm transition-all duration-200 text-[9px] font-medium text-white whitespace-nowrap"
                 style="background-color: {phaseColor || '#a855f7'}"
                 title="{phaseName || '위상'} 지원"
             >
-                {displayNumber !== undefined ? displayNumber : '+'}
+                {displayNumber !== undefined ? displayNumber : phaseName || '위상'}
             </div>
             <!-- Support remove button (appears on hover) -->
             <button
