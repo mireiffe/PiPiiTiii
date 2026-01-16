@@ -21,6 +21,7 @@
     export let workflowData: ProjectWorkflowData;
     export let workflowSteps: WorkflowSteps;
     export let stepContainers: StepContainer[] = [];
+    export let globalPhases: PhaseType[] = [];
 
     const dispatch = createEventDispatcher();
 
@@ -153,7 +154,7 @@
                 containerId,
                 workflowData.steps,
                 workflowData.supportRelations,
-                workflowData.phaseTypes
+                globalPhases
             );
             const supportGroups: SupportGroupLayout[] = [];
             const allSteps: StepLayout[] = [];
@@ -240,7 +241,7 @@
             undefined,
             workflowData.steps,
             workflowData.supportRelations,
-            workflowData.phaseTypes
+            globalPhases
         );
         const hasUncategorized = uncatRows.length > 0;
 

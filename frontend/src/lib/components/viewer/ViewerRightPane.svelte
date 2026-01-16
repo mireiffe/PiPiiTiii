@@ -99,6 +99,7 @@
                 rows: [],
             }}
             stepContainers={settings?.step_containers || []}
+            globalPhases={settings?.phase_types || []}
             {savingWorkflow}
             {captureMode}
             {captureTargetStepId}
