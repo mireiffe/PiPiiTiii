@@ -237,6 +237,93 @@ export interface ContainerColumn {
     branchInfo?: ContainerBranch;  // Info about the branch that starts this column (if not column 0)
 }
 
+/**
+ * Layout row for rendering - supports paired (side-by-side) display
+ * When branches exist, first steps of each branch are paired with parent
+ */
+export interface ContainerLayoutRow {
+    type: 'single' | 'paired';
+    // For single: one step
+    // For paired: first step is parent, rest are branch starts
+    cells: {
+        columnIndex: number;
+        step: WorkflowStepInstance | null;  // null for empty cell
+        isBranchStart: boolean;
+        hideBadge?: boolean;  // Hide the step number badge
+    }[];
+}
+
+/**
+ * Get container layout as rows for rendering
+ * Branch first steps are placed in the same row as their parent step
+ */
+export function getContainerLayoutRows(
+    containerId: string | undefined,
+    steps: WorkflowStepInstance[],
+    containerBranches?: Record<string, ContainerBranch[]>
+): { rows: ContainerLayoutRow[], columns: ContainerColumn[] } {
+    const columns = getContainerColumns(containerId, steps, containerBranches);
+
+    if (columns.length === 0 || columns.every(c => c.steps.length === 0)) {
+        return { rows: [], columns };
+    }
+
+    // For single column, just return simple rows
+    if (columns.length === 1) {
+        const rows: ContainerLayoutRow[] = columns[0].steps.map(step => ({
+            type: 'single' as const,
+            cells: [{ columnIndex: 0, step, isBranchStart: false }]
+        }));
+        return { rows, columns };
+    }
+
+    // Build paired rows
+    // First row: parent step (col 0, index 0) paired with branch start steps
+    // Subsequent rows: remaining steps in each column
+    const rows: ContainerLayoutRow[] = [];
+
+    // Find the maximum column height (excluding first step which goes to row 0)
+    const maxHeight = Math.max(...columns.map((col, idx) =>
+        idx === 0 ? col.steps.length : col.steps.length - 1  // branch columns have first step in row 0
+    ));
+
+    // Row 0: Parent step + all branch first steps
+    const firstRow: ContainerLayoutRow = {
+        type: 'paired',
+        cells: columns.map((col, colIdx) => ({
+            columnIndex: colIdx,
+            step: col.steps[0] ?? null,
+            isBranchStart: colIdx > 0,
+            hideBadge: colIdx > 0,  // Hide badge for branch start steps
+        }))
+    };
+    rows.push(firstRow);
+
+    // Subsequent rows: steps from index 1 onwards (for col 0) or index 1 onwards (for branch cols)
+    for (let rowIdx = 1; rowIdx <= maxHeight; rowIdx++) {
+        const row: ContainerLayoutRow = {
+            type: 'paired',
+            cells: columns.map((col, colIdx) => {
+                // For column 0, use rowIdx directly
+                // For branch columns, use rowIdx (since first step is in row 0)
+                const stepIdx = rowIdx;
+                const step = col.steps[stepIdx] ?? null;
+                return {
+                    columnIndex: colIdx,
+                    step,
+                    isBranchStart: false,
+                };
+            })
+        };
+        // Only add row if it has at least one step
+        if (row.cells.some(c => c.step !== null)) {
+            rows.push(row);
+        }
+    }
+
+    return { rows, columns };
+}
+
 export function getContainerColumns(
     containerId: string | undefined,
     steps: WorkflowStepInstance[],

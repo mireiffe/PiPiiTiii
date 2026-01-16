@@ -29,11 +29,13 @@
         createAttachment,
         generateAttachmentId,
         getContainerColumns,
+        getContainerLayoutRows,
         validateBranchCreation,
         addBranch,
         removeBranch,
         cleanupOrphanedBranches,
     } from "$lib/types/workflow";
+    import type { ContainerLayoutRow } from "$lib/types/workflow";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
     import {
         uploadAttachmentImage,
@@ -575,12 +577,12 @@
     // Sort containers by order
     $: sortedContainers = [...stepContainers].sort((a, b) => a.order - b.order);
 
-    // Calculate columns for each container (for multi-column branch layout)
-    $: containerColumnsMap = (() => {
-        const map: Record<string, ContainerColumn[]> = {};
+    // Calculate layout rows for each container (for multi-column branch layout)
+    $: containerLayoutMap = (() => {
+        const map: Record<string, { rows: ContainerLayoutRow[], columns: ContainerColumn[] }> = {};
 
         // Uncategorized
-        map['__uncategorized__'] = getContainerColumns(
+        map['__uncategorized__'] = getContainerLayoutRows(
             undefined,
             workflowData.steps,
             workflowData.containerBranches
@@ -588,7 +590,7 @@
 
         // Named containers
         sortedContainers.forEach(container => {
-            map[container.id] = getContainerColumns(
+            map[container.id] = getContainerLayoutRows(
                 container.id,
                 workflowData.steps,
                 workflowData.containerBranches
@@ -1191,8 +1193,8 @@
                         <!-- Container Groups -->
                         {#each sortedContainers as container (container.id)}
                             {@const containerSteps = stepsByContainerId[container.id] || []}
-                            {@const columns = containerColumnsMap[container.id] || []}
-                            {@const hasMultipleColumns = columns.length > 1}
+                            {@const layout = containerLayoutMap[container.id] || { rows: [], columns: [] }}
+                            {@const hasMultipleColumns = layout.columns.length > 1}
                             {@const isCollapsed = collapsedContainers.has(container.id)}
                             <div
                                 class="rounded-lg border transition-all {dropTargetContainerId === container.id && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
@@ -1211,115 +1213,200 @@
                                     <span class="text-xs text-gray-400">({containerSteps.length})</span>
                                     {#if hasMultipleColumns}
                                         <span class="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-600 text-[10px] font-medium rounded">
-                                            {columns.length} branches
+                                            {layout.columns.length} 병렬
                                         </span>
+                                        <button
+                                            class="ml-auto text-gray-400 hover:text-red-500 p-0.5 rounded transition-colors"
+                                            title="모든 분기 해제"
+                                            on:click|stopPropagation={() => {
+                                                layout.columns.forEach(col => {
+                                                    if (col.branchInfo) handleRemoveBranch(container.id, col.branchInfo.id);
+                                                });
+                                            }}
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
                                     {/if}
                                 </button>
                                 {#if !isCollapsed}
                                     <div class="p-2 min-h-[40px]">
                                         {#if hasMultipleColumns}
-                                            <!-- Multi-column layout -->
-                                            <div class="flex gap-2">
-                                                {#each columns as column, colIdx (column.columnIndex)}
-                                                    <div class="flex-1 min-w-0 relative">
-                                                        <!-- Column header with branch info -->
-                                                        {#if colIdx > 0 && column.branchInfo}
-                                                            <div class="mb-2 flex items-center justify-between">
-                                                                <span class="text-[10px] font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-                                                                    분기 {colIdx}
-                                                                </span>
-                                                                <button
-                                                                    class="text-gray-400 hover:text-red-500 p-0.5 rounded transition-colors"
-                                                                    title="분기 해제"
-                                                                    on:click={() => handleRemoveBranch(container.id, column.branchInfo?.id ?? '')}
-                                                                >
-                                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                                                    </svg>
-                                                                </button>
-                                                            </div>
-                                                        {/if}
-                                                        <!-- Vertical connection line -->
-                                                        {#if column.steps.length > 0}
-                                                            <div class="absolute left-[23px] top-6 bottom-2 w-px bg-blue-200 z-0"></div>
-                                                        {/if}
-                                                        <!-- Steps in column -->
-                                                        <div class="space-y-2">
-                                                            {#each column.steps as step, localIndex (step.id)}
-                                                                {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
-                                                                {@const stepDef = getStepDefinition(step.stepId)}
-                                                                {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
-                                                                {@const showBranchGuide = branchGuideVisible && branchGuideTargetStepId === step.id}
+                                            <!-- Row-based multi-column layout -->
+                                            <div class="space-y-2">
+                                                {#each layout.rows as row, rowIdx (rowIdx)}
+                                                    {#if row.type === 'paired' && rowIdx === 0}
+                                                        <!-- First row: paired steps with connection line -->
+                                                        <div class="flex items-stretch gap-0 relative">
+                                                            {#each row.cells as cell, cellIdx (cellIdx)}
+                                                                {@const step = cell.step}
+                                                                {#if step}
+                                                                    {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
+                                                                    {@const stepDef = getStepDefinition(step.stepId)}
+                                                                    {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
+                                                                    {@const showBranchGuide = branchGuideVisible && branchGuideTargetStepId === step.id}
 
-                                                                <div class="relative">
-                                                                    <!-- Branch creation guide (bounce animation) -->
-                                                                    {#if showBranchGuide}
-                                                                        <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-                                                                            <div class="branch-guide-indicator">
-                                                                                <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
-                                                                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
-                                                                                    </svg>
-                                                                                </div>
-                                                                                <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
-                                                                                    여기 배치
-                                                                                </span>
-                                                                            </div>
+                                                                    <!-- Connection line between paired steps -->
+                                                                    {#if cellIdx > 0}
+                                                                        <div class="flex items-center px-1">
+                                                                            <div class="w-4 h-0.5 bg-purple-400 rounded"></div>
+                                                                            <div class="w-2 h-2 border-t-2 border-r-2 border-purple-400 transform rotate-45 -ml-1"></div>
                                                                         </div>
                                                                     {/if}
 
-                                                                    <div
-                                                                        draggable="true"
-                                                                        on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                                                        on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); clearBranchGuide(); }}
-                                                                        on:drop={(e) => {
-                                                                            if (branchGuideVisible && branchGuideTargetStepId === step.id) {
-                                                                                handleBranchDrop(e, step.id, container.id);
-                                                                            } else {
-                                                                                handleStepDropWithContainer(e, container.id);
-                                                                            }
-                                                                        }}
-                                                                        on:dragover={(e) => {
-                                                                            dragDropHandlers.handleDragOver(e, index);
-                                                                            handleStepHoverForInsert(e, step.id, index, container.id);
-                                                                            handleStepHoverForBranch(e, step.id, container.id);
-                                                                        }}
-                                                                        on:dragleave={() => clearBranchGuide()}
-                                                                    >
-                                                                        <WorkflowStepItem
-                                                                            {step}
-                                                                            {index}
-                                                                            {stepDef}
-                                                                            {color}
-                                                                            {workflowSteps}
-                                                                            isExpanded={expandedStepId === step.id}
-                                                                            isCapturing={captureTargetStepId === step.id}
-                                                                            isAddingAttachment={addingAttachmentToStepId === step.id}
-                                                                            isBeingDragged={dragState.draggedIndex === index}
-                                                                            showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
-                                                                            showDropIndicatorBottom={false}
-                                                                            isLastStep={index === workflowData.steps.length - 1}
-                                                                            {attachmentTextInput}
-                                                                            isSelected={selectedStepIds.has(step.id)}
-                                                                            showSelectionCheckbox={selectionModeActive}
-                                                                            on:toggleExpand={() => toggleStepExpand(step.id)}
-                                                                            on:startCapture={() => startCaptureForStep(step.id)}
-                                                                            on:toggleAttachment={() => toggleAttachmentSection(step.id)}
-                                                                            on:moveUp={() => moveStepUp(index)}
-                                                                            on:moveDown={() => moveStepDown(index)}
-                                                                            on:remove={() => handleRemoveStep(step.id)}
-                                                                            on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
-                                                                            on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
-                                                                            on:addTextAttachment={() => addTextAttachment(step.id)}
-                                                                            on:paste={(e) => handlePaste(e.detail, step.id)}
-                                                                            on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
-                                                                            on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
-                                                                        />
+                                                                    <div class="flex-1 min-w-0 relative">
+                                                                        {#if showBranchGuide}
+                                                                            <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                                                                                <div class="branch-guide-indicator">
+                                                                                    <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
+                                                                                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
+                                                                                        </svg>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        {/if}
+
+                                                                        <div
+                                                                            draggable="true"
+                                                                            on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
+                                                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); clearBranchGuide(); }}
+                                                                            on:drop={(e) => {
+                                                                                if (branchGuideVisible && branchGuideTargetStepId === step.id) {
+                                                                                    handleBranchDrop(e, step.id, container.id);
+                                                                                } else {
+                                                                                    handleStepDropWithContainer(e, container.id);
+                                                                                }
+                                                                            }}
+                                                                            on:dragover={(e) => {
+                                                                                dragDropHandlers.handleDragOver(e, index);
+                                                                                handleStepHoverForInsert(e, step.id, index, container.id);
+                                                                                handleStepHoverForBranch(e, step.id, container.id);
+                                                                            }}
+                                                                            on:dragleave={() => clearBranchGuide()}
+                                                                        >
+                                                                            <WorkflowStepItem
+                                                                                {step}
+                                                                                {index}
+                                                                                {stepDef}
+                                                                                {color}
+                                                                                {workflowSteps}
+                                                                                isExpanded={expandedStepId === step.id}
+                                                                                isCapturing={captureTargetStepId === step.id}
+                                                                                isAddingAttachment={addingAttachmentToStepId === step.id}
+                                                                                isBeingDragged={dragState.draggedIndex === index}
+                                                                                showDropIndicatorTop={false}
+                                                                                showDropIndicatorBottom={false}
+                                                                                isLastStep={index === workflowData.steps.length - 1}
+                                                                                {attachmentTextInput}
+                                                                                isSelected={selectedStepIds.has(step.id)}
+                                                                                showSelectionCheckbox={selectionModeActive}
+                                                                                hideBadge={cell.hideBadge}
+                                                                                branchIndicator={cell.isBranchStart}
+                                                                                on:toggleExpand={() => toggleStepExpand(step.id)}
+                                                                                on:startCapture={() => startCaptureForStep(step.id)}
+                                                                                on:toggleAttachment={() => toggleAttachmentSection(step.id)}
+                                                                                on:moveUp={() => moveStepUp(index)}
+                                                                                on:moveDown={() => moveStepDown(index)}
+                                                                                on:remove={() => handleRemoveStep(step.id)}
+                                                                                on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
+                                                                                on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
+                                                                                on:addTextAttachment={() => addTextAttachment(step.id)}
+                                                                                on:paste={(e) => handlePaste(e.detail, step.id)}
+                                                                                on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
+                                                                                on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
+                                                                            />
+                                                                        </div>
                                                                     </div>
+                                                                {:else}
+                                                                    <!-- Empty cell -->
+                                                                    {#if cellIdx > 0}
+                                                                        <div class="flex items-center px-1">
+                                                                            <div class="w-6 h-0.5 bg-transparent"></div>
+                                                                        </div>
+                                                                    {/if}
+                                                                    <div class="flex-1 min-w-0"></div>
+                                                                {/if}
+                                                            {/each}
+                                                        </div>
+                                                    {:else}
+                                                        <!-- Subsequent rows: normal paired layout -->
+                                                        <div class="flex gap-2">
+                                                            {#each row.cells as cell, cellIdx (cellIdx)}
+                                                                {@const step = cell.step}
+                                                                <div class="flex-1 min-w-0 relative">
+                                                                    {#if step}
+                                                                        {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
+                                                                        {@const stepDef = getStepDefinition(step.stepId)}
+                                                                        {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
+                                                                        {@const showBranchGuide = branchGuideVisible && branchGuideTargetStepId === step.id}
+
+                                                                        {#if showBranchGuide}
+                                                                            <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                                                                                <div class="branch-guide-indicator">
+                                                                                    <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
+                                                                                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
+                                                                                        </svg>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        {/if}
+
+                                                                        <div
+                                                                            draggable="true"
+                                                                            on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
+                                                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); dropTargetContainerId = null; clearInsertGuide(); clearBranchGuide(); }}
+                                                                            on:drop={(e) => {
+                                                                                if (branchGuideVisible && branchGuideTargetStepId === step.id) {
+                                                                                    handleBranchDrop(e, step.id, container.id);
+                                                                                } else {
+                                                                                    handleStepDropWithContainer(e, container.id);
+                                                                                }
+                                                                            }}
+                                                                            on:dragover={(e) => {
+                                                                                dragDropHandlers.handleDragOver(e, index);
+                                                                                handleStepHoverForInsert(e, step.id, index, container.id);
+                                                                                handleStepHoverForBranch(e, step.id, container.id);
+                                                                            }}
+                                                                            on:dragleave={() => clearBranchGuide()}
+                                                                        >
+                                                                            <WorkflowStepItem
+                                                                                {step}
+                                                                                {index}
+                                                                                {stepDef}
+                                                                                {color}
+                                                                                {workflowSteps}
+                                                                                isExpanded={expandedStepId === step.id}
+                                                                                isCapturing={captureTargetStepId === step.id}
+                                                                                isAddingAttachment={addingAttachmentToStepId === step.id}
+                                                                                isBeingDragged={dragState.draggedIndex === index}
+                                                                                showDropIndicatorTop={false}
+                                                                                showDropIndicatorBottom={false}
+                                                                                isLastStep={index === workflowData.steps.length - 1}
+                                                                                {attachmentTextInput}
+                                                                                isSelected={selectedStepIds.has(step.id)}
+                                                                                showSelectionCheckbox={selectionModeActive}
+                                                                                on:toggleExpand={() => toggleStepExpand(step.id)}
+                                                                                on:startCapture={() => startCaptureForStep(step.id)}
+                                                                                on:toggleAttachment={() => toggleAttachmentSection(step.id)}
+                                                                                on:moveUp={() => moveStepUp(index)}
+                                                                                on:moveDown={() => moveStepDown(index)}
+                                                                                on:remove={() => handleRemoveStep(step.id)}
+                                                                                on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
+                                                                                on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
+                                                                                on:addTextAttachment={() => addTextAttachment(step.id)}
+                                                                                on:paste={(e) => handlePaste(e.detail, step.id)}
+                                                                                on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
+                                                                                on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
+                                                                            />
+                                                                        </div>
+                                                                    {/if}
                                                                 </div>
                                                             {/each}
                                                         </div>
-                                                    </div>
+                                                    {/if}
                                                 {/each}
                                             </div>
                                         {:else}
