@@ -1,12 +1,33 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fetchSettings, updateSettings, fetchAllAttributes } from "$lib/api/project";
-    import type { WorkflowSteps, StepContainer } from "$lib/types/workflow";
+    import type { WorkflowSteps, StepContainer, PhaseType } from "$lib/types/workflow";
     import LLMSettingsSection from "$lib/components/settings/LLMSettingsSection.svelte";
     import SummaryFieldsSection from "$lib/components/settings/SummaryFieldsSection.svelte";
     import PhenomenonAttributesSection from "$lib/components/settings/PhenomenonAttributesSection.svelte";
     import WorkflowStepsSection from "$lib/components/settings/WorkflowStepsSection.svelte";
     import StepContainersSection from "$lib/components/settings/StepContainersSection.svelte";
+    import PhaseSettingsSection from "$lib/components/settings/PhaseSettingsSection.svelte";
+
+    // Navigation sections
+    type SectionId = "llm" | "summary" | "phenomenon" | "workflow" | "containers" | "phases";
+
+    interface NavSection {
+        id: SectionId;
+        label: string;
+        icon: string;
+    }
+
+    const navSections: NavSection[] = [
+        { id: "llm", label: "LLM 설정", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+        { id: "summary", label: "PPT 요약 필드", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+        { id: "phenomenon", label: "발생현상 속성", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" },
+        { id: "workflow", label: "Workflow 스텝", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
+        { id: "containers", label: "Step Containers", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
+        { id: "phases", label: "위상 (Phase)", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
+    ];
+
+    let activeSection: SectionId = "llm";
 
     interface AttributeDefinition {
         key: string;
@@ -37,6 +58,7 @@
         phenomenon_attributes: string[];
         workflow_steps: WorkflowSteps;
         step_containers: StepContainer[];
+        phase_types: PhaseType[];
     }
 
     const DEFAULT_COLUMNS = [
@@ -62,7 +84,16 @@
         phenomenon_attributes: [],
         workflow_steps: { columns: [], rows: [] },
         step_containers: [],
+        phase_types: [],
     };
+
+    function scrollToSection(sectionId: SectionId) {
+        activeSection = sectionId;
+        const element = document.getElementById(`section-${sectionId}`);
+        if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }
 
     onMount(async () => {
         try {
@@ -103,6 +134,7 @@
                     phenomenon_attributes: data.phenomenon_attributes || [],
                     workflow_steps: data.workflow_steps || { columns: DEFAULT_COLUMNS, rows: [] },
                     step_containers: data.step_containers || [],
+                    phase_types: data.phase_types || [],
                 };
 
                 if (!settings.workflow_steps.columns || settings.workflow_steps.columns.length === 0) {
@@ -200,9 +232,15 @@
     function handleStepContainersUpdate(e: CustomEvent<{ containers: StepContainer[] }>) {
         settings.step_containers = e.detail.containers;
     }
+
+    // Phase types handlers
+    function handlePhaseTypesUpdate(e: CustomEvent<{ phases: PhaseType[] }>) {
+        settings.phase_types = e.detail.phases;
+    }
 </script>
 
 <div class="h-screen flex flex-col bg-gray-100">
+    <!-- Header -->
     <div class="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center shadow-sm">
         <div>
             <h1 class="text-2xl font-bold text-gray-800">설정</h1>
@@ -217,47 +255,94 @@
         </button>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-8">
-        {#if loading}
-            <div class="text-center text-gray-500">로딩 중...</div>
-        {:else}
-            <div class="max-w-4xl mx-auto space-y-8">
-                <!-- LLM 설정 (요약) -->
-                <LLMSettingsSection bind:llm={settings.llm} />
-
-                <!-- PPT 요약 필드 -->
-                <SummaryFieldsSection
-                    fields={settings.summary_fields}
-                    {expandedFieldId}
-                    on:add={handleAddField}
-                    on:remove={handleRemoveField}
-                    on:moveUp={handleMoveFieldUp}
-                    on:moveDown={handleMoveFieldDown}
-                    on:toggleExpand={handleToggleFieldExpand}
-                    on:update={handleFieldsUpdate}
-                />
-
-                <!-- 발생현상 속성 설정 -->
-                <PhenomenonAttributesSection
-                    {availableAttributes}
-                    selectedAttributes={settings.phenomenon_attributes}
-                    on:toggle={handleTogglePhenomenonAttribute}
-                />
-
-                <!-- 워크플로우 스텝 설정 -->
-                <WorkflowStepsSection
-                    workflowSteps={settings.workflow_steps}
-                    {expandedRowId}
-                    on:update={handleWorkflowStepsUpdate}
-                    on:toggleRowExpand={handleToggleRowExpand}
-                />
-
-                <!-- Step Containers 설정 -->
-                <StepContainersSection
-                    containers={settings.step_containers}
-                    on:update={handleStepContainersUpdate}
-                />
+    <!-- Main Content with Navigation -->
+    <div class="flex-1 flex overflow-hidden">
+        <!-- Navigation Pane -->
+        <nav class="w-64 bg-white border-r border-gray-200 flex-shrink-0 overflow-y-auto">
+            <div class="p-4">
+                <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">설정 메뉴</h2>
+                <ul class="space-y-1">
+                    {#each navSections as section}
+                        <li>
+                            <button
+                                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors
+                                    {activeSection === section.id
+                                        ? 'bg-blue-50 text-blue-700 font-medium'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}"
+                                on:click={() => scrollToSection(section.id)}
+                            >
+                                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d={section.icon} />
+                                </svg>
+                                <span class="text-sm">{section.label}</span>
+                            </button>
+                        </li>
+                    {/each}
+                </ul>
             </div>
-        {/if}
+        </nav>
+
+        <!-- Content Area -->
+        <div class="flex-1 overflow-y-auto p-8">
+            {#if loading}
+                <div class="text-center text-gray-500">로딩 중...</div>
+            {:else}
+                <div class="max-w-4xl mx-auto space-y-8">
+                    <!-- LLM 설정 (요약) -->
+                    <div id="section-llm">
+                        <LLMSettingsSection bind:llm={settings.llm} />
+                    </div>
+
+                    <!-- PPT 요약 필드 -->
+                    <div id="section-summary">
+                        <SummaryFieldsSection
+                            fields={settings.summary_fields}
+                            {expandedFieldId}
+                            on:add={handleAddField}
+                            on:remove={handleRemoveField}
+                            on:moveUp={handleMoveFieldUp}
+                            on:moveDown={handleMoveFieldDown}
+                            on:toggleExpand={handleToggleFieldExpand}
+                            on:update={handleFieldsUpdate}
+                        />
+                    </div>
+
+                    <!-- 발생현상 속성 설정 -->
+                    <div id="section-phenomenon">
+                        <PhenomenonAttributesSection
+                            {availableAttributes}
+                            selectedAttributes={settings.phenomenon_attributes}
+                            on:toggle={handleTogglePhenomenonAttribute}
+                        />
+                    </div>
+
+                    <!-- 워크플로우 스텝 설정 -->
+                    <div id="section-workflow">
+                        <WorkflowStepsSection
+                            workflowSteps={settings.workflow_steps}
+                            {expandedRowId}
+                            on:update={handleWorkflowStepsUpdate}
+                            on:toggleRowExpand={handleToggleRowExpand}
+                        />
+                    </div>
+
+                    <!-- Step Containers 설정 -->
+                    <div id="section-containers">
+                        <StepContainersSection
+                            containers={settings.step_containers}
+                            on:update={handleStepContainersUpdate}
+                        />
+                    </div>
+
+                    <!-- 위상 (Phase) 설정 -->
+                    <div id="section-phases">
+                        <PhaseSettingsSection
+                            phases={settings.phase_types}
+                            on:update={handlePhaseTypesUpdate}
+                        />
+                    </div>
+                </div>
+            {/if}
+        </div>
     </div>
 </div>
