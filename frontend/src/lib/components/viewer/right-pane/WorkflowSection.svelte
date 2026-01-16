@@ -1349,13 +1349,42 @@
                                             </div>
                                         {/if}
 
-                                        <div
-                                            draggable="true"
-                                            on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                            on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
-                                            on:drop={(e) => handleStepDropWithContainer(e, undefined)}
-                                            on:dragover={(e) => { dragDropHandlers.handleDragOver(e, index); handleStepHoverForInsert(e, step.id, index, undefined); }}
-                                        >
+                                        {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === step.id}
+                                        <div class="relative">
+                                            <!-- Support creation guide -->
+                                            {#if showSupportGuide}
+                                                <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                                                    <div class="support-guide-indicator">
+                                                        <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
+                                                            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+                                                            </svg>
+                                                        </div>
+                                                        <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
+                                                            위상 지원
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            {/if}
+
+                                            <div
+                                                draggable="true"
+                                                on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
+                                                on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
+                                                on:drop={(e) => {
+                                                    if (dragMode === 'support' && supportGuideTargetStepId === step.id) {
+                                                        handleSupportDrop(e, step.id);
+                                                    } else {
+                                                        handleStepDropWithContainer(e, undefined);
+                                                    }
+                                                }}
+                                                on:dragover={(e) => {
+                                                    dragDropHandlers.handleDragOver(e, index);
+                                                    handleStepHoverForInsert(e, step.id, index, undefined);
+                                                    handleStepHoverForSupport(e, step.id);
+                                                }}
+                                                on:dragleave={() => clearSupportGuide()}
+                                            >
                                             <WorkflowStepItem
                                                 {step}
                                                 {index}
@@ -1385,6 +1414,7 @@
                                                 on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
                                                 on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
                                             />
+                                            </div>
                                         </div>
 
                                         <!-- Insert guide indicator (bottom) -->
