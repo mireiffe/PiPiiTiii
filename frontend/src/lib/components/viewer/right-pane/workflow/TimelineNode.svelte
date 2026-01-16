@@ -17,10 +17,14 @@
             line: string;
         };
         isLeft: boolean;
+        isSupporter?: boolean;
+        phaseColor?: string;
+        phaseName?: string;
     };
 
     $: hasMetadata = data.captureCount > 0 || data.attachmentCount > 0;
     $: hasDetails = data.system || data.target;
+    $: isSupporter = data.isSupporter ?? false;
 </script>
 
 <div
@@ -29,8 +33,10 @@
         --node-bg: {data.color.bg};
         --node-border: {data.color.border};
         --node-text: {data.color.text};
+        --phase-color: {data.phaseColor || '#a855f7'};
     "
     class:is-left={data.isLeft}
+    class:is-supporter={isSupporter}
 >
     <!-- Connection handle -->
     <Handle
@@ -44,12 +50,26 @@
         style="background: {data.color.border}; width: 8px; height: 8px; border: 2px solid white;"
     />
 
+    <!-- Phase badge for supporter nodes -->
+    {#if isSupporter}
+        <div class="phase-badge" style="background: {data.phaseColor || '#a855f7'};">
+            <svg class="phase-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M12 5v14m-7-7h14" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="phase-name">{data.phaseName || '위상'}</span>
+        </div>
+    {/if}
+
     <!-- Header with category badge and step number -->
     <div class="node-header">
         <span class="category-badge" style="background: {data.color.border};">
             {data.category}
         </span>
-        <span class="step-number">#{data.stepIndex + 1}</span>
+        {#if !isSupporter && data.stepIndex >= 0}
+            <span class="step-number">#{data.stepIndex + 1}</span>
+        {:else if isSupporter}
+            <span class="supporter-label">지원</span>
+        {/if}
     </div>
 
     <!-- Purpose / Main content -->
@@ -237,5 +257,55 @@
     .timeline-node:not(.is-left)::before {
         left: -16px;
         border-right-color: var(--node-border);
+    }
+
+    /* Supporter node styles */
+    .timeline-node.is-supporter {
+        width: 220px;
+        min-height: 70px;
+        padding: 10px 12px;
+        border-style: dashed;
+        opacity: 0.95;
+    }
+
+    .timeline-node.is-supporter::before {
+        display: none;  /* No arrow for supporters */
+    }
+
+    /* Phase badge */
+    .phase-badge {
+        position: absolute;
+        top: -10px;
+        left: 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px 3px 6px;
+        border-radius: 10px;
+        color: white;
+        font-size: 9px;
+        font-weight: 700;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        z-index: 10;
+    }
+
+    .phase-icon {
+        width: 10px;
+        height: 10px;
+        flex-shrink: 0;
+    }
+
+    .phase-name {
+        letter-spacing: 0.2px;
+    }
+
+    .supporter-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--phase-color);
+        opacity: 0.8;
+        padding: 2px 6px;
+        background: rgba(168, 85, 247, 0.1);
+        border-radius: 4px;
     }
 </style>

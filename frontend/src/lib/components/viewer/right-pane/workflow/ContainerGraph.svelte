@@ -236,7 +236,7 @@
             return { supportGroups, allSteps, totalWidth, maxHeight: totalHeight };
         }
 
-        // Uncategorized steps first (if any)
+        // Uncategorized steps (only show if there ARE defined containers AND uncategorized steps exist)
         const uncatRows = getContainerLayoutRows(
             undefined,
             workflowData.steps,
@@ -245,7 +245,10 @@
         );
         const hasUncategorized = uncatRows.length > 0;
 
-        if (hasUncategorized || sortedContainers.length === 0) {
+        // Only show uncategorized container when:
+        // 1. There are defined containers (sortedContainers.length > 0)
+        // 2. AND there are uncategorized steps
+        if (hasUncategorized && sortedContainers.length > 0) {
             const { supportGroups, allSteps, totalWidth, maxHeight: colMaxHeight } = buildContainerLayout(undefined);
 
             containers.push({
@@ -1022,30 +1025,59 @@
         });
 
         // Empty state with animation
-        if (containers.length === 0 || (containers.length === 1 && containers[0].steps.length === 0 && workflowData.steps.length === 0)) {
+        const hasNoContainers = sortedContainers.length === 0;
+        const hasSteps = workflowData.steps.length > 0;
+        const showEmptyState = containers.length === 0 || (containers.length === 1 && containers[0].steps.length === 0 && !hasSteps);
+
+        if (showEmptyState) {
             const emptyGroup = mainGroup.append('g')
                 .attr('transform', `translate(${width / 2}, ${height / 2})`);
 
-            emptyGroup.append('text')
-                .attr('text-anchor', 'middle')
-                .attr('y', -20)
-                .attr('font-size', '40px')
-                .text('📋');
+            if (hasNoContainers && hasSteps) {
+                // No containers defined but steps exist
+                emptyGroup.append('text')
+                    .attr('text-anchor', 'middle')
+                    .attr('y', -20)
+                    .attr('font-size', '40px')
+                    .text('📦');
 
-            emptyGroup.append('text')
-                .attr('text-anchor', 'middle')
-                .attr('y', 20)
-                .attr('font-size', '14px')
-                .attr('fill', '#9ca3af')
-                .attr('font-weight', '500')
-                .text('워크플로우 스텝이 없습니다');
+                emptyGroup.append('text')
+                    .attr('text-anchor', 'middle')
+                    .attr('y', 20)
+                    .attr('font-size', '14px')
+                    .attr('fill', '#9ca3af')
+                    .attr('font-weight', '500')
+                    .text('Container가 정의되어 있지 않습니다');
 
-            emptyGroup.append('text')
-                .attr('text-anchor', 'middle')
-                .attr('y', 45)
-                .attr('font-size', '11px')
-                .attr('fill', '#cbd5e1')
-                .text('List 뷰에서 스텝을 추가해보세요');
+                emptyGroup.append('text')
+                    .attr('text-anchor', 'middle')
+                    .attr('y', 45)
+                    .attr('font-size', '11px')
+                    .attr('fill', '#cbd5e1')
+                    .text('설정에서 Container를 추가해주세요');
+            } else {
+                // No steps at all
+                emptyGroup.append('text')
+                    .attr('text-anchor', 'middle')
+                    .attr('y', -20)
+                    .attr('font-size', '40px')
+                    .text('📋');
+
+                emptyGroup.append('text')
+                    .attr('text-anchor', 'middle')
+                    .attr('y', 20)
+                    .attr('font-size', '14px')
+                    .attr('fill', '#9ca3af')
+                    .attr('font-weight', '500')
+                    .text('워크플로우 스텝이 없습니다');
+
+                emptyGroup.append('text')
+                    .attr('text-anchor', 'middle')
+                    .attr('y', 45)
+                    .attr('font-size', '11px')
+                    .attr('fill', '#cbd5e1')
+                    .text('List 뷰에서 스텝을 추가해보세요');
+            }
         }
 
         // Fit view with smooth animation
