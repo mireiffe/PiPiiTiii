@@ -141,7 +141,7 @@
         let globalStepIndex = 0;
 
         const COLUMN_GAP = 16;  // Gap between columns within a container
-        const PAIRED_GAP = 8;   // Gap between paired steps in same row
+        const PAIRED_GAP = 40;   // Gap between paired steps in same row (first row only)
 
         // Helper to build row-based layout for a container
         function buildContainerLayout(containerId: string | undefined): { columns: ColumnLayout[], totalWidth: number, maxHeight: number } {
@@ -611,22 +611,21 @@
                 .attr('fill', '#a855f7')
                 .attr('fill-opacity', 0.7);
 
-            // 1. Draw horizontal connection between paired steps (first row)
-            // Find paired steps in the same row
+            // 1. Draw horizontal connection between paired steps (FIRST ROW ONLY)
+            // Find paired steps - only the first row (branch starts paired with parent)
             const pairedSteps: StepLayout[][] = [];
             if (columns.length > 1) {
-                // Group by y position to find same-row steps
-                const stepsByY = new Map<number, StepLayout[]>();
-                containerData.steps.forEach(step => {
-                    const yKey = Math.round(step.y);
-                    if (!stepsByY.has(yKey)) stepsByY.set(yKey, []);
-                    stepsByY.get(yKey)!.push(step);
-                });
-                stepsByY.forEach(stepsInRow => {
-                    if (stepsInRow.length > 1) {
-                        pairedSteps.push(stepsInRow.sort((a, b) => a.x - b.x));
-                    }
-                });
+                // Find the minimum y value (first row)
+                const minY = Math.min(...containerData.steps.map(s => s.y));
+
+                // Only get steps in the first row
+                const firstRowSteps = containerData.steps
+                    .filter(step => Math.round(step.y) === Math.round(minY))
+                    .sort((a, b) => a.x - b.x);
+
+                if (firstRowSteps.length > 1) {
+                    pairedSteps.push(firstRowSteps);
+                }
             }
 
             // Draw paired step connections (horizontal solid line)
