@@ -7,7 +7,9 @@
         WorkflowStepInstance,
         WorkflowStepRow,
         StepContainer,
+        ContainerColumn,
     } from "$lib/types/workflow";
+    import { getContainerColumns } from "$lib/types/workflow";
 
     export let workflowData: ProjectWorkflowData;
     export let workflowSteps: WorkflowSteps;
@@ -96,6 +98,14 @@
         color: typeof CONTAINER_COLORS[0];
         steps: StepLayout[];
         colorIndex: number;
+        columns: ColumnLayout[];  // For multi-column branch layout
+    }
+
+    interface ColumnLayout {
+        columnIndex: number;
+        x: number;
+        steps: StepLayout[];
+        branchInfo?: { parentStepId: string };  // Connection info
     }
 
     interface StepLayout {
@@ -108,10 +118,10 @@
         height: number;
         isExpanded: boolean;
         globalIndex: number;
+        columnIndex: number;  // Which column this step belongs to
     }
 
     function calculateLayout(): { containers: ContainerLayout[], totalWidth: number, totalHeight: number } {
-        const stepsByContainer = getStepsByContainer();
         const sortedContainers = getSortedContainers();
         const containers: ContainerLayout[] = [];
 
@@ -119,89 +129,102 @@
         let maxHeight = 0;
         let globalStepIndex = 0;
 
-        // Uncategorized steps first (if any)
-        const uncategorizedSteps = stepsByContainer.__uncategorized__ || [];
-        if (uncategorizedSteps.length > 0 || sortedContainers.length === 0) {
-            const steps: StepLayout[] = [];
-            let stepY = CONTAINER_HEADER_HEIGHT + CONTAINER_PADDING;
+        const COLUMN_GAP = 12;  // Gap between columns within a container
 
-            uncategorizedSteps.forEach((step) => {
-                const isExpanded = expandedStepId === step.id;
-                const h = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
-                steps.push({
-                    id: step.id,
-                    step,
-                    info: getStepInfo(step),
-                    x: CONTAINER_PADDING,
-                    y: stepY,
-                    width: STEP_NODE_WIDTH,
-                    height: h,
-                    isExpanded,
-                    globalIndex: globalStepIndex++,
+        // Helper to build columns for a container
+        function buildContainerColumns(containerId: string | undefined): { columns: ColumnLayout[], totalWidth: number, maxHeight: number } {
+            const containerColumns = getContainerColumns(containerId, workflowData.steps, workflowData.containerBranches);
+            const columnLayouts: ColumnLayout[] = [];
+            let colX = CONTAINER_PADDING;
+            let maxColHeight = 0;
+
+            containerColumns.forEach((col, colIdx) => {
+                const colSteps: StepLayout[] = [];
+                let stepY = CONTAINER_HEADER_HEIGHT + CONTAINER_PADDING;
+
+                col.steps.forEach((step) => {
+                    const isExpanded = expandedStepId === step.id;
+                    const h = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
+                    colSteps.push({
+                        id: step.id,
+                        step,
+                        info: getStepInfo(step),
+                        x: colX,
+                        y: stepY,
+                        width: STEP_NODE_WIDTH,
+                        height: h,
+                        isExpanded,
+                        globalIndex: globalStepIndex++,
+                        columnIndex: colIdx,
+                    });
+                    stepY += h + STEP_GAP;
                 });
-                stepY += h + STEP_GAP;
+
+                columnLayouts.push({
+                    columnIndex: colIdx,
+                    x: colX,
+                    steps: colSteps,
+                    branchInfo: col.branchInfo ? { parentStepId: col.branchInfo.parentStepId } : undefined,
+                });
+
+                maxColHeight = Math.max(maxColHeight, stepY + CONTAINER_PADDING - STEP_GAP);
+                colX += STEP_NODE_WIDTH + COLUMN_GAP;
             });
 
-            const containerHeight = stepY + CONTAINER_PADDING - STEP_GAP;
-            const containerWidth = Math.max(CONTAINER_MIN_WIDTH, STEP_NODE_WIDTH + CONTAINER_PADDING * 2);
+            const totalWidth = Math.max(
+                CONTAINER_MIN_WIDTH,
+                colX - COLUMN_GAP + CONTAINER_PADDING
+            );
+
+            return { columns: columnLayouts, totalWidth, maxHeight: maxColHeight };
+        }
+
+        // Uncategorized steps first (if any)
+        const uncategorizedColumns = getContainerColumns(undefined, workflowData.steps, workflowData.containerBranches);
+        const hasUncategorized = uncategorizedColumns.some(col => col.steps.length > 0);
+
+        if (hasUncategorized || sortedContainers.length === 0) {
+            const { columns, totalWidth, maxHeight: colMaxHeight } = buildContainerColumns(undefined);
+            const allSteps = columns.flatMap(col => col.steps);
 
             containers.push({
                 id: '__uncategorized__',
                 name: '미분류',
                 x: currentX,
                 y: MARGIN.top,
-                width: containerWidth,
-                height: Math.max(containerHeight, 140),
+                width: totalWidth,
+                height: Math.max(colMaxHeight, 140),
                 color: UNCATEGORIZED_COLOR,
-                steps,
+                steps: allSteps,
                 colorIndex: -1,
+                columns,
             });
 
-            currentX += containerWidth + CONTAINER_GAP;
-            maxHeight = Math.max(maxHeight, containerHeight);
+            currentX += totalWidth + CONTAINER_GAP;
+            maxHeight = Math.max(maxHeight, colMaxHeight);
         }
 
         // Named containers
         sortedContainers.forEach((container, cIndex) => {
-            const containerSteps = stepsByContainer[container.id] || [];
-            const steps: StepLayout[] = [];
-            let stepY = CONTAINER_HEADER_HEIGHT + CONTAINER_PADDING;
+            const { columns, totalWidth, maxHeight: colMaxHeight } = buildContainerColumns(container.id);
+            const allSteps = columns.flatMap(col => col.steps);
 
-            containerSteps.forEach((step) => {
-                const isExpanded = expandedStepId === step.id;
-                const h = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
-                steps.push({
-                    id: step.id,
-                    step,
-                    info: getStepInfo(step),
-                    x: CONTAINER_PADDING,
-                    y: stepY,
-                    width: STEP_NODE_WIDTH,
-                    height: h,
-                    isExpanded,
-                    globalIndex: globalStepIndex++,
-                });
-                stepY += h + STEP_GAP;
-            });
-
-            const containerHeight = containerSteps.length > 0
-                ? stepY + CONTAINER_PADDING - STEP_GAP
-                : 140;
-            const containerWidth = Math.max(CONTAINER_MIN_WIDTH, STEP_NODE_WIDTH + CONTAINER_PADDING * 2);
+            const containerHeight = allSteps.length > 0 ? colMaxHeight : 140;
 
             containers.push({
                 id: container.id,
                 name: container.name,
                 x: currentX,
                 y: MARGIN.top,
-                width: containerWidth,
+                width: totalWidth,
                 height: containerHeight,
                 color: CONTAINER_COLORS[cIndex % CONTAINER_COLORS.length],
-                steps,
+                steps: allSteps,
                 colorIndex: cIndex,
+                columns,
             });
 
-            currentX += containerWidth + CONTAINER_GAP;
+            currentX += totalWidth + CONTAINER_GAP;
             maxHeight = Math.max(maxHeight, containerHeight);
         });
 
@@ -501,24 +524,52 @@
             .attr('fill', d => d.color.text)
             .text(d => d.steps.length);
 
-        // Draw step connections within containers
+        // Draw step connections within containers (with branch support)
         containerGroups.each(function(containerData, containerIdx) {
             const group = d3.select(this);
-            const steps = containerData.steps;
+            const columns = containerData.columns;
+            const lineGroup = group.append('g').attr('class', 'step-connections');
 
-            if (steps.length > 1) {
-                const lineGroup = group.append('g').attr('class', 'step-connections');
+            // Arrow marker for steps
+            defs.append('marker')
+                .attr('id', `arrow-step-${containerIdx}`)
+                .attr('viewBox', '0 -4 8 8')
+                .attr('refX', 6)
+                .attr('refY', 0)
+                .attr('markerWidth', 5)
+                .attr('markerHeight', 5)
+                .attr('orient', 'auto')
+                .append('path')
+                .attr('d', 'M0,-4L8,0L0,4Z')
+                .attr('fill', containerData.color.border)
+                .attr('fill-opacity', 0.5);
 
-                for (let i = 0; i < steps.length - 1; i++) {
-                    const from = steps[i];
-                    const to = steps[i + 1];
+            // Arrow marker for branch connections (purple)
+            defs.append('marker')
+                .attr('id', `arrow-branch-${containerIdx}`)
+                .attr('viewBox', '0 -4 8 8')
+                .attr('refX', 6)
+                .attr('refY', 0)
+                .attr('markerWidth', 5)
+                .attr('markerHeight', 5)
+                .attr('orient', 'auto')
+                .append('path')
+                .attr('d', 'M0,-4L8,0L0,4Z')
+                .attr('fill', '#a855f7')
+                .attr('fill-opacity', 0.7);
+
+            // Draw connections within each column (top to bottom)
+            columns.forEach((column) => {
+                const colSteps = column.steps;
+                for (let i = 0; i < colSteps.length - 1; i++) {
+                    const from = colSteps[i];
+                    const to = colSteps[i + 1];
 
                     const x1 = from.x + from.width / 2;
                     const y1 = from.y + from.height + 2;
                     const x2 = to.x + to.width / 2;
                     const y2 = to.y - 2;
 
-                    // Curved connecting line
                     const path = d3.path();
                     path.moveTo(x1, y1);
                     const midY = (y1 + y2) / 2;
@@ -533,21 +584,66 @@
                         .attr('stroke-linecap', 'round')
                         .attr('marker-end', `url(#arrow-step-${containerIdx})`);
                 }
+            });
 
-                // Arrow marker for steps
-                defs.append('marker')
-                    .attr('id', `arrow-step-${containerIdx}`)
-                    .attr('viewBox', '0 -4 8 8')
-                    .attr('refX', 6)
-                    .attr('refY', 0)
-                    .attr('markerWidth', 5)
-                    .attr('markerHeight', 5)
-                    .attr('orient', 'auto')
-                    .append('path')
-                    .attr('d', 'M0,-4L8,0L0,4Z')
-                    .attr('fill', containerData.color.border)
-                    .attr('fill-opacity', 0.5);
-            }
+            // Draw branch connections (from parent step to branch start)
+            // These go from left column's parent step to right column's first step
+            // Arrow points upward (from bottom-left to top-right)
+            columns.forEach((column, colIdx) => {
+                if (colIdx === 0 || !column.branchInfo) return;
+
+                // Find the parent step in any previous column
+                const parentStepId = column.branchInfo.parentStepId;
+                let parentStep: StepLayout | undefined;
+
+                for (let prevColIdx = 0; prevColIdx < colIdx; prevColIdx++) {
+                    const found = columns[prevColIdx].steps.find(s => s.id === parentStepId);
+                    if (found) {
+                        parentStep = found;
+                        break;
+                    }
+                }
+
+                if (!parentStep || column.steps.length === 0) return;
+
+                const branchFirstStep = column.steps[0];
+
+                // Draw curved arrow from parent's right side to branch first step's top
+                // Arrow goes UP and RIGHT (parent bottom-right → branch top)
+                const x1 = parentStep.x + parentStep.width + 4;  // Right edge of parent
+                const y1 = parentStep.y + parentStep.height / 2; // Middle height of parent
+                const x2 = branchFirstStep.x + branchFirstStep.width / 2; // Center of branch start
+                const y2 = branchFirstStep.y - 8; // Above the branch start
+
+                const path = d3.path();
+                path.moveTo(x1, y1);
+
+                // Bezier curve that goes up and right
+                const ctrlX1 = x1 + 20;
+                const ctrlY1 = y1;
+                const ctrlX2 = x2;
+                const ctrlY2 = y2 + 30;
+                path.bezierCurveTo(ctrlX1, ctrlY1, ctrlX2, ctrlY2, x2, y2);
+
+                // Branch line with distinct purple color and dashed style
+                lineGroup.append('path')
+                    .attr('d', path.toString())
+                    .attr('fill', 'none')
+                    .attr('stroke', '#a855f7')  // Purple for branches
+                    .attr('stroke-width', 2)
+                    .attr('stroke-opacity', 0.6)
+                    .attr('stroke-dasharray', '6,3')
+                    .attr('stroke-linecap', 'round')
+                    .attr('marker-end', `url(#arrow-branch-${containerIdx})`);
+
+                // Add a small branch indicator circle at the branch point
+                lineGroup.append('circle')
+                    .attr('cx', x1 - 4)
+                    .attr('cy', y1)
+                    .attr('r', 4)
+                    .attr('fill', '#a855f7')
+                    .attr('opacity', 0.6);
+            });
         });
 
         // Draw step nodes
