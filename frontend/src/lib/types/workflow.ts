@@ -28,6 +28,36 @@ export interface StepContainer {
     order: number;
 }
 
+// ========== Container Branch (Multi-Column Flow) ==========
+
+// Branch point within a container
+// When a step starts a new branch, it and subsequent steps in that container
+// are displayed in a new column to the right of the parent step
+export interface ContainerBranch {
+    id: string;
+    branchStartStepId: string;  // The step that starts this branch
+    parentStepId: string;       // The step this branch is positioned next to (on the right)
+    createdAt: string;
+}
+
+// Generate unique ID for branches
+export function generateBranchId(): string {
+    return `branch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Create a new branch
+export function createContainerBranch(
+    branchStartStepId: string,
+    parentStepId: string
+): ContainerBranch {
+    return {
+        id: generateBranchId(),
+        branchStartStepId,
+        parentStepId,
+        createdAt: new Date().toISOString(),
+    };
+}
+
 // ========== Project Workflow Data ==========
 
 // Capture for a workflow step instance
@@ -65,6 +95,9 @@ export interface WorkflowStepInstance {
 // Project's Workflow Data
 export interface ProjectWorkflowData {
     steps: WorkflowStepInstance[];
+    // Container branches for multi-column layout
+    // Key: containerId (or '__uncategorized__' for uncategorized steps)
+    containerBranches?: Record<string, ContainerBranch[]>;
     createdAt?: string;
     updatedAt?: string;
 }
@@ -154,4 +187,231 @@ export function createAttachment(
     }
 
     return attachment;
+}
+
+// ========== Branch Utility Functions ==========
+
+/**
+ * Get the column index for a step within a container
+ * Column 0 is the default (left-most), higher indices are branches to the right
+ */
+export function getStepColumnIndex(
+    stepId: string,
+    containerId: string | undefined,
+    steps: WorkflowStepInstance[],
+    containerBranches?: Record<string, ContainerBranch[]>
+): number {
+    const containerKey = containerId ?? '__uncategorized__';
+    const branches = containerBranches?.[containerKey] ?? [];
+
+    if (branches.length === 0) return 0;
+
+    // Get steps in this container in order
+    const containerSteps = steps.filter(s =>
+        (s.containerId ?? '__uncategorized__') === containerKey
+    );
+
+    const stepIndex = containerSteps.findIndex(s => s.id === stepId);
+    if (stepIndex === -1) return 0;
+
+    // Find which branch this step belongs to (if any)
+    // A step belongs to a branch if it is the branch start or comes after it in the container
+    let currentColumn = 0;
+
+    for (const branch of branches) {
+        const branchStartIndex = containerSteps.findIndex(s => s.id === branch.branchStartStepId);
+        if (branchStartIndex !== -1 && stepIndex >= branchStartIndex) {
+            currentColumn++;
+        }
+    }
+
+    return currentColumn;
+}
+
+/**
+ * Get all steps organized by columns within a container
+ */
+export interface ContainerColumn {
+    columnIndex: number;
+    steps: WorkflowStepInstance[];
+    branchInfo?: ContainerBranch;  // Info about the branch that starts this column (if not column 0)
+}
+
+export function getContainerColumns(
+    containerId: string | undefined,
+    steps: WorkflowStepInstance[],
+    containerBranches?: Record<string, ContainerBranch[]>
+): ContainerColumn[] {
+    const containerKey = containerId ?? '__uncategorized__';
+    const branches = containerBranches?.[containerKey] ?? [];
+
+    // Get steps in this container in order
+    const containerSteps = steps.filter(s =>
+        (s.containerId ?? '__uncategorized__') === containerKey
+    );
+
+    if (containerSteps.length === 0) {
+        return [{ columnIndex: 0, steps: [] }];
+    }
+
+    if (branches.length === 0) {
+        return [{ columnIndex: 0, steps: containerSteps }];
+    }
+
+    // Sort branches by their start position
+    const sortedBranches = [...branches].sort((a, b) => {
+        const aIdx = containerSteps.findIndex(s => s.id === a.branchStartStepId);
+        const bIdx = containerSteps.findIndex(s => s.id === b.branchStartStepId);
+        return aIdx - bIdx;
+    });
+
+    // Build columns
+    const columns: ContainerColumn[] = [];
+    let currentColumnSteps: WorkflowStepInstance[] = [];
+    let branchIndex = 0;
+
+    for (let i = 0; i < containerSteps.length; i++) {
+        const step = containerSteps[i];
+
+        // Check if this step starts a new branch
+        if (branchIndex < sortedBranches.length &&
+            step.id === sortedBranches[branchIndex].branchStartStepId) {
+            // Save current column
+            if (i > 0) {
+                columns.push({
+                    columnIndex: columns.length,
+                    steps: currentColumnSteps,
+                    branchInfo: columns.length > 0 ? sortedBranches[columns.length - 1] : undefined,
+                });
+            }
+            // Start new column
+            currentColumnSteps = [step];
+            branchIndex++;
+        } else {
+            currentColumnSteps.push(step);
+        }
+    }
+
+    // Add last column
+    columns.push({
+        columnIndex: columns.length,
+        steps: currentColumnSteps,
+        branchInfo: columns.length > 0 ? sortedBranches[columns.length - 1] : undefined,
+    });
+
+    return columns;
+}
+
+/**
+ * Validate if a branch can be created (left-to-right order only)
+ * Returns null if valid, or an error message if invalid
+ */
+export function validateBranchCreation(
+    branchStartStepId: string,
+    parentStepId: string,
+    containerId: string | undefined,
+    steps: WorkflowStepInstance[]
+): string | null {
+    const containerKey = containerId ?? '__uncategorized__';
+
+    // Get steps in this container in order
+    const containerSteps = steps.filter(s =>
+        (s.containerId ?? '__uncategorized__') === containerKey
+    );
+
+    const branchStartIndex = containerSteps.findIndex(s => s.id === branchStartStepId);
+    const parentIndex = containerSteps.findIndex(s => s.id === parentStepId);
+
+    if (branchStartIndex === -1 || parentIndex === -1) {
+        return "스텝을 찾을 수 없습니다.";
+    }
+
+    // Branch start must come AFTER parent (left-to-right order)
+    if (branchStartIndex <= parentIndex) {
+        return "분기는 왼쪽에서 오른쪽 순서로만 생성할 수 있습니다.";
+    }
+
+    return null;
+}
+
+/**
+ * Add a branch to workflow data
+ */
+export function addBranch(
+    workflowData: ProjectWorkflowData,
+    containerId: string | undefined,
+    branchStartStepId: string,
+    parentStepId: string
+): ProjectWorkflowData {
+    const containerKey = containerId ?? '__uncategorized__';
+    const branches = workflowData.containerBranches ?? {};
+    const containerBranches = branches[containerKey] ?? [];
+
+    const newBranch = createContainerBranch(branchStartStepId, parentStepId);
+
+    return {
+        ...workflowData,
+        containerBranches: {
+            ...branches,
+            [containerKey]: [...containerBranches, newBranch],
+        },
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Remove a branch from workflow data
+ */
+export function removeBranch(
+    workflowData: ProjectWorkflowData,
+    containerId: string | undefined,
+    branchId: string
+): ProjectWorkflowData {
+    const containerKey = containerId ?? '__uncategorized__';
+    const branches = workflowData.containerBranches ?? {};
+    const containerBranches = branches[containerKey] ?? [];
+
+    return {
+        ...workflowData,
+        containerBranches: {
+            ...branches,
+            [containerKey]: containerBranches.filter(b => b.id !== branchId),
+        },
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Clean up orphaned branches (when steps are deleted or moved)
+ */
+export function cleanupOrphanedBranches(
+    workflowData: ProjectWorkflowData
+): ProjectWorkflowData {
+    if (!workflowData.containerBranches) return workflowData;
+
+    const stepIds = new Set(workflowData.steps.map(s => s.id));
+    const stepContainerMap = new Map(workflowData.steps.map(s => [s.id, s.containerId ?? '__uncategorized__']));
+
+    const cleanedBranches: Record<string, ContainerBranch[]> = {};
+
+    for (const [containerKey, branches] of Object.entries(workflowData.containerBranches)) {
+        cleanedBranches[containerKey] = branches.filter(branch => {
+            // Both steps must exist
+            if (!stepIds.has(branch.branchStartStepId) || !stepIds.has(branch.parentStepId)) {
+                return false;
+            }
+            // Both steps must be in this container
+            if (stepContainerMap.get(branch.branchStartStepId) !== containerKey ||
+                stepContainerMap.get(branch.parentStepId) !== containerKey) {
+                return false;
+            }
+            return true;
+        });
+    }
+
+    return {
+        ...workflowData,
+        containerBranches: cleanedBranches,
+        updatedAt: new Date().toISOString(),
+    };
 }
