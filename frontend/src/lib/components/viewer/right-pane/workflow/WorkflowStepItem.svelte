@@ -28,6 +28,7 @@
     export let supportIndicator = false;  // Show support indicator (this step supports another)
     export let phaseColor: string | undefined = undefined;  // Phase color for supporter
     export let phaseName: string | undefined = undefined;  // Phase name for supporter
+    export let displayNumber: string | number | undefined = undefined;  // Custom display number for badge
 
     const dispatch = createEventDispatcher<{
         toggleExpand: void;
@@ -78,16 +79,14 @@
 
     <!-- Step Number Badge (or Support Indicator) -->
     {#if supportIndicator}
-        <!-- Support indicator with phase color -->
+        <!-- Support indicator with phase color and display number -->
         <div class="absolute left-0 top-2.5 group/support">
             <div
-                class="w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-all duration-200"
+                class="min-w-5 h-5 px-1 rounded-full flex items-center justify-center shadow-sm transition-all duration-200 text-[8px] font-bold text-white"
                 style="background-color: {phaseColor || '#a855f7'}"
                 title="{phaseName || '위상'} 지원"
             >
-                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
-                </svg>
+                {displayNumber !== undefined ? displayNumber : '+'}
             </div>
             <!-- Support remove button (appears on hover) -->
             <button
@@ -105,7 +104,7 @@
             class="absolute left-0 top-2.5 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shadow-sm transition-all duration-200"
             style="background-color: {color.border}; color: white;"
         >
-            {index + 1}
+            {displayNumber !== undefined ? displayNumber : index + 1}
         </div>
     {/if}
 

@@ -80,7 +80,7 @@
     // Support/Phase creation state
     let supportGuideTargetStepId: string | null = null;  // Target step for support placement
     let supportHoverTimer: ReturnType<typeof setTimeout> | null = null;
-    const SUPPORT_GUIDE_DELAY = 500; // ms to wait before showing support guide
+    const SUPPORT_GUIDE_DELAY = 300; // ms to wait before showing support guide (0.3 seconds)
 
     // Phase selection modal state
     let showPhaseSelectModal = false;
@@ -232,7 +232,7 @@
         }
     }
 
-    function handleStepHoverForSupport(e: DragEvent, targetStepId: string) {
+    function handleStepHoverForSupport(e: DragEvent, targetStepId: string, forceImmediate: boolean = false) {
         if (dragState.draggedIndex === null) return;
 
         const draggedStep = workflowData.steps[dragState.draggedIndex];
@@ -243,20 +243,9 @@
             return;
         }
 
-        // If already in support mode for this step, keep it active (don't check position)
+        // If already in support mode for this step, keep it active
         if (dragMode === 'support' && supportGuideTargetStepId === targetStepId) {
             return;  // Already active, maintain it
-        }
-
-        const target = e.currentTarget as HTMLElement;
-        const rect = target.getBoundingClientRect();
-        const offsetX = e.clientX - rect.left;
-        const isRightSide = offsetX > rect.width * 0.7;  // Right 30% of the card
-
-        // Only show support guide when hovering on right side
-        if (!isRightSide) {
-            if (dragMode === 'support') clearSupportGuide();
-            return;
         }
 
         // Validate support creation
@@ -269,6 +258,17 @@
 
         if (validationError) {
             if (dragMode === 'support') clearSupportGuide();
+            return;
+        }
+
+        // If forceImmediate (Shift+drag), activate support mode immediately
+        if (forceImmediate) {
+            if (supportHoverTimer) {
+                clearTimeout(supportHoverTimer);
+                supportHoverTimer = null;
+            }
+            dragMode = 'support';
+            supportGuideTargetStepId = targetStepId;
             return;
         }
 
@@ -798,6 +798,7 @@
                             {@const stepDef = getStepDefinition(step.stepId)}
                             {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
                             {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === step.id}
+                            {@const mainStepNumber = rowIndex + 1}
 
                             <div class="relative mb-2">
                                 <!-- Support creation guide -->
@@ -829,7 +830,7 @@
                                     }}
                                     on:dragover={(e) => {
                                         dragDropHandlers.handleDragOver(e, index);
-                                        handleStepHoverForSupport(e, step.id);
+                                        handleStepHoverForSupport(e, step.id, e.shiftKey);
                                     }}
                                     on:dragleave={(e) => handleDragLeave(e, step.id)}
                                 >
@@ -839,6 +840,7 @@
                                         {stepDef}
                                         {color}
                                         {workflowSteps}
+                                        displayNumber={mainStepNumber}
                                         isExpanded={expandedStepId === step.id}
                                         isCapturing={captureTargetStepId === step.id}
                                         isAddingAttachment={addingAttachmentToStepId === step.id}
@@ -867,11 +869,13 @@
                                 <!-- Supporter steps (indented, with phase indicator) -->
                                 {#if row.supporters.length > 0}
                                     <div class="ml-8 mt-1 space-y-1 border-l-2 border-purple-200 pl-2">
-                                        {#each row.supporters as supporter (supporter.step.id)}
+                                        {#each row.supporters as supporter, supLocalIdx (supporter.step.id)}
                                             {@const supStep = supporter.step}
                                             {@const supIndex = workflowData.steps.findIndex(s => s.id === supStep.id)}
                                             {@const supStepDef = getStepDefinition(supStep.stepId)}
                                             {@const supColor = EVIDENCE_COLORS[supIndex % EVIDENCE_COLORS.length]}
+                                            {@const phaseShortName = supporter.phase?.name?.charAt(0).toUpperCase() || 'P'}
+                                            {@const supporterDisplayNumber = `${mainStepNumber}_${phaseShortName}${row.supporters.length > 1 ? supLocalIdx + 1 : ''}`}
 
                                             <div class="relative group">
                                                 <!-- Phase badge -->
@@ -907,6 +911,7 @@
                                                         stepDef={supStepDef}
                                                         color={supColor}
                                                         {workflowSteps}
+                                                        displayNumber={supporterDisplayNumber}
                                                         isExpanded={expandedStepId === supStep.id}
                                                         isCapturing={captureTargetStepId === supStep.id}
                                                         isAddingAttachment={addingAttachmentToStepId === supStep.id}
@@ -917,7 +922,6 @@
                                                         {attachmentTextInput}
                                                         isSelected={selectedStepIds.has(supStep.id)}
                                                         showSelectionCheckbox={selectionModeActive}
-                                                        hideBadge={true}
                                                         supportIndicator={true}
                                                         phaseColor={supporter.phase?.color}
                                                         phaseName={supporter.phase?.name}
