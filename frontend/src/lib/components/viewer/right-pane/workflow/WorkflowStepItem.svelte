@@ -24,6 +24,8 @@
     export let attachmentTextInput = "";
     export let isSelected = false;
     export let showSelectionCheckbox = false;
+    export let hideBadge = false;  // Hide the step number badge
+    export let branchIndicator = false;  // Show branch start indicator instead of number
 
     const dispatch = createEventDispatcher<{
         toggleExpand: void;
@@ -71,13 +73,25 @@
         ></div>
     {/if}
 
-    <!-- Step Number Badge -->
-    <div
-        class="absolute left-0 top-2.5 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shadow-sm transition-all duration-200"
-        style="background-color: {color.border}; color: white;"
-    >
-        {index + 1}
-    </div>
+    <!-- Step Number Badge (or Branch Indicator) -->
+    {#if branchIndicator}
+        <!-- Branch start indicator -->
+        <div
+            class="absolute left-0 top-2.5 w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-all duration-200 bg-purple-500"
+            title="병렬 분기"
+        >
+            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+        </div>
+    {:else if !hideBadge}
+        <div
+            class="absolute left-0 top-2.5 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shadow-sm transition-all duration-200"
+            style="background-color: {color.border}; color: white;"
+        >
+            {index + 1}
+        </div>
+    {/if}
 
     <!-- Step Card -->
     <div

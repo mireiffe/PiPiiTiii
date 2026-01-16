@@ -8,8 +8,9 @@
         WorkflowStepRow,
         StepContainer,
         ContainerColumn,
+        ContainerLayoutRow,
     } from "$lib/types/workflow";
-    import { getContainerColumns } from "$lib/types/workflow";
+    import { getContainerColumns, getContainerLayoutRows } from "$lib/types/workflow";
 
     export let workflowData: ProjectWorkflowData;
     export let workflowSteps: WorkflowSteps;
@@ -36,7 +37,7 @@
     const CONTAINER_HEADER_HEIGHT = 48;
     const STEP_NODE_WIDTH = 180;
     const STEP_NODE_HEIGHT = 80;
-    const STEP_NODE_HEIGHT_EXPANDED = 160;
+    const STEP_NODE_HEIGHT_EXPANDED = 200;
     const STEP_GAP = 20;
     const MARGIN = { top: 50, right: 50, bottom: 50, left: 50 };
 
@@ -119,6 +120,16 @@
         isExpanded: boolean;
         globalIndex: number;
         columnIndex: number;  // Which column this step belongs to
+        isBranchStart: boolean;  // Is this the first step of a branch?
+        hideBadge: boolean;  // Hide step number badge
+        pairedWith?: string;  // ID of paired step (for branch starts)
+    }
+
+    // Junction point for branch connections
+    interface JunctionPoint {
+        x: number;
+        y: number;
+        connectedStepIds: string[];  // IDs of steps connected at this junction
     }
 
     function calculateLayout(): { containers: ContainerLayout[], totalWidth: number, totalHeight: number } {
@@ -129,62 +140,104 @@
         let maxHeight = 0;
         let globalStepIndex = 0;
 
-        const COLUMN_GAP = 12;  // Gap between columns within a container
+        const COLUMN_GAP = 16;  // Gap between columns within a container
+        const PAIRED_GAP = 8;   // Gap between paired steps in same row
 
-        // Helper to build columns for a container
-        function buildContainerColumns(containerId: string | undefined): { columns: ColumnLayout[], totalWidth: number, maxHeight: number } {
-            const containerColumns = getContainerColumns(containerId, workflowData.steps, workflowData.containerBranches);
+        // Helper to build row-based layout for a container
+        function buildContainerLayout(containerId: string | undefined): { columns: ColumnLayout[], totalWidth: number, maxHeight: number } {
+            const { rows, columns: rawColumns } = getContainerLayoutRows(containerId, workflowData.steps, workflowData.containerBranches);
             const columnLayouts: ColumnLayout[] = [];
-            let colX = CONTAINER_PADDING;
-            let maxColHeight = 0;
 
-            containerColumns.forEach((col, colIdx) => {
-                const colSteps: StepLayout[] = [];
-                let stepY = CONTAINER_HEADER_HEIGHT + CONTAINER_PADDING;
+            if (rows.length === 0) {
+                return { columns: [{ columnIndex: 0, x: CONTAINER_PADDING, steps: [] }], totalWidth: CONTAINER_MIN_WIDTH, maxHeight: 140 };
+            }
 
-                col.steps.forEach((step) => {
-                    const isExpanded = expandedStepId === step.id;
-                    const h = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
-                    colSteps.push({
-                        id: step.id,
-                        step,
-                        info: getStepInfo(step),
-                        x: colX,
-                        y: stepY,
-                        width: STEP_NODE_WIDTH,
-                        height: h,
-                        isExpanded,
-                        globalIndex: globalStepIndex++,
-                        columnIndex: colIdx,
-                    });
-                    stepY += h + STEP_GAP;
-                });
+            const numColumns = rawColumns.length;
+            const columnWidth = STEP_NODE_WIDTH;
 
+            // Initialize column layouts
+            for (let colIdx = 0; colIdx < numColumns; colIdx++) {
+                const colX = CONTAINER_PADDING + colIdx * (columnWidth + (colIdx > 0 ? PAIRED_GAP : COLUMN_GAP));
                 columnLayouts.push({
                     columnIndex: colIdx,
                     x: colX,
-                    steps: colSteps,
-                    branchInfo: col.branchInfo ? { parentStepId: col.branchInfo.parentStepId } : undefined,
+                    steps: [],
+                    branchInfo: rawColumns[colIdx].branchInfo ? { parentStepId: rawColumns[colIdx].branchInfo!.parentStepId } : undefined,
+                });
+            }
+
+            // Calculate positions row by row
+            let currentY = CONTAINER_HEADER_HEIGHT + CONTAINER_PADDING;
+
+            rows.forEach((row, rowIdx) => {
+                let rowMaxHeight = STEP_NODE_HEIGHT;
+
+                // First pass: calculate heights
+                row.cells.forEach(cell => {
+                    if (cell.step) {
+                        const isExpanded = expandedStepId === cell.step.id;
+                        const h = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
+                        rowMaxHeight = Math.max(rowMaxHeight, h);
+                    }
                 });
 
-                maxColHeight = Math.max(maxColHeight, stepY + CONTAINER_PADDING - STEP_GAP);
-                colX += STEP_NODE_WIDTH + COLUMN_GAP;
+                // Second pass: create step layouts
+                row.cells.forEach(cell => {
+                    if (cell.step) {
+                        const isExpanded = expandedStepId === cell.step.id;
+                        const h = isExpanded ? STEP_NODE_HEIGHT_EXPANDED : STEP_NODE_HEIGHT;
+                        const colLayout = columnLayouts[cell.columnIndex];
+
+                        // For first row with multiple columns, use tighter spacing
+                        let stepX = colLayout.x;
+                        if (rowIdx === 0 && numColumns > 1) {
+                            stepX = CONTAINER_PADDING + cell.columnIndex * (columnWidth + PAIRED_GAP);
+                        }
+
+                        const stepLayout: StepLayout = {
+                            id: cell.step.id,
+                            step: cell.step,
+                            info: getStepInfo(cell.step),
+                            x: stepX,
+                            y: currentY,
+                            width: columnWidth,
+                            height: h,
+                            isExpanded,
+                            globalIndex: globalStepIndex++,
+                            columnIndex: cell.columnIndex,
+                            isBranchStart: cell.isBranchStart,
+                            hideBadge: cell.hideBadge ?? false,
+                            pairedWith: rowIdx === 0 && cell.columnIndex > 0
+                                ? row.cells[0]?.step?.id
+                                : undefined,
+                        };
+
+                        colLayout.steps.push(stepLayout);
+                    }
+                });
+
+                currentY += rowMaxHeight + STEP_GAP;
             });
 
-            const totalWidth = Math.max(
-                CONTAINER_MIN_WIDTH,
-                colX - COLUMN_GAP + CONTAINER_PADDING
-            );
+            // Calculate total dimensions
+            const totalHeight = currentY + CONTAINER_PADDING - STEP_GAP;
+            let maxX = CONTAINER_PADDING;
+            columnLayouts.forEach(col => {
+                col.steps.forEach(step => {
+                    maxX = Math.max(maxX, step.x + step.width);
+                });
+            });
+            const totalWidth = Math.max(CONTAINER_MIN_WIDTH, maxX + CONTAINER_PADDING);
 
-            return { columns: columnLayouts, totalWidth, maxHeight: maxColHeight };
+            return { columns: columnLayouts, totalWidth, maxHeight: totalHeight };
         }
 
         // Uncategorized steps first (if any)
-        const uncategorizedColumns = getContainerColumns(undefined, workflowData.steps, workflowData.containerBranches);
-        const hasUncategorized = uncategorizedColumns.some(col => col.steps.length > 0);
+        const { rows: uncatRows } = getContainerLayoutRows(undefined, workflowData.steps, workflowData.containerBranches);
+        const hasUncategorized = uncatRows.length > 0 && uncatRows.some(r => r.cells.some(c => c.step !== null));
 
         if (hasUncategorized || sortedContainers.length === 0) {
-            const { columns, totalWidth, maxHeight: colMaxHeight } = buildContainerColumns(undefined);
+            const { columns, totalWidth, maxHeight: colMaxHeight } = buildContainerLayout(undefined);
             const allSteps = columns.flatMap(col => col.steps);
 
             containers.push({
@@ -206,7 +259,7 @@
 
         // Named containers
         sortedContainers.forEach((container, cIndex) => {
-            const { columns, totalWidth, maxHeight: colMaxHeight } = buildContainerColumns(container.id);
+            const { columns, totalWidth, maxHeight: colMaxHeight } = buildContainerLayout(container.id);
             const allSteps = columns.flatMap(col => col.steps);
 
             const containerHeight = allSteps.length > 0 ? colMaxHeight : 140;
@@ -544,9 +597,9 @@
                 .attr('fill', containerData.color.border)
                 .attr('fill-opacity', 0.5);
 
-            // Arrow marker for branch connections (purple)
+            // Arrow marker for branch return connections (purple, pointing down)
             defs.append('marker')
-                .attr('id', `arrow-branch-${containerIdx}`)
+                .attr('id', `arrow-branch-return-${containerIdx}`)
                 .attr('viewBox', '0 -4 8 8')
                 .attr('refX', 6)
                 .attr('refY', 0)
@@ -558,10 +611,68 @@
                 .attr('fill', '#a855f7')
                 .attr('fill-opacity', 0.7);
 
-            // Draw connections within each column (top to bottom)
-            columns.forEach((column) => {
+            // 1. Draw horizontal connection between paired steps (first row)
+            // Find paired steps in the same row
+            const pairedSteps: StepLayout[][] = [];
+            if (columns.length > 1) {
+                // Group by y position to find same-row steps
+                const stepsByY = new Map<number, StepLayout[]>();
+                containerData.steps.forEach(step => {
+                    const yKey = Math.round(step.y);
+                    if (!stepsByY.has(yKey)) stepsByY.set(yKey, []);
+                    stepsByY.get(yKey)!.push(step);
+                });
+                stepsByY.forEach(stepsInRow => {
+                    if (stepsInRow.length > 1) {
+                        pairedSteps.push(stepsInRow.sort((a, b) => a.x - b.x));
+                    }
+                });
+            }
+
+            // Draw paired step connections (horizontal solid line)
+            pairedSteps.forEach(stepsInRow => {
+                for (let i = 0; i < stepsInRow.length - 1; i++) {
+                    const from = stepsInRow[i];
+                    const to = stepsInRow[i + 1];
+
+                    const x1 = from.x + from.width;
+                    const y1 = from.y + from.height / 2;
+                    const x2 = to.x;
+                    const y2 = to.y + to.height / 2;
+
+                    // Solid horizontal line with purple color
+                    lineGroup.append('line')
+                        .attr('x1', x1 + 2)
+                        .attr('y1', y1)
+                        .attr('x2', x2 - 2)
+                        .attr('y2', y2)
+                        .attr('stroke', '#a855f7')
+                        .attr('stroke-width', 3)
+                        .attr('stroke-opacity', 0.7)
+                        .attr('stroke-linecap', 'round');
+
+                    // Add small circles at connection points
+                    lineGroup.append('circle')
+                        .attr('cx', x1 + 2)
+                        .attr('cy', y1)
+                        .attr('r', 3)
+                        .attr('fill', '#a855f7')
+                        .attr('opacity', 0.8);
+                    lineGroup.append('circle')
+                        .attr('cx', x2 - 2)
+                        .attr('cy', y2)
+                        .attr('r', 3)
+                        .attr('fill', '#a855f7')
+                        .attr('opacity', 0.8);
+                }
+            });
+
+            // 2. Draw vertical connections within each column (skip first step in branches)
+            columns.forEach((column, colIdx) => {
                 const colSteps = column.steps;
-                for (let i = 0; i < colSteps.length - 1; i++) {
+                const startIdx = 0;  // Start from first step
+
+                for (let i = startIdx; i < colSteps.length - 1; i++) {
                     const from = colSteps[i];
                     const to = colSteps[i + 1];
 
@@ -586,64 +697,56 @@
                 }
             });
 
-            // Draw branch connections (from parent step to branch start)
-            // These go from left column's parent step to right column's first step
-            // Arrow points upward (from bottom-left to top-right)
-            columns.forEach((column, colIdx) => {
-                if (colIdx === 0 || !column.branchInfo) return;
+            // 3. Draw return arrows: from last step of column 0 to the junction point
+            // Junction point is at the center of the horizontal line between paired steps
+            if (columns.length > 1 && columns[0].steps.length > 1 && pairedSteps.length > 0) {
+                const col0Steps = columns[0].steps;
+                const lastStepCol0 = col0Steps[col0Steps.length - 1];
+                const firstRowSteps = pairedSteps[0];  // First paired row
 
-                // Find the parent step in any previous column
-                const parentStepId = column.branchInfo.parentStepId;
-                let parentStep: StepLayout | undefined;
+                if (firstRowSteps && firstRowSteps.length >= 2) {
+                    // Junction point: center of the horizontal line
+                    const junctionX = (firstRowSteps[0].x + firstRowSteps[0].width + firstRowSteps[1].x) / 2;
+                    const junctionY = firstRowSteps[0].y + firstRowSteps[0].height / 2;
 
-                for (let prevColIdx = 0; prevColIdx < colIdx; prevColIdx++) {
-                    const found = columns[prevColIdx].steps.find(s => s.id === parentStepId);
-                    if (found) {
-                        parentStep = found;
-                        break;
-                    }
+                    // Arrow from last step of col 0 to junction
+                    const x1 = lastStepCol0.x + lastStepCol0.width + 4;
+                    const y1 = lastStepCol0.y + lastStepCol0.height / 2;
+                    const x2 = junctionX;
+                    const y2 = junctionY + 8;  // Slightly below junction
+
+                    const path = d3.path();
+                    path.moveTo(x1, y1);
+
+                    // Bezier curve going up and right to junction
+                    const ctrlX1 = x1 + 30;
+                    const ctrlY1 = y1 - 20;
+                    const ctrlX2 = x2 + 20;
+                    const ctrlY2 = y2 + 40;
+                    path.bezierCurveTo(ctrlX1, ctrlY1, ctrlX2, ctrlY2, x2, y2);
+
+                    // Return arrow with dashed purple line
+                    lineGroup.append('path')
+                        .attr('d', path.toString())
+                        .attr('fill', 'none')
+                        .attr('stroke', '#a855f7')
+                        .attr('stroke-width', 2)
+                        .attr('stroke-opacity', 0.5)
+                        .attr('stroke-dasharray', '6,4')
+                        .attr('stroke-linecap', 'round')
+                        .attr('marker-end', `url(#arrow-branch-return-${containerIdx})`);
+
+                    // Junction indicator
+                    lineGroup.append('circle')
+                        .attr('cx', junctionX)
+                        .attr('cy', junctionY)
+                        .attr('r', 5)
+                        .attr('fill', '#a855f7')
+                        .attr('stroke', 'white')
+                        .attr('stroke-width', 2)
+                        .attr('opacity', 0.8);
                 }
-
-                if (!parentStep || column.steps.length === 0) return;
-
-                const branchFirstStep = column.steps[0];
-
-                // Draw curved arrow from parent's right side to branch first step's top
-                // Arrow goes UP and RIGHT (parent bottom-right → branch top)
-                const x1 = parentStep.x + parentStep.width + 4;  // Right edge of parent
-                const y1 = parentStep.y + parentStep.height / 2; // Middle height of parent
-                const x2 = branchFirstStep.x + branchFirstStep.width / 2; // Center of branch start
-                const y2 = branchFirstStep.y - 8; // Above the branch start
-
-                const path = d3.path();
-                path.moveTo(x1, y1);
-
-                // Bezier curve that goes up and right
-                const ctrlX1 = x1 + 20;
-                const ctrlY1 = y1;
-                const ctrlX2 = x2;
-                const ctrlY2 = y2 + 30;
-                path.bezierCurveTo(ctrlX1, ctrlY1, ctrlX2, ctrlY2, x2, y2);
-
-                // Branch line with distinct purple color and dashed style
-                lineGroup.append('path')
-                    .attr('d', path.toString())
-                    .attr('fill', 'none')
-                    .attr('stroke', '#a855f7')  // Purple for branches
-                    .attr('stroke-width', 2)
-                    .attr('stroke-opacity', 0.6)
-                    .attr('stroke-dasharray', '6,3')
-                    .attr('stroke-linecap', 'round')
-                    .attr('marker-end', `url(#arrow-branch-${containerIdx})`);
-
-                // Add a small branch indicator circle at the branch point
-                lineGroup.append('circle')
-                    .attr('cx', x1 - 4)
-                    .attr('cy', y1)
-                    .attr('r', 4)
-                    .attr('fill', '#a855f7')
-                    .attr('opacity', 0.6);
-            });
+            }
         });
 
         // Draw step nodes
@@ -724,37 +827,58 @@
                     toggleStepExpand(d.id);
                 });
 
-            // Step index badge with gradient
+            // Step index badge with gradient (or branch indicator)
             stepGroups.each(function(d) {
                 const g = d3.select(this);
-                const badgeGradId = `badge-${d.id.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-                defs.append('radialGradient')
-                    .attr('id', badgeGradId)
-                    .selectAll('stop')
-                    .data([
-                        { offset: '0%', color: containerData.color.border },
-                        { offset: '100%', color: d3.color(containerData.color.border)?.darker(0.3)?.toString() || containerData.color.border }
-                    ])
-                    .enter()
-                    .append('stop')
-                    .attr('offset', d => d.offset)
-                    .attr('stop-color', d => d.color);
+                if (d.isBranchStart) {
+                    // Branch start indicator - purple circle with parallel arrow icon
+                    g.append('circle')
+                        .attr('cx', 18)
+                        .attr('cy', 18)
+                        .attr('r', 12)
+                        .attr('fill', '#a855f7');
 
-                g.append('circle')
-                    .attr('cx', 18)
-                    .attr('cy', 18)
-                    .attr('r', 12)
-                    .attr('fill', `url(#${badgeGradId})`);
+                    // Parallel arrow icon (>>)
+                    g.append('text')
+                        .attr('x', 18)
+                        .attr('y', 22)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', '11px')
+                        .attr('font-weight', '700')
+                        .attr('fill', 'white')
+                        .text('»');
+                } else if (!d.hideBadge) {
+                    // Normal step badge with gradient
+                    const badgeGradId = `badge-${d.id.replace(/[^a-zA-Z0-9]/g, '')}`;
 
-                g.append('text')
-                    .attr('x', 18)
-                    .attr('y', 22)
-                    .attr('text-anchor', 'middle')
-                    .attr('font-size', '11px')
-                    .attr('font-weight', '700')
-                    .attr('fill', 'white')
-                    .text(d.globalIndex + 1);
+                    defs.append('radialGradient')
+                        .attr('id', badgeGradId)
+                        .selectAll('stop')
+                        .data([
+                            { offset: '0%', color: containerData.color.border },
+                            { offset: '100%', color: d3.color(containerData.color.border)?.darker(0.3)?.toString() || containerData.color.border }
+                        ])
+                        .enter()
+                        .append('stop')
+                        .attr('offset', dd => dd.offset)
+                        .attr('stop-color', dd => dd.color);
+
+                    g.append('circle')
+                        .attr('cx', 18)
+                        .attr('cy', 18)
+                        .attr('r', 12)
+                        .attr('fill', `url(#${badgeGradId})`);
+
+                    g.append('text')
+                        .attr('x', 18)
+                        .attr('y', 22)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-size', '11px')
+                        .attr('font-weight', '700')
+                        .attr('fill', 'white')
+                        .text(d.globalIndex + 1);
+                }
             });
 
             // Category badge
@@ -839,7 +963,7 @@
                 .each(function(d) {
                     const g = d3.select(this);
 
-                    // Divider line with gradient
+                    // Divider line
                     g.append('line')
                         .attr('x1', 14)
                         .attr('y1', 82)
@@ -857,7 +981,16 @@
                         .attr('opacity', 0.6)
                         .text('▲');
 
-                    let yPos = 100;
+                    let yPos = 96;
+
+                    // Step ID / Global Index
+                    g.append('text')
+                        .attr('x', 14)
+                        .attr('y', yPos)
+                        .attr('font-size', '9px')
+                        .attr('fill', '#94a3b8')
+                        .text(`#${d.globalIndex + 1} · ${d.step.stepId.substring(0, 15)}`);
+                    yPos += 16;
 
                     // System info
                     if (d.info.system) {
@@ -866,8 +999,8 @@
                             .attr('y', yPos)
                             .attr('font-size', '10px')
                             .attr('fill', '#64748b')
-                            .text(`🖥️ ${d.info.system.substring(0, 22)}${d.info.system.length > 22 ? '...' : ''}`);
-                        yPos += 18;
+                            .text(`🖥️ ${d.info.system.substring(0, 20)}${d.info.system.length > 20 ? '...' : ''}`);
+                        yPos += 16;
                     }
 
                     // Target info
@@ -877,8 +1010,8 @@
                             .attr('y', yPos)
                             .attr('font-size', '10px')
                             .attr('fill', '#64748b')
-                            .text(`🎯 ${d.info.target.substring(0, 22)}${d.info.target.length > 22 ? '...' : ''}`);
-                        yPos += 18;
+                            .text(`🎯 ${d.info.target.substring(0, 20)}${d.info.target.length > 20 ? '...' : ''}`);
+                        yPos += 16;
                     }
 
                     // Expected result
@@ -888,7 +1021,64 @@
                             .attr('y', yPos)
                             .attr('font-size', '10px')
                             .attr('fill', '#64748b')
-                            .text(`✅ ${d.info.expectedResult.substring(0, 22)}${d.info.expectedResult.length > 22 ? '...' : ''}`);
+                            .text(`✅ ${d.info.expectedResult.substring(0, 20)}${d.info.expectedResult.length > 20 ? '...' : ''}`);
+                        yPos += 16;
+                    }
+
+                    // Captures and attachments summary at bottom
+                    const captureCount = d.step.captures.length;
+                    const attachmentCount = d.step.attachments.length;
+                    if (captureCount > 0 || attachmentCount > 0) {
+                        yPos = d.height - 20;
+                        let xPos = 14;
+
+                        if (captureCount > 0) {
+                            g.append('rect')
+                                .attr('x', xPos)
+                                .attr('y', yPos - 12)
+                                .attr('width', 50)
+                                .attr('height', 16)
+                                .attr('rx', 8)
+                                .attr('fill', '#dbeafe');
+                            g.append('text')
+                                .attr('x', xPos + 25)
+                                .attr('y', yPos)
+                                .attr('text-anchor', 'middle')
+                                .attr('font-size', '9px')
+                                .attr('fill', '#2563eb')
+                                .text(`📷 ${captureCount} 캡처`);
+                            xPos += 56;
+                        }
+
+                        if (attachmentCount > 0) {
+                            g.append('rect')
+                                .attr('x', xPos)
+                                .attr('y', yPos - 12)
+                                .attr('width', 50)
+                                .attr('height', 16)
+                                .attr('rx', 8)
+                                .attr('fill', '#fef3c7');
+                            g.append('text')
+                                .attr('x', xPos + 25)
+                                .attr('y', yPos)
+                                .attr('text-anchor', 'middle')
+                                .attr('font-size', '9px')
+                                .attr('fill', '#d97706')
+                                .text(`📎 ${attachmentCount} 첨부`);
+                        }
+                    }
+
+                    // Created time
+                    if (d.step.createdAt) {
+                        const date = new Date(d.step.createdAt);
+                        const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+                        g.append('text')
+                            .attr('x', d.width - 14)
+                            .attr('y', d.height - 8)
+                            .attr('text-anchor', 'end')
+                            .attr('font-size', '8px')
+                            .attr('fill', '#cbd5e1')
+                            .text(dateStr);
                     }
                 });
 
