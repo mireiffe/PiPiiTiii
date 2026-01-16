@@ -848,7 +848,7 @@
                                         showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
                                         showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
                                         isLastStep={index === workflowData.steps.length - 1}
-                                        {attachmentTextInput}
+                                        bind:attachmentTextInput
                                         isSelected={selectedStepIds.has(step.id)}
                                         showSelectionCheckbox={selectionModeActive}
                                         on:toggleExpand={() => toggleStepExpand(step.id)}
@@ -899,7 +899,7 @@
                                                         showDropIndicatorTop={false}
                                                         showDropIndicatorBottom={false}
                                                         isLastStep={supIndex === workflowData.steps.length - 1}
-                                                        {attachmentTextInput}
+                                                        bind:attachmentTextInput
                                                         isSelected={selectedStepIds.has(supStep.id)}
                                                         showSelectionCheckbox={selectionModeActive}
                                                         supportIndicator={true}
