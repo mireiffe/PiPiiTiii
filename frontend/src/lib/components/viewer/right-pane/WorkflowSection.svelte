@@ -36,9 +36,6 @@
         cleanupOrphanedSupports,
         isStepSupporter,
         getSupportInfo,
-        addPhaseType,
-        removePhaseType,
-        updatePhaseType,
         getMainFlowSteps,
     } from "$lib/types/workflow";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
@@ -52,6 +49,7 @@
     export let workflowData: ProjectWorkflowData = createEmptyWorkflowData();
     export let workflowSteps: WorkflowSteps = { columns: [], rows: [] };
     export let stepContainers: StepContainer[] = [];
+    export let globalPhases: PhaseType[] = [];  // Global phases from settings
     export let savingWorkflow = false;
     export let captureMode = false;
     export let captureTargetStepId: string | null = null;
@@ -100,9 +98,6 @@
     // Phase selection modal state
     let showPhaseSelectModal = false;
     let pendingSupport: { supporterStepId: string; targetStepId: string } | null = null;
-
-    // Phase settings modal state
-    let showPhaseSettings = false;
 
     // Multi-selection state
     let selectedStepIds: Set<string> = new Set();
@@ -421,18 +416,16 @@
             return;
         }
 
-        // Check if there are phases defined
-        const phases = workflowData.phaseTypes ?? [];
-
-        if (phases.length === 0) {
-            // No phases: prompt user to create one first
-            alert("먼저 위상을 추가해주세요. 상단의 '위상 설정' 버튼을 클릭하세요.");
+        // Check if there are global phases defined (from settings)
+        if (globalPhases.length === 0) {
+            // No phases: prompt user to add phases in settings
+            alert("먼저 설정에서 위상을 추가해주세요. 메인 메뉴 > 설정 > 위상 (Phase)에서 추가할 수 있습니다.");
             clearAllDragGuides();
             dragState = { draggedIndex: null, dropTargetIndex: null };
             return;
-        } else if (phases.length === 1) {
+        } else if (globalPhases.length === 1) {
             // Only one phase: auto-select
-            workflowData = addSupportRelation(workflowData, draggedStep.id, targetStepId, phases[0].id);
+            workflowData = addSupportRelation(workflowData, draggedStep.id, targetStepId, globalPhases[0].id);
             dispatch("workflowChange", workflowData);
             clearAllDragGuides();
             dragState = { draggedIndex: null, dropTargetIndex: null };
@@ -462,24 +455,6 @@
 
     function handleRemoveSupport(stepId: string) {
         workflowData = removeSupportByStepId(workflowData, stepId);
-        dispatch("workflowChange", workflowData);
-    }
-
-    // Phase management
-    function handleAddPhase(name: string, color: string) {
-        workflowData = addPhaseType(workflowData, name, color);
-        dispatch("workflowChange", workflowData);
-    }
-
-    function handleRemovePhase(phaseId: string) {
-        if (confirm("이 위상을 삭제하면 관련된 모든 지원 관계가 삭제됩니다. 계속하시겠습니까?")) {
-            workflowData = removePhaseType(workflowData, phaseId);
-            dispatch("workflowChange", workflowData);
-        }
-    }
-
-    function handleUpdatePhase(phaseId: string, updates: { name?: string; color?: string }) {
-        workflowData = updatePhaseType(workflowData, phaseId, updates);
         dispatch("workflowChange", workflowData);
     }
 
@@ -690,7 +665,7 @@
             undefined,
             workflowData.steps,
             workflowData.supportRelations,
-            workflowData.phaseTypes
+            globalPhases
         );
 
         // Named containers
@@ -699,7 +674,7 @@
                 container.id,
                 workflowData.steps,
                 workflowData.supportRelations,
-                workflowData.phaseTypes
+                globalPhases
             );
         });
 
@@ -1056,21 +1031,28 @@
                             Graph
                         </button>
                     </div>
-                    <button
-                        class="px-1.5 py-0.5 rounded text-[10px] font-medium transition-all flex items-center gap-1 {showPhaseSettings
-                            ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                            : 'bg-gray-100 text-gray-500 hover:text-purple-600 hover:bg-purple-50 border border-gray-200'}"
-                        on:click|stopPropagation={() => (showPhaseSettings = !showPhaseSettings)}
-                        title="위상 설정"
-                    >
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                        </svg>
-                        위상
-                        {#if (workflowData.phaseTypes ?? []).length > 0}
-                            <span class="text-[9px] bg-purple-200 px-1 rounded">{(workflowData.phaseTypes ?? []).length}</span>
-                        {/if}
-                    </button>
+                    {#if globalPhases.length > 0}
+                        <span
+                            class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-600 border border-purple-200 flex items-center gap-1"
+                            title="설정에서 정의된 위상"
+                        >
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                            </svg>
+                            위상 {globalPhases.length}개
+                        </span>
+                    {:else}
+                        <a
+                            href="/settings#section-phases"
+                            class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-400 hover:text-purple-600 hover:bg-purple-50 border border-gray-200 flex items-center gap-1"
+                            title="설정에서 위상 추가"
+                        >
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            위상 추가
+                        </a>
+                    {/if}
                     <button
                         class="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                         on:click|stopPropagation={handleDeleteWorkflow}
@@ -1095,6 +1077,7 @@
                     {workflowData}
                     {workflowSteps}
                     {stepContainers}
+                    {globalPhases}
                 />
             {:else}
                 <!-- Selection Toolbar (shown when items are selected) -->
@@ -1569,7 +1552,7 @@
                         <div class="bg-white rounded-lg shadow-xl p-4 min-w-[200px] max-w-[300px]" on:click|stopPropagation>
                             <h3 class="text-sm font-medium text-gray-800 mb-3">위상 선택</h3>
                             <div class="space-y-2">
-                                {#each workflowData.phaseTypes ?? [] as phase (phase.id)}
+                                {#each globalPhases as phase (phase.id)}
                                     <button
                                         class="w-full px-3 py-2 text-left text-sm rounded-lg border border-gray-200 hover:border-purple-400 hover:bg-purple-50 transition-colors flex items-center gap-2"
                                         on:click={() => handlePhaseSelect(phase.id)}
@@ -1589,71 +1572,6 @@
                     </div>
                 {/if}
 
-                <!-- Phase Settings Panel -->
-                {#if showPhaseSettings}
-                    <div class="absolute top-0 right-0 w-64 bg-white border-l border-gray-200 h-full shadow-lg z-40 flex flex-col">
-                        <div class="px-3 py-2 border-b border-gray-200 flex items-center justify-between bg-purple-50">
-                            <h3 class="text-sm font-medium text-purple-800">위상 설정</h3>
-                            <button
-                                class="text-gray-400 hover:text-gray-600"
-                                on:click={() => showPhaseSettings = false}
-                            >
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div class="flex-1 overflow-y-auto p-3 space-y-2">
-                            <p class="text-[10px] text-gray-500 mb-2">
-                                위상을 추가하면 step을 다른 step 위에 드래그하여 지원 관계를 만들 수 있습니다.
-                            </p>
-                            {#each workflowData.phaseTypes ?? [] as phase, idx (phase.id)}
-                                <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg group">
-                                    <input
-                                        type="color"
-                                        value={phase.color}
-                                        class="w-6 h-6 rounded cursor-pointer border-0"
-                                        on:change={(e) => handleUpdatePhase(phase.id, { color: e.currentTarget.value })}
-                                    />
-                                    <input
-                                        type="text"
-                                        value={phase.name}
-                                        class="flex-1 text-xs bg-transparent border-b border-transparent focus:border-purple-400 outline-none px-1"
-                                        on:blur={(e) => handleUpdatePhase(phase.id, { name: e.currentTarget.value })}
-                                    />
-                                    <button
-                                        class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        on:click={() => handleRemovePhase(phase.id)}
-                                        title="삭제"
-                                    >
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            {/each}
-
-                            {#if (workflowData.phaseTypes ?? []).length === 0}
-                                <div class="text-xs text-gray-400 text-center py-4">
-                                    아직 위상이 없습니다
-                                </div>
-                            {/if}
-                        </div>
-                        <div class="p-3 border-t border-gray-200">
-                            <button
-                                class="w-full py-2 border border-dashed border-purple-300 rounded-lg text-purple-500 hover:border-purple-500 hover:bg-purple-50 text-xs font-medium transition-colors"
-                                on:click={() => {
-                                    const colors = ['#a855f7', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
-                                    const usedColors = new Set((workflowData.phaseTypes ?? []).map(p => p.color));
-                                    const availableColor = colors.find(c => !usedColors.has(c)) || colors[0];
-                                    handleAddPhase(`위상 ${(workflowData.phaseTypes ?? []).length + 1}`, availableColor);
-                                }}
-                            >
-                                + 새 위상 추가
-                            </button>
-                        </div>
-                    </div>
-                {/if}
             {/if}
         </div>
     {/if}
