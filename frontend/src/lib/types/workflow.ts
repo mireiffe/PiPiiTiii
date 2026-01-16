@@ -21,13 +21,6 @@ export interface WorkflowSteps {
     rows: WorkflowStepRow[];
 }
 
-// Step Container Definition (settings)
-export interface StepContainer {
-    id: string;
-    name: string;
-    order: number;
-}
-
 // ========== Phase System (Support Steps) ==========
 
 // Phase type definition - defines types of phases (main is always implicit)
@@ -113,7 +106,6 @@ export interface StepAttachment {
 export interface WorkflowStepInstance {
     id: string;
     stepId: string;  // Reference to WorkflowStepRow.id in settings
-    containerId?: string;  // Reference to StepContainer.id (optional, null = uncategorized)
     captures: StepCapture[];
     attachments: StepAttachment[];
     order: number;
@@ -152,11 +144,6 @@ export function generateStepCaptureId(): string {
 // Generate unique ID for attachments
 export function generateAttachmentId(): string {
     return `att_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
-// Generate unique ID for containers
-export function generateContainerId(): string {
-    return `cont_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
 // Create a new step instance from a step definition
@@ -414,10 +401,10 @@ export function updatePhaseType(
     };
 }
 
-// ========== Container Layout Functions (for Phase System) ==========
+// ========== Layout Functions (for Phase System) ==========
 
 /**
- * Get steps grouped by target step for a container
+ * Get steps grouped by target step
  * Returns main flow steps with their supporters
  */
 export interface StepWithSupports {
@@ -429,28 +416,20 @@ export interface StepWithSupports {
     }[];
 }
 
-export function getContainerStepsWithSupports(
-    containerId: string | undefined,
+export function getStepsWithSupports(
     steps: WorkflowStepInstance[],
     supportRelations: SupportRelation[] | undefined,
     phaseTypes: PhaseType[] | undefined
 ): StepWithSupports[] {
-    const containerKey = containerId ?? '__uncategorized__';
-
-    // Get steps in this container
-    const containerSteps = steps.filter(s =>
-        (s.containerId ?? '__uncategorized__') === containerKey
-    );
-
     // Separate main flow from supporters
-    const mainFlowSteps = getMainFlowSteps(containerSteps, supportRelations);
+    const mainFlowSteps = getMainFlowSteps(steps, supportRelations);
 
     return mainFlowSteps.map(step => {
         const supports = getSupportSteps(step.id, supportRelations);
         return {
             step,
             supporters: supports.map(rel => ({
-                step: containerSteps.find(s => s.id === rel.supporterStepId)!,
+                step: steps.find(s => s.id === rel.supporterStepId)!,
                 relation: rel,
                 phase: (phaseTypes ?? []).find(p => p.id === rel.phaseId),
             })).filter(s => s.step !== undefined),
@@ -461,7 +440,7 @@ export function getContainerStepsWithSupports(
 /**
  * Layout row for rendering with phase support
  */
-export interface ContainerLayoutRow {
+export interface LayoutRow {
     mainStep: WorkflowStepInstance;
     supporters: {
         step: WorkflowStepInstance;
@@ -471,16 +450,14 @@ export interface ContainerLayoutRow {
 }
 
 /**
- * Get container layout rows for rendering
+ * Get layout rows for rendering (main steps with their supporters)
  */
-export function getContainerLayoutRows(
-    containerId: string | undefined,
+export function getLayoutRows(
     steps: WorkflowStepInstance[],
     supportRelations: SupportRelation[] | undefined,
     phaseTypes: PhaseType[] | undefined
-): ContainerLayoutRow[] {
-    const stepsWithSupports = getContainerStepsWithSupports(
-        containerId,
+): LayoutRow[] {
+    const stepsWithSupports = getStepsWithSupports(
         steps,
         supportRelations,
         phaseTypes

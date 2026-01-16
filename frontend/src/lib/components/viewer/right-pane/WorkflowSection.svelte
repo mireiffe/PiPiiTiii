@@ -7,7 +7,6 @@
     import StepDefinitionPopup from "./workflow/StepDefinitionPopup.svelte";
     import WorkflowStepItem from "./workflow/WorkflowStepItem.svelte";
     import TimelineGraph from "./workflow/TimelineGraph.svelte";
-    import ContainerGraph from "./workflow/ContainerGraph.svelte";
     import {
         createDragDropHandlers,
         type DragDropState,
@@ -18,10 +17,8 @@
         WorkflowStepInstance,
         ProjectWorkflowData,
         StepAttachment,
-        StepContainer,
         PhaseType,
-        SupportRelation,
-        ContainerLayoutRow,
+        LayoutRow,
     } from "$lib/types/workflow";
     import {
         createEmptyWorkflowData,
@@ -29,13 +26,12 @@
         createStepCapture,
         createAttachment,
         generateAttachmentId,
-        getContainerLayoutRows,
+        getLayoutRows,
         validateSupportCreation,
         addSupportRelation,
         removeSupportByStepId,
         cleanupOrphanedSupports,
         isStepSupporter,
-        getSupportInfo,
         getMainFlowSteps,
     } from "$lib/types/workflow";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
@@ -48,7 +44,6 @@
     export let projectId: string = "";
     export let workflowData: ProjectWorkflowData = createEmptyWorkflowData();
     export let workflowSteps: WorkflowSteps = { columns: [], rows: [] };
-    export let stepContainers: StepContainer[] = [];
     export let globalPhases: PhaseType[] = [];  // Global phases from settings
     export let savingWorkflow = false;
     export let captureMode = false;
@@ -78,17 +73,9 @@
 
     // Drag & Drop State - Unified mode system
     // Only one drag mode is active at a time to avoid UI conflicts
-    type DragMode = 'reorder' | 'insert' | 'support' | null;
+    type DragMode = 'reorder' | 'support' | null;
     let dragMode: DragMode = null;
     let dragState: DragDropState = { draggedIndex: null, dropTargetIndex: null };
-    let dropTargetContainerId: string | null = null;  // For container-level drop (insert mode)
-    let collapsedContainers: Set<string> = new Set();
-
-    // Insert guide state (for cross-container insertion)
-    let insertGuideIndex: number | null = null;
-    let insertGuideContainerId: string | null | undefined = null;
-    let insertHoverTimer: ReturnType<typeof setTimeout> | null = null;
-    const INSERT_GUIDE_DELAY = 400; // ms to wait before showing insert guide
 
     // Support/Phase creation state
     let supportGuideTargetStepId: string | null = null;  // Target step for support placement
@@ -102,8 +89,6 @@
     // Multi-selection state
     let selectedStepIds: Set<string> = new Set();
     let lastClickedStepId: string | null = null;
-    let showMoveToContainerDropdown = false;
-    let moveDropdownPosition = { top: 0, left: 0 };
     let selectionModeActive = false;  // 체크박스 표시 여부
 
     // Selection helpers
@@ -186,54 +171,12 @@
         selectedStepIds.clear();
         selectedStepIds = selectedStepIds;
         lastClickedStepId = null;
-        showMoveToContainerDropdown = false;
         selectionModeActive = false;
     }
 
     function selectAll() {
         workflowData.steps.forEach(step => selectedStepIds.add(step.id));
         selectedStepIds = selectedStepIds;
-    }
-
-    function openMoveDropdown(event: MouseEvent) {
-        const button = event.currentTarget as HTMLElement;
-        const rect = button.getBoundingClientRect();
-        moveDropdownPosition = {
-            top: rect.bottom + 4,
-            left: rect.left
-        };
-        showMoveToContainerDropdown = true;
-    }
-
-    function moveSelectedToContainer(targetContainerId: string | null) {
-        if (selectedStepIds.size === 0) return;
-
-        const steps = [...workflowData.steps];
-
-        // Update containerId for all selected steps
-        steps.forEach((step, index) => {
-            if (selectedStepIds.has(step.id)) {
-                steps[index] = {
-                    ...step,
-                    containerId: targetContainerId || undefined
-                };
-            }
-        });
-
-        workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
-        dispatch("workflowChange", workflowData);
-
-        clearSelection();
-    }
-
-    // Close dropdown when clicking outside
-    function handleDropdownClickOutside(event: MouseEvent) {
-        if (showMoveToContainerDropdown) {
-            const target = event.target as HTMLElement;
-            if (!target.closest('.move-dropdown')) {
-                showMoveToContainerDropdown = false;
-            }
-        }
     }
 
     const dragDropHandlers = createDragDropHandlers(
@@ -249,52 +192,8 @@
         () => captureMode && exitCaptureMode()
     );
 
-    // Container helpers
-    function toggleContainerCollapse(containerId: string) {
-        if (collapsedContainers.has(containerId)) {
-            collapsedContainers.delete(containerId);
-        } else {
-            collapsedContainers.add(containerId);
-        }
-        collapsedContainers = collapsedContainers;
-    }
-
-    function getStepsByContainer(containerId: string | null): WorkflowStepInstance[] {
-        return workflowData.steps.filter(s =>
-            containerId === null ? !s.containerId : s.containerId === containerId
-        );
-    }
-
-    function handleContainerDragOver(e: DragEvent, containerId: string | null) {
-        e.preventDefault();
-        if (dragState.draggedIndex !== null) {
-            const draggedStep = workflowData.steps[dragState.draggedIndex];
-            const isCrossContainer = (draggedStep.containerId ?? null) !== containerId;
-
-            // Only show container highlight for cross-container drags
-            if (isCrossContainer && dragMode !== 'support') {
-                dropTargetContainerId = containerId;
-            }
-        }
-    }
-
-    function handleContainerDragLeave() {
-        dropTargetContainerId = null;
-        clearInsertGuide();
-    }
-
     // Clear all drag guides and reset mode
     function clearAllDragGuides() {
-        // Clear insert guide
-        if (insertHoverTimer) {
-            clearTimeout(insertHoverTimer);
-            insertHoverTimer = null;
-        }
-        insertGuideIndex = null;
-        insertGuideContainerId = null;
-        lastHoverStepId = null;
-        lastHoverPosition = null;
-
         // Clear support guide
         if (supportHoverTimer) {
             clearTimeout(supportHoverTimer);
@@ -304,20 +203,6 @@
 
         // Reset mode
         dragMode = null;
-        dropTargetContainerId = null;
-    }
-
-    function clearInsertGuide() {
-        if (insertHoverTimer) {
-            clearTimeout(insertHoverTimer);
-            insertHoverTimer = null;
-        }
-        insertGuideIndex = null;
-        insertGuideContainerId = null;
-        if (dragMode === 'insert') {
-            dragMode = null;
-            dropTargetContainerId = null;
-        }
     }
 
     function clearSupportGuide() {
@@ -333,9 +218,6 @@
 
     function handleStepHoverForSupport(e: DragEvent, targetStepId: string) {
         if (dragState.draggedIndex === null) return;
-
-        // If already in insert mode with visible guide, don't switch to support
-        if (dragMode === 'insert' && insertGuideIndex !== null) return;
 
         const draggedStep = workflowData.steps[dragState.draggedIndex];
 
@@ -383,9 +265,6 @@
         supportHoverTimer = setTimeout(() => {
             dragMode = 'support';
             supportGuideTargetStepId = targetStepId;
-            // Clear other guides
-            insertGuideIndex = null;
-            insertGuideContainerId = null;
         }, SUPPORT_GUIDE_DELAY);
     }
 
@@ -458,249 +337,12 @@
         dispatch("workflowChange", workflowData);
     }
 
-    // Track hover position for insert guide
-    let lastHoverStepId: string | null = null;
-    let lastHoverPosition: 'top' | 'bottom' | null = null;
-
-    function handleStepHoverForInsert(e: DragEvent, stepId: string, stepIndex: number, stepContainerId: string | undefined) {
-        // Only track hover for cross-container drags
-        if (dragState.draggedIndex === null) return;
-
-        // If support mode is active, don't activate insert mode
-        if (dragMode === 'support') return;
-
-        const draggedStep = workflowData.steps[dragState.draggedIndex];
-        const isCrossContainer = (draggedStep.containerId ?? null) !== (stepContainerId ?? null);
-        if (!isCrossContainer) {
-            if (dragMode === 'insert') clearInsertGuide();
-            return;
-        }
-
-        const target = e.currentTarget as HTMLElement;
-        const rect = target.getBoundingClientRect();
-        const offsetY = e.clientY - rect.top;
-        const isTopHalf = offsetY < rect.height / 2;
-        const position = isTopHalf ? 'top' : 'bottom';
-
-        // If hovering a different step or position, reset timer
-        if (lastHoverStepId !== stepId || lastHoverPosition !== position) {
-            // Clear previous timer
-            if (insertHoverTimer) {
-                clearTimeout(insertHoverTimer);
-                insertHoverTimer = null;
-            }
-
-            lastHoverStepId = stepId;
-            lastHoverPosition = position;
-
-            insertHoverTimer = setTimeout(() => {
-                dragMode = 'insert';
-                dropTargetContainerId = stepContainerId ?? null;
-                insertGuideIndex = position === 'top' ? stepIndex : stepIndex + 1;
-                insertGuideContainerId = stepContainerId;
-                // Clear support guide if any
-                supportGuideTargetStepId = null;
-            }, INSERT_GUIDE_DELAY);
-        }
-    }
-
-    function handleContainerDrop(e: DragEvent, containerId: string | null) {
-        e.preventDefault();
-        if (dragState.draggedIndex === null) return;
-
-        const draggedStep = workflowData.steps[dragState.draggedIndex];
-        const sourceContainerId = draggedStep.containerId ?? null;
-
-        // Same container - no action
-        if (sourceContainerId === containerId) {
-            dragState = { draggedIndex: null, dropTargetIndex: null };
-            clearAllDragGuides();
-            return;
-        }
-
-        // Check if insert guide is active - use specific position
-        if (dragMode === 'insert' && insertGuideIndex !== null && insertGuideContainerId === (containerId ?? undefined)) {
-            const steps = [...workflowData.steps];
-            const [removed] = steps.splice(dragState.draggedIndex, 1);
-
-            let adjustedIndex = insertGuideIndex;
-            if (dragState.draggedIndex < insertGuideIndex) {
-                adjustedIndex -= 1;
-            }
-
-            removed.containerId = containerId || undefined;
-            steps.splice(adjustedIndex, 0, removed);
-
-            workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
-            dispatch("workflowChange", workflowData);
-
-            dragState = { draggedIndex: null, dropTargetIndex: null };
-            clearAllDragGuides();
-            return;
-        }
-
-        // Default behavior: position based on container order
-        // Get container orders (uncategorized = -1)
-        const sourceOrder = sourceContainerId
-            ? sortedContainers.find(c => c.id === sourceContainerId)?.order ?? -1
-            : -1;
-        const targetOrder = containerId
-            ? sortedContainers.find(c => c.id === containerId)?.order ?? -1
-            : -1;
-
-        // Calculate target position based on container order
-        let newIndex: number;
-        if (targetOrder > sourceOrder) {
-            // Moving to higher order container -> first position of that container
-            const targetContainerSteps = containerId
-                ? workflowData.steps.filter(s => s.containerId === containerId)
-                : workflowData.steps.filter(s => !s.containerId);
-
-            if (targetContainerSteps.length > 0) {
-                // Insert before the first step of target container
-                newIndex = workflowData.steps.findIndex(s => s.id === targetContainerSteps[0].id);
-            } else {
-                // Empty container - find insertion point based on container order
-                // Find first step from a higher-order container
-                const higherContainerIds = sortedContainers
-                    .filter(c => c.order > targetOrder)
-                    .map(c => c.id);
-                const nextStep = workflowData.steps.find(s =>
-                    s.containerId && higherContainerIds.includes(s.containerId)
-                );
-                newIndex = nextStep
-                    ? workflowData.steps.findIndex(s => s.id === nextStep.id)
-                    : workflowData.steps.length;
-            }
-        } else {
-            // Moving to lower order container -> last position of that container
-            const targetContainerSteps = containerId
-                ? workflowData.steps.filter(s => s.containerId === containerId)
-                : workflowData.steps.filter(s => !s.containerId);
-
-            if (targetContainerSteps.length > 0) {
-                // Insert after the last step of target container
-                const lastStep = targetContainerSteps[targetContainerSteps.length - 1];
-                newIndex = workflowData.steps.findIndex(s => s.id === lastStep.id) + 1;
-            } else {
-                // Empty container - find insertion point
-                // Find first step from a higher-order container than target
-                const higherContainerIds = sortedContainers
-                    .filter(c => c.order > targetOrder)
-                    .map(c => c.id);
-                const nextStep = workflowData.steps.find(s =>
-                    s.containerId && higherContainerIds.includes(s.containerId)
-                );
-                newIndex = nextStep
-                    ? workflowData.steps.findIndex(s => s.id === nextStep.id)
-                    : workflowData.steps.length;
-            }
-        }
-
-        // Build new steps array
-        const steps = [...workflowData.steps];
-        const [removed] = steps.splice(dragState.draggedIndex, 1);
-
-        // Adjust target index if needed after removal
-        let adjustedIndex = newIndex;
-        if (dragState.draggedIndex < newIndex) {
-            adjustedIndex -= 1;
-        }
-
-        // Update container and insert at new position
-        removed.containerId = containerId || undefined;
-        steps.splice(adjustedIndex, 0, removed);
-
-        workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
-        dispatch("workflowChange", workflowData);
-
-        dragState = { draggedIndex: null, dropTargetIndex: null };
-        clearAllDragGuides();
-    }
-
-    // Handle drop on a step within a container (combines reorder + container change)
-    function handleStepDropWithContainer(e: DragEvent, targetContainerId: string | undefined) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const { draggedIndex, dropTargetIndex } = dragState;
-        if (draggedIndex === null || dropTargetIndex === null) {
-            clearAllDragGuides();
-            dragState = { draggedIndex: null, dropTargetIndex: null };
-            return;
-        }
-
-        const steps = [...workflowData.steps];
-        const draggedStep = steps[draggedIndex];
-
-        // Update container if different
-        const newContainerId = targetContainerId || undefined;
-        if (draggedStep.containerId !== newContainerId) {
-            steps[draggedIndex] = { ...draggedStep, containerId: newContainerId };
-        }
-
-        // Reorder
-        const [removed] = steps.splice(draggedIndex, 1);
-        let target = dropTargetIndex;
-        if (draggedIndex < target) target -= 1;
-        if (target !== draggedIndex || draggedStep.containerId !== newContainerId) {
-            steps.splice(target, 0, removed);
-            workflowData = { ...workflowData, steps, updatedAt: new Date().toISOString() };
-            dispatch("workflowChange", workflowData);
-        }
-
-        dragState = { draggedIndex: null, dropTargetIndex: null };
-        clearAllDragGuides();
-    }
-
-    // Sort containers by order
-    $: sortedContainers = [...stepContainers].sort((a, b) => a.order - b.order);
-
-    // Calculate layout rows for each container (for phase/support layout)
-    $: containerLayoutMap = (() => {
-        const map: Record<string, ContainerLayoutRow[]> = {};
-
-        // Uncategorized
-        map['__uncategorized__'] = getContainerLayoutRows(
-            undefined,
-            workflowData.steps,
-            workflowData.supportRelations,
-            globalPhases
-        );
-
-        // Named containers
-        sortedContainers.forEach(container => {
-            map[container.id] = getContainerLayoutRows(
-                container.id,
-                workflowData.steps,
-                workflowData.supportRelations,
-                globalPhases
-            );
-        });
-
-        return map;
-    })();
-
-    // Reactive: pre-compute steps by container (workflowData.steps dependency is explicit)
-    $: stepsByContainerId = (() => {
-        const map: Record<string, WorkflowStepInstance[]> = { __uncategorized__: [] };
-        sortedContainers.forEach(c => { map[c.id] = []; });
-
-        workflowData.steps.forEach(step => {
-            const key = step.containerId ?? '__uncategorized__';
-            if (map[key]) {
-                map[key].push(step);
-            } else {
-                // containerId references a non-existent container, put in uncategorized
-                map.__uncategorized__.push(step);
-            }
-        });
-
-        return map;
-    })();
-
-    // Reactive uncategorized steps
-    $: uncategorizedSteps = sortedContainers.length > 0 ? (stepsByContainerId.__uncategorized__ || []) : [];
+    // Calculate layout rows for phase/support layout
+    $: layoutRows = getLayoutRows(
+        workflowData.steps,
+        workflowData.supportRelations,
+        globalPhases
+    );
 
     // Helpers
     function exitCaptureMode() {
@@ -720,7 +362,6 @@
     onMount(() => window.addEventListener("keydown", handleKeyDown));
     onDestroy(() => {
         window.removeEventListener("keydown", handleKeyDown);
-        if (insertHoverTimer) clearTimeout(insertHoverTimer);
         if (supportHoverTimer) clearTimeout(supportHoverTimer);
     });
 
@@ -1001,7 +642,7 @@
     }
 </script>
 
-<svelte:window on:click={handleClickOutside} on:click={handleDropdownClickOutside} />
+<svelte:window on:click={handleClickOutside} />
 
 <div class="border-b border-gray-200 bg-white flex flex-col {isExpanded ? 'flex-1 min-h-0' : ''}">
     <AccordionHeader
@@ -1073,10 +714,9 @@
             class="flex-1 flex flex-col min-h-[400px] bg-gray-50/50 relative overflow-hidden"
         >
             {#if viewMode === "graph"}
-                <ContainerGraph
+                <TimelineGraph
                     {workflowData}
                     {workflowSteps}
-                    {stepContainers}
                     {globalPhases}
                 />
             {:else}
@@ -1100,47 +740,6 @@
                                 선택 해제
                             </button>
                         </div>
-                        <div class="flex-1"></div>
-                        {#if sortedContainers.length > 0}
-                            <div class="relative move-dropdown">
-                                <button
-                                    class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-md flex items-center gap-1.5 transition-colors shadow-sm"
-                                    on:click={openMoveDropdown}
-                                >
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                                    </svg>
-                                    Container로 이동
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                {#if showMoveToContainerDropdown}
-                                    <div
-                                        class="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px] z-50 max-h-[300px] overflow-y-auto"
-                                    >
-                                        <button
-                                            class="w-full px-3 py-2 text-left text-xs hover:bg-gray-100 flex items-center gap-2"
-                                            on:click={() => moveSelectedToContainer(null)}
-                                        >
-                                            <span class="w-2 h-2 rounded-full bg-gray-400"></span>
-                                            미분류
-                                        </button>
-                                        <div class="border-t border-gray-100 my-1"></div>
-                                        {#each sortedContainers as container}
-                                            <button
-                                                class="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2"
-                                                on:click={() => moveSelectedToContainer(container.id)}
-                                            >
-                                                <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                                                {container.name}
-                                            </button>
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </div>
-                        {/if}
                     </div>
                 {/if}
 
@@ -1168,477 +767,161 @@
                     {/if}
                 </div>
 
-                <!-- Step List with Containers -->
+                <!-- Step List with Phase Support -->
                 <div class="flex-1 overflow-y-auto p-3 space-y-3 relative flex flex-col">
-                    {#if sortedContainers.length === 0}
-                        <!-- No containers defined: show flat list with phase support -->
-                        {@const flatLayoutRows = containerLayoutMap['__uncategorized__'] || []}
-                        <div class="relative">
-                            <div class="absolute left-[23px] top-0 bottom-0 w-px bg-gray-200 z-0"></div>
-                            {#each flatLayoutRows as row, rowIndex (row.mainStep.id)}
-                                {@const step = row.mainStep}
-                                {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
-                                {@const stepDef = getStepDefinition(step.stepId)}
-                                {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
-                                {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === step.id}
+                    <div class="relative">
+                        <div class="absolute left-[23px] top-0 bottom-0 w-px bg-gray-200 z-0"></div>
+                        {#each layoutRows as row, rowIndex (row.mainStep.id)}
+                            {@const step = row.mainStep}
+                            {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
+                            {@const stepDef = getStepDefinition(step.stepId)}
+                            {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
+                            {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === step.id}
 
-                                <div class="relative mb-2">
-                                    <!-- Support creation guide -->
-                                    {#if showSupportGuide}
-                                        <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-                                            <div class="support-guide-indicator">
-                                                <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
-                                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
-                                                    </svg>
-                                                </div>
-                                                <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
-                                                    위상 지원
-                                                </span>
+                            <div class="relative mb-2">
+                                <!-- Support creation guide -->
+                                {#if showSupportGuide}
+                                    <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                                        <div class="support-guide-indicator">
+                                            <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
+                                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+                                                </svg>
                                             </div>
+                                            <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
+                                                위상 지원
+                                            </span>
                                         </div>
-                                    {/if}
-
-                                    <div
-                                        draggable="true"
-                                        on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                        on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
-                                        on:drop={(e) => {
-                                            if (dragMode === 'support' && supportGuideTargetStepId === step.id) {
-                                                handleSupportDrop(e, step.id);
-                                            } else {
-                                                dragDropHandlers.handleDrop(e);
-                                            }
-                                        }}
-                                        on:dragover={(e) => {
-                                            dragDropHandlers.handleDragOver(e, index);
-                                            handleStepHoverForSupport(e, step.id);
-                                        }}
-                                        on:dragleave={() => clearSupportGuide()}
-                                    >
-                                        <WorkflowStepItem
-                                            {step}
-                                            {index}
-                                            {stepDef}
-                                            {color}
-                                            {workflowSteps}
-                                            isExpanded={expandedStepId === step.id}
-                                            isCapturing={captureTargetStepId === step.id}
-                                            isAddingAttachment={addingAttachmentToStepId === step.id}
-                                            isBeingDragged={dragState.draggedIndex === index}
-                                            showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
-                                            showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
-                                            isLastStep={index === workflowData.steps.length - 1}
-                                            {attachmentTextInput}
-                                            on:toggleExpand={() => toggleStepExpand(step.id)}
-                                            on:startCapture={() => startCaptureForStep(step.id)}
-                                            on:toggleAttachment={() => toggleAttachmentSection(step.id)}
-                                            on:moveUp={() => moveStepUp(index)}
-                                            on:moveDown={() => moveStepDown(index)}
-                                            on:remove={() => handleRemoveStep(step.id)}
-                                            on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
-                                            on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
-                                            on:addTextAttachment={() => addTextAttachment(step.id)}
-                                            on:paste={(e) => handlePaste(e.detail, step.id)}
-                                        />
                                     </div>
+                                {/if}
 
-                                    <!-- Supporter steps (indented, with phase indicator) -->
-                                    {#if row.supporters.length > 0}
-                                        <div class="ml-8 mt-1 space-y-1 border-l-2 border-purple-200 pl-2">
-                                            {#each row.supporters as supporter (supporter.step.id)}
-                                                {@const supStep = supporter.step}
-                                                {@const supIndex = workflowData.steps.findIndex(s => s.id === supStep.id)}
-                                                {@const supStepDef = getStepDefinition(supStep.stepId)}
-                                                {@const supColor = EVIDENCE_COLORS[supIndex % EVIDENCE_COLORS.length]}
-
-                                                <div class="relative group">
-                                                    <!-- Phase badge -->
-                                                    <div
-                                                        class="absolute -left-5 top-2 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white shadow-sm"
-                                                        style="background-color: {supporter.phase?.color || '#a855f7'}"
-                                                        title="{supporter.phase?.name || '위상'}"
-                                                    >
-                                                        P
-                                                    </div>
-
-                                                    <!-- Remove support button -->
-                                                    <button
-                                                        class="absolute -left-6 top-6 w-3 h-3 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
-                                                        title="지원 해제"
-                                                        on:click|stopPropagation={() => handleRemoveSupport(supStep.id)}
-                                                    >
-                                                        <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                    </button>
-
-                                                    <div
-                                                        draggable="true"
-                                                        on:dragstart={(e) => dragDropHandlers.handleDragStart(e, supIndex)}
-                                                        on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
-                                                        on:drop={dragDropHandlers.handleDrop}
-                                                        on:dragover={(e) => dragDropHandlers.handleDragOver(e, supIndex)}
-                                                    >
-                                                        <WorkflowStepItem
-                                                            step={supStep}
-                                                            index={supIndex}
-                                                            stepDef={supStepDef}
-                                                            color={supColor}
-                                                            {workflowSteps}
-                                                            isExpanded={expandedStepId === supStep.id}
-                                                            isCapturing={captureTargetStepId === supStep.id}
-                                                            isAddingAttachment={addingAttachmentToStepId === supStep.id}
-                                                            isBeingDragged={dragState.draggedIndex === supIndex}
-                                                            showDropIndicatorTop={false}
-                                                            showDropIndicatorBottom={false}
-                                                            isLastStep={supIndex === workflowData.steps.length - 1}
-                                                            {attachmentTextInput}
-                                                            hideBadge={true}
-                                                            supportIndicator={true}
-                                                            phaseColor={supporter.phase?.color}
-                                                            phaseName={supporter.phase?.name}
-                                                            on:toggleExpand={() => toggleStepExpand(supStep.id)}
-                                                            on:startCapture={() => startCaptureForStep(supStep.id)}
-                                                            on:toggleAttachment={() => toggleAttachmentSection(supStep.id)}
-                                                            on:moveUp={() => moveStepUp(supIndex)}
-                                                            on:moveDown={() => moveStepDown(supIndex)}
-                                                            on:remove={() => handleRemoveStep(supStep.id)}
-                                                            on:removeCapture={(e) => removeCapture(supStep.id, e.detail.captureId)}
-                                                            on:openAttachmentModal={(e) => openAttachmentModal(supStep.id, e.detail.attachment)}
-                                                            on:addTextAttachment={() => addTextAttachment(supStep.id)}
-                                                            on:paste={(e) => handlePaste(e.detail, supStep.id)}
-                                                            on:removeSupport={() => handleRemoveSupport(supStep.id)}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            {/each}
-                                        </div>
-                                    {/if}
-                                </div>
-                            {/each}
-                        </div>
-                    {:else}
-                        <!-- With containers: show grouped view -->
-
-                        <!-- Uncategorized Steps (only shown when there are uncategorized items) -->
-                        {#if uncategorizedSteps.length > 0}
-                            <div
-                                class="rounded-lg border transition-all {dropTargetContainerId === null && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
-                                on:dragover={(e) => handleContainerDragOver(e, null)}
-                                on:dragleave={handleContainerDragLeave}
-                                on:drop={(e) => handleContainerDrop(e, null)}
-                            >
-                                <div class="px-3 py-2 bg-gray-100 border-b border-gray-200 rounded-t-lg">
-                                    <span class="text-xs font-medium text-gray-500">미분류</span>
-                                    <span class="text-xs text-gray-400 ml-1">({uncategorizedSteps.length})</span>
-                                </div>
-                                <div class="p-2 space-y-2 relative min-h-[40px]">
-                                    <div class="absolute left-[23px] top-2 bottom-2 w-px bg-gray-200 z-0"></div>
-                                    {#each uncategorizedSteps as step, localIndex (step.id)}
-                                        {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
-                                        {@const stepDef = getStepDefinition(step.stepId)}
-                                        {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
-                                        {@const showInsertGuideTop = insertGuideIndex === index && insertGuideContainerId === undefined && localIndex === 0}
-                                        {@const showInsertGuideBottom = insertGuideIndex === index + 1 && insertGuideContainerId === undefined}
-
-                                        <!-- Insert guide indicator (top) -->
-                                        {#if showInsertGuideTop}
-                                            <div class="relative h-1 -mt-1 mb-1">
-                                                <div class="absolute inset-x-0 h-1 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-300"></div>
-                                            </div>
-                                        {/if}
-
-                                        {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === step.id}
-                                        <div class="relative">
-                                            <!-- Support creation guide -->
-                                            {#if showSupportGuide}
-                                                <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-                                                    <div class="support-guide-indicator">
-                                                        <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
-                                                            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
-                                                            </svg>
-                                                        </div>
-                                                        <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
-                                                            위상 지원
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            {/if}
-
-                                            <div
-                                                draggable="true"
-                                                on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                                on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
-                                                on:drop={(e) => {
-                                                    if (dragMode === 'support' && supportGuideTargetStepId === step.id) {
-                                                        handleSupportDrop(e, step.id);
-                                                    } else {
-                                                        handleStepDropWithContainer(e, undefined);
-                                                    }
-                                                }}
-                                                on:dragover={(e) => {
-                                                    dragDropHandlers.handleDragOver(e, index);
-                                                    handleStepHoverForInsert(e, step.id, index, undefined);
-                                                    handleStepHoverForSupport(e, step.id);
-                                                }}
-                                                on:dragleave={() => clearSupportGuide()}
-                                            >
-                                            <WorkflowStepItem
-                                                {step}
-                                                {index}
-                                                {stepDef}
-                                                {color}
-                                                {workflowSteps}
-                                                isExpanded={expandedStepId === step.id}
-                                                isCapturing={captureTargetStepId === step.id}
-                                                isAddingAttachment={addingAttachmentToStepId === step.id}
-                                                isBeingDragged={dragState.draggedIndex === index}
-                                                showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
-                                                showDropIndicatorBottom={false}
-                                                isLastStep={index === workflowData.steps.length - 1}
-                                                {attachmentTextInput}
-                                                isSelected={selectedStepIds.has(step.id)}
-                                                showSelectionCheckbox={selectionModeActive}
-                                                on:toggleExpand={() => toggleStepExpand(step.id)}
-                                                on:startCapture={() => startCaptureForStep(step.id)}
-                                                on:toggleAttachment={() => toggleAttachmentSection(step.id)}
-                                                on:moveUp={() => moveStepUp(index)}
-                                                on:moveDown={() => moveStepDown(index)}
-                                                on:remove={() => handleRemoveStep(step.id)}
-                                                on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
-                                                on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
-                                                on:addTextAttachment={() => addTextAttachment(step.id)}
-                                                on:paste={(e) => handlePaste(e.detail, step.id)}
-                                                on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
-                                                on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
-                                            />
-                                            </div>
-                                        </div>
-
-                                        <!-- Insert guide indicator (bottom) -->
-                                        {#if showInsertGuideBottom}
-                                            <div class="relative h-1 mt-1 -mb-1">
-                                                <div class="absolute inset-x-0 h-1 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-300"></div>
-                                            </div>
-                                        {/if}
-                                    {/each}
-                                </div>
-                            </div>
-                        {/if}
-
-                        <!-- Container Groups -->
-                        {#each sortedContainers as container (container.id)}
-                            {@const containerSteps = stepsByContainerId[container.id] || []}
-                            {@const layoutRows = containerLayoutMap[container.id] || []}
-                            {@const hasSupporters = layoutRows.some(r => r.supporters.length > 0)}
-                            {@const isCollapsed = collapsedContainers.has(container.id)}
-                            <div
-                                class="rounded-lg border transition-all {dropTargetContainerId === container.id && dragState.draggedIndex !== null ? 'border-blue-400 border-2 bg-blue-50/50' : 'border-gray-200 bg-white'}"
-                                on:dragover={(e) => handleContainerDragOver(e, container.id)}
-                                on:dragleave={handleContainerDragLeave}
-                                on:drop={(e) => handleContainerDrop(e, container.id)}
-                            >
-                                <button
-                                    class="w-full px-3 py-2 bg-gradient-to-r from-blue-50 to-white border-b border-gray-200 rounded-t-lg flex items-center gap-2 hover:bg-blue-100/50 transition-colors"
-                                    on:click={() => toggleContainerCollapse(container.id)}
+                                <div
+                                    draggable="true"
+                                    on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
+                                    on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
+                                    on:drop={(e) => {
+                                        if (dragMode === 'support' && supportGuideTargetStepId === step.id) {
+                                            handleSupportDrop(e, step.id);
+                                        } else {
+                                            dragDropHandlers.handleDrop(e);
+                                        }
+                                    }}
+                                    on:dragover={(e) => {
+                                        dragDropHandlers.handleDragOver(e, index);
+                                        handleStepHoverForSupport(e, step.id);
+                                    }}
+                                    on:dragleave={() => clearSupportGuide()}
                                 >
-                                    <svg class="w-3.5 h-3.5 text-gray-500 transition-transform {isCollapsed ? '' : 'rotate-90'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                    </svg>
-                                    <span class="text-xs font-medium text-blue-700">{container.name}</span>
-                                    <span class="text-xs text-gray-400">({containerSteps.length})</span>
-                                    {#if hasSupporters}
-                                        <span class="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-600 text-[10px] font-medium rounded">
-                                            위상
-                                        </span>
-                                    {/if}
-                                </button>
-                                {#if !isCollapsed}
-                                    <div class="p-2 min-h-[40px]">
-                                        <!-- Phase-based layout with support steps -->
-                                        <div class="space-y-2 relative">
-                                            {#if layoutRows.length > 0}
-                                                <div class="absolute left-[23px] top-2 bottom-2 w-px bg-blue-200 z-0"></div>
-                                            {/if}
-                                            {#each layoutRows as row, localIndex (row.mainStep.id)}
-                                                {@const step = row.mainStep}
-                                                {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
-                                                {@const stepDef = getStepDefinition(step.stepId)}
-                                                {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
-                                                {@const showInsertGuideTop = insertGuideIndex === index && insertGuideContainerId === container.id && localIndex === 0}
-                                                {@const showInsertGuideBottom = insertGuideIndex === index + 1 && insertGuideContainerId === container.id}
-                                                {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === step.id}
+                                    <WorkflowStepItem
+                                        {step}
+                                        {index}
+                                        {stepDef}
+                                        {color}
+                                        {workflowSteps}
+                                        isExpanded={expandedStepId === step.id}
+                                        isCapturing={captureTargetStepId === step.id}
+                                        isAddingAttachment={addingAttachmentToStepId === step.id}
+                                        isBeingDragged={dragState.draggedIndex === index}
+                                        showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
+                                        showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
+                                        isLastStep={index === workflowData.steps.length - 1}
+                                        {attachmentTextInput}
+                                        isSelected={selectedStepIds.has(step.id)}
+                                        showSelectionCheckbox={selectionModeActive}
+                                        on:toggleExpand={() => toggleStepExpand(step.id)}
+                                        on:startCapture={() => startCaptureForStep(step.id)}
+                                        on:toggleAttachment={() => toggleAttachmentSection(step.id)}
+                                        on:moveUp={() => moveStepUp(index)}
+                                        on:moveDown={() => moveStepDown(index)}
+                                        on:remove={() => handleRemoveStep(step.id)}
+                                        on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
+                                        on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
+                                        on:addTextAttachment={() => addTextAttachment(step.id)}
+                                        on:paste={(e) => handlePaste(e.detail, step.id)}
+                                        on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
+                                        on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
+                                    />
+                                </div>
 
-                                                <!-- Insert guide indicator (top) -->
-                                                {#if showInsertGuideTop}
-                                                    <div class="relative h-1 -mt-1 mb-1">
-                                                        <div class="absolute inset-x-0 h-1 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-300"></div>
-                                                    </div>
-                                                {/if}
+                                <!-- Supporter steps (indented, with phase indicator) -->
+                                {#if row.supporters.length > 0}
+                                    <div class="ml-8 mt-1 space-y-1 border-l-2 border-purple-200 pl-2">
+                                        {#each row.supporters as supporter (supporter.step.id)}
+                                            {@const supStep = supporter.step}
+                                            {@const supIndex = workflowData.steps.findIndex(s => s.id === supStep.id)}
+                                            {@const supStepDef = getStepDefinition(supStep.stepId)}
+                                            {@const supColor = EVIDENCE_COLORS[supIndex % EVIDENCE_COLORS.length]}
 
-                                                <div class="relative">
-                                                    <!-- Support creation guide (bounce animation) -->
-                                                    {#if showSupportGuide}
-                                                        <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-                                                            <div class="support-guide-indicator">
-                                                                <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
-                                                                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
-                                                                    </svg>
-                                                                </div>
-                                                                <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
-                                                                    위상 지원
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    {/if}
-
-                                                    <!-- Main step -->
-                                                    <div
-                                                        draggable="true"
-                                                        on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                                        on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
-                                                        on:drop={(e) => {
-                                                            if (dragMode === 'support' && supportGuideTargetStepId === step.id) {
-                                                                handleSupportDrop(e, step.id);
-                                                            } else {
-                                                                handleStepDropWithContainer(e, container.id);
-                                                            }
-                                                        }}
-                                                        on:dragover={(e) => {
-                                                            dragDropHandlers.handleDragOver(e, index);
-                                                            handleStepHoverForInsert(e, step.id, index, container.id);
-                                                            handleStepHoverForSupport(e, step.id);
-                                                        }}
-                                                        on:dragleave={() => clearSupportGuide()}
-                                                    >
-                                                        <WorkflowStepItem
-                                                            {step}
-                                                            {index}
-                                                            {stepDef}
-                                                            {color}
-                                                            {workflowSteps}
-                                                            isExpanded={expandedStepId === step.id}
-                                                            isCapturing={captureTargetStepId === step.id}
-                                                            isAddingAttachment={addingAttachmentToStepId === step.id}
-                                                            isBeingDragged={dragState.draggedIndex === index}
-                                                            showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
-                                                            showDropIndicatorBottom={false}
-                                                            isLastStep={index === workflowData.steps.length - 1}
-                                                            {attachmentTextInput}
-                                                            isSelected={selectedStepIds.has(step.id)}
-                                                            showSelectionCheckbox={selectionModeActive}
-                                                            on:toggleExpand={() => toggleStepExpand(step.id)}
-                                                            on:startCapture={() => startCaptureForStep(step.id)}
-                                                            on:toggleAttachment={() => toggleAttachmentSection(step.id)}
-                                                            on:moveUp={() => moveStepUp(index)}
-                                                            on:moveDown={() => moveStepDown(index)}
-                                                            on:remove={() => handleRemoveStep(step.id)}
-                                                            on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
-                                                            on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
-                                                            on:addTextAttachment={() => addTextAttachment(step.id)}
-                                                            on:paste={(e) => handlePaste(e.detail, step.id)}
-                                                            on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
-                                                            on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
-                                                        />
-                                                    </div>
-
-                                                    <!-- Supporter steps (indented, with phase indicator) -->
-                                                    {#if row.supporters.length > 0}
-                                                        <div class="ml-8 mt-1 space-y-1 border-l-2 border-purple-200 pl-2">
-                                                            {#each row.supporters as supporter (supporter.step.id)}
-                                                                {@const supStep = supporter.step}
-                                                                {@const supIndex = workflowData.steps.findIndex(s => s.id === supStep.id)}
-                                                                {@const supStepDef = getStepDefinition(supStep.stepId)}
-                                                                {@const supColor = EVIDENCE_COLORS[supIndex % EVIDENCE_COLORS.length]}
-
-                                                                <div class="relative group">
-                                                                    <!-- Phase badge -->
-                                                                    <div
-                                                                        class="absolute -left-5 top-2 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white shadow-sm"
-                                                                        style="background-color: {supporter.phase?.color || '#a855f7'}"
-                                                                        title="{supporter.phase?.name || '위상'}"
-                                                                    >
-                                                                        P
-                                                                    </div>
-
-                                                                    <!-- Remove support button -->
-                                                                    <button
-                                                                        class="absolute -left-6 top-6 w-3 h-3 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
-                                                                        title="지원 해제"
-                                                                        on:click|stopPropagation={() => handleRemoveSupport(supStep.id)}
-                                                                    >
-                                                                        <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
-                                                                        </svg>
-                                                                    </button>
-
-                                                                    <div
-                                                                        draggable="true"
-                                                                        on:dragstart={(e) => dragDropHandlers.handleDragStart(e, supIndex)}
-                                                                        on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
-                                                                        on:drop={(e) => handleStepDropWithContainer(e, container.id)}
-                                                                        on:dragover={(e) => dragDropHandlers.handleDragOver(e, supIndex)}
-                                                                    >
-                                                                        <WorkflowStepItem
-                                                                            step={supStep}
-                                                                            index={supIndex}
-                                                                            stepDef={supStepDef}
-                                                                            color={supColor}
-                                                                            {workflowSteps}
-                                                                            isExpanded={expandedStepId === supStep.id}
-                                                                            isCapturing={captureTargetStepId === supStep.id}
-                                                                            isAddingAttachment={addingAttachmentToStepId === supStep.id}
-                                                                            isBeingDragged={dragState.draggedIndex === supIndex}
-                                                                            showDropIndicatorTop={false}
-                                                                            showDropIndicatorBottom={false}
-                                                                            isLastStep={supIndex === workflowData.steps.length - 1}
-                                                                            {attachmentTextInput}
-                                                                            isSelected={selectedStepIds.has(supStep.id)}
-                                                                            showSelectionCheckbox={selectionModeActive}
-                                                                            hideBadge={true}
-                                                                            supportIndicator={true}
-                                                                            phaseColor={supporter.phase?.color}
-                                                                            phaseName={supporter.phase?.name}
-                                                                            on:toggleExpand={() => toggleStepExpand(supStep.id)}
-                                                                            on:startCapture={() => startCaptureForStep(supStep.id)}
-                                                                            on:toggleAttachment={() => toggleAttachmentSection(supStep.id)}
-                                                                            on:moveUp={() => moveStepUp(supIndex)}
-                                                                            on:moveDown={() => moveStepDown(supIndex)}
-                                                                            on:remove={() => handleRemoveStep(supStep.id)}
-                                                                            on:removeCapture={(e) => removeCapture(supStep.id, e.detail.captureId)}
-                                                                            on:openAttachmentModal={(e) => openAttachmentModal(supStep.id, e.detail.attachment)}
-                                                                            on:addTextAttachment={() => addTextAttachment(supStep.id)}
-                                                                            on:paste={(e) => handlePaste(e.detail, supStep.id)}
-                                                                            on:checkboxClick={(e) => handleCheckboxClick(supStep.id, e.detail)}
-                                                                            on:cardClick={(e) => handleCardCtrlClick(supStep.id, e.detail)}
-                                                                            on:removeSupport={() => handleRemoveSupport(supStep.id)}
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                            {/each}
-                                                        </div>
-                                                    {/if}
+                                            <div class="relative group">
+                                                <!-- Phase badge -->
+                                                <div
+                                                    class="absolute -left-5 top-2 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white shadow-sm"
+                                                    style="background-color: {supporter.phase?.color || '#a855f7'}"
+                                                    title="{supporter.phase?.name || '위상'}"
+                                                >
+                                                    P
                                                 </div>
 
-                                                <!-- Insert guide indicator (bottom) -->
-                                                {#if showInsertGuideBottom}
-                                                    <div class="relative h-1 mt-1 -mb-1">
-                                                        <div class="absolute inset-x-0 h-1 bg-green-500 rounded-full animate-pulse shadow-sm shadow-green-300"></div>
-                                                    </div>
-                                                {/if}
-                                            {/each}
-                                        </div>
-                                        {#if containerSteps.length === 0}
-                                            <div class="text-xs text-gray-400 text-center py-2">드래그하여 여기에 놓기</div>
-                                        {/if}
+                                                <!-- Remove support button -->
+                                                <button
+                                                    class="absolute -left-6 top-6 w-3 h-3 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
+                                                    title="지원 해제"
+                                                    on:click|stopPropagation={() => handleRemoveSupport(supStep.id)}
+                                                >
+                                                    <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+
+                                                <div
+                                                    draggable="true"
+                                                    on:dragstart={(e) => dragDropHandlers.handleDragStart(e, supIndex)}
+                                                    on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
+                                                    on:drop={dragDropHandlers.handleDrop}
+                                                    on:dragover={(e) => dragDropHandlers.handleDragOver(e, supIndex)}
+                                                >
+                                                    <WorkflowStepItem
+                                                        step={supStep}
+                                                        index={supIndex}
+                                                        stepDef={supStepDef}
+                                                        color={supColor}
+                                                        {workflowSteps}
+                                                        isExpanded={expandedStepId === supStep.id}
+                                                        isCapturing={captureTargetStepId === supStep.id}
+                                                        isAddingAttachment={addingAttachmentToStepId === supStep.id}
+                                                        isBeingDragged={dragState.draggedIndex === supIndex}
+                                                        showDropIndicatorTop={false}
+                                                        showDropIndicatorBottom={false}
+                                                        isLastStep={supIndex === workflowData.steps.length - 1}
+                                                        {attachmentTextInput}
+                                                        isSelected={selectedStepIds.has(supStep.id)}
+                                                        showSelectionCheckbox={selectionModeActive}
+                                                        hideBadge={true}
+                                                        supportIndicator={true}
+                                                        phaseColor={supporter.phase?.color}
+                                                        phaseName={supporter.phase?.name}
+                                                        on:toggleExpand={() => toggleStepExpand(supStep.id)}
+                                                        on:startCapture={() => startCaptureForStep(supStep.id)}
+                                                        on:toggleAttachment={() => toggleAttachmentSection(supStep.id)}
+                                                        on:moveUp={() => moveStepUp(supIndex)}
+                                                        on:moveDown={() => moveStepDown(supIndex)}
+                                                        on:remove={() => handleRemoveStep(supStep.id)}
+                                                        on:removeCapture={(e) => removeCapture(supStep.id, e.detail.captureId)}
+                                                        on:openAttachmentModal={(e) => openAttachmentModal(supStep.id, e.detail.attachment)}
+                                                        on:addTextAttachment={() => addTextAttachment(supStep.id)}
+                                                        on:paste={(e) => handlePaste(e.detail, supStep.id)}
+                                                        on:checkboxClick={(e) => handleCheckboxClick(supStep.id, e.detail)}
+                                                        on:cardClick={(e) => handleCardCtrlClick(supStep.id, e.detail)}
+                                                        on:removeSupport={() => handleRemoveSupport(supStep.id)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        {/each}
                                     </div>
                                 {/if}
                             </div>
                         {/each}
-                    {/if}
+                    </div>
 
                     {#if workflowData.steps.length === 0}
                         <div class="flex flex-col items-center justify-center text-gray-300 py-8">
