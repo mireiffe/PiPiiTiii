@@ -278,6 +278,13 @@ class StepContainer(BaseModel):
     order: int
 
 
+class PhaseType(BaseModel):
+    id: str
+    name: str
+    color: str
+    order: int
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     workflow_llm: Optional[LLMConfig] = None
@@ -286,6 +293,7 @@ class Settings(BaseModel):
     use_thumbnails: bool = False
     workflow_steps: Optional[WorkflowSteps] = None
     step_containers: Optional[List[StepContainer]] = None
+    phase_types: Optional[List[PhaseType]] = None
 
 
 class WorkflowData(BaseModel):
@@ -716,6 +724,9 @@ def load_settings() -> dict:
             # Ensure step_containers exists (migration for existing settings)
             if "step_containers" not in settings:
                 settings["step_containers"] = []
+            # Ensure phase_types exists (migration for existing settings)
+            if "phase_types" not in settings:
+                settings["phase_types"] = []
             return settings
     else:
         return {
@@ -737,6 +748,7 @@ def load_settings() -> dict:
             "use_thumbnails": True,
             "workflow_steps": get_default_workflow_steps(),
             "step_containers": [],
+            "phase_types": [],
         }
 
 
