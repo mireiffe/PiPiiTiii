@@ -51,8 +51,6 @@
 
     interface Settings {
         llm: LLMConfig;
-        workflow_llm?: LLMConfig;
-        workflow_prompts?: { system_prompt: string; user_prompt: string };
         summary_fields: SummaryField[];
         use_thumbnails: boolean;
         phenomenon_attributes: string[];
@@ -79,8 +77,6 @@
 
     let settings: Settings = {
         llm: { api_type: "openai", api_endpoint: "", model_name: "" },
-        workflow_llm: { api_type: "openai", api_endpoint: "", model_name: "" },
-        workflow_prompts: { system_prompt: "", user_prompt: "" },
         summary_fields: [],
         use_thumbnails: true,
         phenomenon_attributes: [],
@@ -119,15 +115,6 @@
                         api_type: data.llm?.api_type || "openai",
                         api_endpoint: data.llm?.api_endpoint || "",
                         model_name: data.llm?.model_name || "",
-                    },
-                    workflow_llm: {
-                        api_type: data.workflow_llm?.api_type || data.llm?.api_type || "openai",
-                        api_endpoint: data.workflow_llm?.api_endpoint || data.llm?.api_endpoint || "",
-                        model_name: data.workflow_llm?.model_name || data.llm?.model_name || "",
-                    },
-                    workflow_prompts: {
-                        system_prompt: data.workflow_prompts?.system_prompt || "",
-                        user_prompt: data.workflow_prompts?.user_prompt || "",
                     },
                     summary_fields: (data.summary_fields || []).map((f: any) => ({
                         id: f.id,

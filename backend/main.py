@@ -28,7 +28,6 @@ from utils import (
     create_file_resolver,
     extract_preserved_descriptions,
     update_shape_property,
-    parse_workflow_from_llm_response,
 )
 
 
@@ -251,11 +250,6 @@ class SummaryField(BaseModel):
     user_prompt: str = ""
 
 
-class WorkflowPrompts(BaseModel):
-    system_prompt: str = ""
-    user_prompt: str = ""
-
-
 class WorkflowStepColumn(BaseModel):
     id: str
     name: str
@@ -305,8 +299,6 @@ class WorkflowSettingsModel(BaseModel):
 
 class Settings(BaseModel):
     llm: LLMConfig
-    workflow_llm: Optional[LLMConfig] = None
-    workflow_prompts: Optional[WorkflowPrompts] = None
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
     workflow_steps: Optional[WorkflowSteps] = None
@@ -755,15 +747,6 @@ def load_settings() -> dict:
                 "api_endpoint": "https://api.openai.com/v1",
                 "model_name": "gpt-4o",
             },
-            "workflow_llm": {
-                "api_type": "openai",
-                "api_endpoint": "https://api.openai.com/v1",
-                "model_name": "gpt-4o",
-            },
-            "workflow_prompts": {
-                "system_prompt": "",
-                "user_prompt": "",
-            },
             "summary_fields": [],
             "use_thumbnails": True,
             "workflow_steps": get_default_workflow_steps(),
@@ -842,131 +825,6 @@ def update_project_workflow(project_id: str, request: WorkflowUpdateRequest):
         raise HTTPException(
             status_code=500, detail=f"Failed to save workflow: {str(e)}"
         )
-
-
-class GenerateWorkflowRequest(BaseModel):
-    query: str
-
-
-@app.post("/api/project/{project_id}/workflow/generate_llm")
-async def generate_workflow_llm(project_id: str, request: GenerateWorkflowRequest):
-    """
-    Generate/Modify workflow using LLM.
-    """
-    try:
-        settings = load_settings()
-
-        # Use workflow_llm
-        llm_config_data = settings.get("workflow_llm")
-        if not llm_config_data:
-            raise HTTPException(
-                status_code=500,
-                detail="Workflow LLM configuration is missing in settings.",
-            )
-
-        llm_config = LLMConfig(**llm_config_data)
-
-        workflow_prompts = settings.get("workflow_prompts")
-        if not workflow_prompts:
-            raise HTTPException(
-                status_code=500,
-                detail="Workflow prompts configuration is missing in settings.",
-            )
-
-        system_prompt = workflow_prompts.get("system_prompt")
-        user_prompt_template = workflow_prompts.get("user_prompt")
-
-        if not system_prompt or not user_prompt_template:
-            raise HTTPException(
-                status_code=500,
-                detail="System or User prompt is missing in workflow_prompts settings.",
-            )
-
-        # Get summary data to provide as background knowledge
-        summary_data = db.get_project_summary(project_id)
-        summary_text = ""
-        if summary_data:
-            # Format summary data into text
-            user_summary = summary_data.get("user", {})
-            llm_summary = summary_data.get("llm", {})
-
-            if user_summary or llm_summary:
-                summary_text = "=== 문서 배경 지식 ===\n"
-
-                # Use LLM-generated summaries (preferred)
-                if llm_summary:
-                    for field_id, content in llm_summary.items():
-                        if content:
-                            summary_text += f"{content}\n\n"
-                # Fall back to user summaries if no LLM summaries
-                elif user_summary:
-                    for field_id, content in user_summary.items():
-                        if content:
-                            summary_text += f"{content}\n\n"
-
-                summary_text += "======================\n\n"
-
-        # Prepend summary to system prompt
-        if summary_text:
-            system_prompt = summary_text + system_prompt
-
-        # Get available actions with params (deprecated - now using workflow_steps)
-        workflow_actions = []  # Legacy: workflow_actions removed
-        # Provide full schema to LLM
-        available_actions_list = [
-            {
-                "id": a["id"],
-                "name": a["name"],
-                "params": [
-                    {
-                        "id": p["id"],
-                        "name": p["name"],
-                        "required": p.get("required", False),
-                    }
-                    for p in a.get("params", [])
-                ],
-            }
-            for a in workflow_actions
-        ]
-        available_actions_str = json.dumps(
-            available_actions_list, ensure_ascii=False, indent=2
-        )
-
-        # Get current workflow
-        current_workflow = db.get_project_workflow(project_id)
-        workflow_json = json.dumps(current_workflow, ensure_ascii=False, indent=2)
-
-        # Prepare prompts
-        user_prompt = user_prompt_template.replace(
-            "{workflow_json}", workflow_json
-        ).replace("{query}", request.query)
-        if "{available_actions}" in user_prompt:
-            user_prompt = user_prompt.replace(
-                "{available_actions}", available_actions_str
-            )
-        else:
-            # Append if not in template (backward compatibility for existing settings)
-            user_prompt += f"\n\n[참고] 사용 가능한 액션 및 파라미터 목록 (엄격 준수):\n{available_actions_str}"
-
-        # Enforce strict JSON output
-        user_prompt += "\n\n중요: 다른 설명 없이 오직 JSON 데이터만 반환하세요. 정의되지 않은 액션이나 파라미터는 사용하지 마세요."
-
-        # Call LLM
-        llm_service = LLMService(llm_config.dict())
-        response = await llm_service.generate_text(system_prompt, user_prompt)
-
-        # Parse and validate workflow using llm_utils
-        result = parse_workflow_from_llm_response(response, workflow_actions)
-
-        # If successful, update DB
-        if result["status"] == "success":
-            db.update_project_workflow(project_id, result["workflow"])
-
-        return result
-
-    except Exception as e:
-        print(f"Workflow generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/workflow/validate")
