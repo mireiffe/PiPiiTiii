@@ -49,6 +49,8 @@
     export let captureMode = false;
     export let captureTargetStepId: string | null = null;
     export let workflowName: string = "Workflow";  // Name of current workflow for overlay labels
+    export let workflows: { id: string; name: string }[] = [];  // Available workflows
+    export let activeWorkflowId: string | null = null;  // Currently selected workflow
 
     const dispatch = createEventDispatcher();
 
@@ -761,6 +763,30 @@
             transition:slide={{ duration: 200 }}
             class="flex-1 flex flex-col min-h-[400px] bg-gray-50/50 relative overflow-hidden"
         >
+            <!-- Workflow Tabs (inside accordion) -->
+            {#if workflows.length > 0}
+                <div class="flex border-b border-gray-200 bg-gray-50 px-2 pt-2 gap-1 overflow-x-auto shrink-0">
+                    {#each workflows as workflow (workflow.id)}
+                        <button
+                            class="px-3 py-1.5 text-xs font-medium rounded-t-lg transition-colors whitespace-nowrap
+                                {activeWorkflowId === workflow.id
+                                    ? 'bg-white text-blue-600 border border-b-0 border-gray-200 -mb-px'
+                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}"
+                            on:click={() => dispatch("selectWorkflowTab", { workflowId: workflow.id })}
+                        >
+                            {workflow.name}
+                        </button>
+                    {/each}
+                    <a
+                        href="/settings#section-workflows"
+                        class="px-2 py-1.5 text-xs text-gray-400 hover:text-blue-500 transition-colors"
+                        title="워크플로우 추가"
+                    >
+                        +
+                    </a>
+                </div>
+            {/if}
+
             {#if viewMode === "graph"}
                 <D3WorkflowGraph
                     {workflowData}

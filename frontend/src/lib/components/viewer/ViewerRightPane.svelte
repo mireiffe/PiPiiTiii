@@ -140,30 +140,6 @@
     </div>
 
     <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
-        <!-- Workflow Tabs (if workflows are defined) -->
-        {#if workflows.length > 0}
-            <div class="flex border-b border-gray-200 bg-gray-50 px-2 pt-2 gap-1 overflow-x-auto shrink-0">
-                {#each workflows as workflow (workflow.id)}
-                    <button
-                        class="px-3 py-1.5 text-xs font-medium rounded-t-lg transition-colors whitespace-nowrap
-                            {activeWorkflowId === workflow.id
-                                ? 'bg-white text-blue-600 border border-b-0 border-gray-200 -mb-px'
-                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}"
-                        on:click={() => selectWorkflowTab(workflow.id)}
-                    >
-                        {workflow.name}
-                    </button>
-                {/each}
-                <a
-                    href="/settings#section-workflows"
-                    class="px-2 py-1.5 text-xs text-gray-400 hover:text-blue-500 transition-colors"
-                    title="워크플로우 추가"
-                >
-                    +
-                </a>
-            </div>
-        {/if}
-
         <!-- Workflow Section -->
         <WorkflowSection
             isExpanded={expandedSection === "workflow"}
@@ -175,6 +151,8 @@
             {savingWorkflow}
             {captureMode}
             {captureTargetStepId}
+            {workflows}
+            {activeWorkflowId}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
             on:workflowChange={handleWorkflowChange}
@@ -183,6 +161,7 @@
             on:deleteStepDefinition
             on:createStepDefinition
             on:updateStepDefinition
+            on:selectWorkflowTab={(e) => selectWorkflowTab(e.detail.workflowId)}
         />
 
         <!-- Summary Section -->
