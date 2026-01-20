@@ -48,6 +48,7 @@
     export let savingWorkflow = false;
     export let captureMode = false;
     export let captureTargetStepId: string | null = null;
+    export let workflowName: string = "Workflow";  // Name of current workflow for overlay labels
 
     const dispatch = createEventDispatcher();
 
@@ -509,10 +510,21 @@
     export function getCaptureOverlays() {
         const overlays: any[] = [];
         let colorIndex = 0;
-        for (const step of workflowData.steps) {
+        for (let stepIndex = 0; stepIndex < workflowData.steps.length; stepIndex++) {
+            const step = workflowData.steps[stepIndex];
             const color = EVIDENCE_COLORS[colorIndex % EVIDENCE_COLORS.length];
+            let captureIndexInStep = 0;
             for (const capture of step.captures) {
-                overlays.push({ ...capture, stepId: step.id, color, colorIndex });
+                overlays.push({
+                    ...capture,
+                    stepId: step.id,
+                    workflowName,
+                    stepNumber: stepIndex + 1,
+                    captureIndexInStep,
+                    color,
+                    colorIndex
+                });
+                captureIndexInStep++;
             }
             colorIndex++;
         }

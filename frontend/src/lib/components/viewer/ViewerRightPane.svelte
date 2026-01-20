@@ -171,6 +171,7 @@
             workflowData={currentWorkflowData}
             workflowSteps={currentWorkflowSteps}
             globalPhases={settings?.phase_types || []}
+            workflowName={currentWorkflow?.name || "Workflow"}
             {savingWorkflow}
             {captureMode}
             {captureTargetStepId}

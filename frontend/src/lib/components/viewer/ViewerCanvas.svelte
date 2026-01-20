@@ -348,14 +348,14 @@
                                 title={overlay.isActionCapture ? `Action: ${overlay.actionName || ''}\nCause: ${overlay.causeName || ''}` : overlay.label || ''}
                             >
                                 <div
-                                    class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t
+                                    class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t whitespace-nowrap
                                            {isHighlighted ? 'scale-110' : ''}"
                                     style="background-color: {color.border};"
                                 >
                                     {#if overlay.isActionCapture}
                                         A{overlay.colorIndex + 1}
                                     {:else}
-                                        #{overlay.colorIndex + 1}
+                                        {overlay.workflowName}: #{overlay.stepNumber}-{overlay.captureIndexInStep + 1}
                                     {/if}
                                 </div>
                                 {#if isHighlighted}
