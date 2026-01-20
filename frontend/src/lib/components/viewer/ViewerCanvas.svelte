@@ -354,6 +354,8 @@
                                 >
                                     {#if overlay.isActionCapture}
                                         A{overlay.colorIndex + 1}
+                                    {:else if overlay.isSupporter}
+                                        {overlay.workflowName}: #{overlay.stepNumber}({overlay.phaseName || '위상'})-{overlay.captureIndexInStep + 1}
                                     {:else}
                                         {overlay.workflowName}: #{overlay.stepNumber}-{overlay.captureIndexInStep + 1}
                                     {/if}

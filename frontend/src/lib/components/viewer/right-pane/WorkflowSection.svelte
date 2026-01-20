@@ -89,6 +89,10 @@
     let showPhaseSelectModal = false;
     let pendingSupport: { supporterStepId: string; targetStepId: string } | null = null;
 
+    // Phase list popup state
+    let showPhaseListPopup = false;
+    let phaseListPopupRef: HTMLDivElement | null = null;
+
     // Multi-selection state
     let selectedStepIds: Set<string> = new Set();
     let lastClickedStepId: string | null = null;
@@ -511,20 +515,54 @@
 
     export function getCaptureOverlays() {
         const overlays: any[] = [];
+
+        // Build a map of step ID to display info based on layoutRows
+        // This ensures overlay numbering matches the UI list exactly
+        const stepDisplayMap = new Map<string, {
+            displayNumber: number | string;  // number for main steps, phase name for supporters
+            isSupporter: boolean;
+            parentStepNumber?: number;
+            phaseName?: string;
+        }>();
+
+        layoutRows.forEach((row, rowIndex) => {
+            const mainStepNumber = rowIndex + 1;
+            stepDisplayMap.set(row.mainStep.id, {
+                displayNumber: mainStepNumber,
+                isSupporter: false,
+            });
+
+            // Supporters get their parent's number + phase name
+            row.supporters.forEach(supporter => {
+                stepDisplayMap.set(supporter.step.id, {
+                    displayNumber: supporter.phase?.name || '위상',
+                    isSupporter: true,
+                    parentStepNumber: mainStepNumber,
+                    phaseName: supporter.phase?.name,
+                });
+            });
+        });
+
         let colorIndex = 0;
         for (let stepIndex = 0; stepIndex < workflowData.steps.length; stepIndex++) {
             const step = workflowData.steps[stepIndex];
+            const displayInfo = stepDisplayMap.get(step.id);
             const color = EVIDENCE_COLORS[colorIndex % EVIDENCE_COLORS.length];
             let captureIndexInStep = 0;
+
             for (const capture of step.captures) {
                 overlays.push({
                     ...capture,
                     stepId: step.id,
                     workflowName,
-                    stepNumber: stepIndex + 1,
+                    stepNumber: displayInfo?.isSupporter
+                        ? displayInfo.parentStepNumber  // Use parent's number for supporters
+                        : displayInfo?.displayNumber ?? (stepIndex + 1),
                     captureIndexInStep,
                     color,
-                    colorIndex
+                    colorIndex,
+                    isSupporter: displayInfo?.isSupporter ?? false,
+                    phaseName: displayInfo?.phaseName,
                 });
                 captureIndexInStep++;
             }
@@ -689,6 +727,9 @@
         if (popupRef && !popupRef.contains(event.target as Node)) {
             showAddStepPopup = false;
         }
+        if (phaseListPopupRef && !phaseListPopupRef.contains(event.target as Node)) {
+            showPhaseListPopup = false;
+        }
     }
 </script>
 
@@ -723,15 +764,56 @@
                         </button>
                     </div>
                     {#if globalPhases.length > 0}
-                        <span
-                            class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-600 border border-purple-200 flex items-center gap-1"
-                            title="설정에서 정의된 위상"
-                        >
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                            </svg>
-                            위상 {globalPhases.length}개
-                        </span>
+                        <div class="relative">
+                            <button
+                                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-600 border border-purple-200 flex items-center gap-1 hover:bg-purple-200 transition-colors cursor-pointer"
+                                title="클릭하여 위상 목록 보기"
+                                on:click|stopPropagation={() => (showPhaseListPopup = !showPhaseListPopup)}
+                            >
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                </svg>
+                                위상 {globalPhases.length}개
+                                <svg class="w-2.5 h-2.5 ml-0.5 transition-transform {showPhaseListPopup ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            <!-- Phase List Popup -->
+                            {#if showPhaseListPopup}
+                                <div
+                                    bind:this={phaseListPopupRef}
+                                    class="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-2 min-w-[160px] z-50"
+                                    on:click|stopPropagation
+                                >
+                                    <div class="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
+                                        정의된 위상
+                                    </div>
+                                    {#each globalPhases as phase, idx (phase.id)}
+                                        <div class="px-3 py-1.5 flex items-center gap-2 text-xs text-gray-700 hover:bg-gray-50">
+                                            <span
+                                                class="w-3 h-3 rounded-full shrink-0"
+                                                style="background-color: {phase.color}"
+                                            ></span>
+                                            <span class="truncate">{phase.name}</span>
+                                        </div>
+                                    {/each}
+                                    <div class="border-t border-gray-100 mt-1 pt-1">
+                                        <a
+                                            href="/settings#section-phases"
+                                            class="px-3 py-1.5 flex items-center gap-1.5 text-xs text-purple-600 hover:bg-purple-50"
+                                            on:click={() => (showPhaseListPopup = false)}
+                                        >
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                            설정에서 관리
+                                        </a>
+                                    </div>
+                                </div>
+                            {/if}
+                        </div>
                     {:else}
                         <a
                             href="/settings#section-phases"
