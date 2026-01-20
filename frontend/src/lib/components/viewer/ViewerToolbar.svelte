@@ -11,13 +11,30 @@
     export let loadingSettings;
     export let downloading;
     export let scale;
+    export let project = null;
 
     const dispatch = createEventDispatcher();
+
+    $: pptFileName = project?.ppt_path?.split("\\").pop() || "Loading...";
 </script>
 
 <div
-    class="min-h-[3.5rem] h-auto bg-white border-b border-gray-200 flex flex-wrap items-center justify-between px-4 py-2 gap-2 shrink-0 z-10"
+    class="bg-white border-b border-gray-200 flex flex-col shrink-0 z-10"
 >
+    <!-- Top row: PPT Title -->
+    <div class="px-4 py-2 border-b border-gray-100">
+        <h1
+            class="font-bold text-gray-800 text-base"
+            title={pptFileName}
+        >
+            {pptFileName}
+        </h1>
+    </div>
+
+    <!-- Bottom row: Controls -->
+    <div class="min-h-[3rem] h-auto flex flex-wrap items-center justify-between px-4 py-2 gap-2">
+    <!-- Left side: Edit controls -->
+    <div class="flex items-center gap-4 min-w-0">
     {#if allowEdit}
         <div class="flex items-center space-x-2">
             <Button
@@ -56,9 +73,8 @@
                 Reset
             </Button>
         </div>
-    {:else}
-        <div class="w-2"></div>
     {/if}
+    </div>
 
     <div class="flex items-center space-x-2 shrink-0">
         <Button
@@ -144,5 +160,6 @@
         >
             -
         </button>
+    </div>
     </div>
 </div>

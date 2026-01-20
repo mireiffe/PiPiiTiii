@@ -951,6 +951,7 @@
                 {loadingSettings}
                 {downloading}
                 {scale}
+                {project}
                 on:undo={undo}
                 on:redo={redo}
                 on:saveState={handleSaveState}
