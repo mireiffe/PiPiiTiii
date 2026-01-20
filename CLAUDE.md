@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Backend: Python 3.14, FastAPI 0.122, pywin32 311, Pillow 12.0
 - Frontend: Svelte 5.43, SvelteKit 2.48, TailwindCSS 3.4, TypeScript 5.9
-- Workflow: @xyflow/svelte 1.5 (declarative node/edge graph with Background, Controls, MiniMap)
+- Workflow: D3.js 7.9 (custom workflow graph visualization)
 - Platform: **Windows only** (requires PowerPoint COM automation)
 
 ## Development Commands
@@ -59,24 +59,7 @@ results/
 **Key Components:**
 - `ViewerCanvas.svelte` - Main slide canvas with shape rendering
 - `WorkflowSection.svelte` - Workflow tree UI container
-- `workflow/SvelteFlowWorkflow.svelte` - Workflow graph editor using @xyflow/svelte
-
-### Workflow Implementation (@xyflow/svelte)
-
-**Pattern:**
-```typescript
-import { SvelteFlow, Background, Controls, MiniMap } from "@xyflow/svelte";
-
-// Bind reactive arrays
-let nodes: Node[] = [];
-let edges: Edge[] = [];
-
-// Convert workflow data to xyflow format
-nodes = workflowToNodes(workflow);
-edges = workflowToEdges(workflow);
-
-// Event handlers: onnodeclick, onnodecontextmenu, onpaneclick
-```
+- `workflow/D3WorkflowGraph.svelte` - Workflow graph editor using D3.js
 
 **Node Types:**
 - Phenomenon (red) - Root node with slide captures
