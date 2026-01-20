@@ -1,15 +1,16 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fetchSettings, updateSettings, fetchAllAttributes } from "$lib/api/project";
-    import type { WorkflowSteps, PhaseType } from "$lib/types/workflow";
+    import type { WorkflowSteps, PhaseType, WorkflowDefinition, WorkflowSettings } from "$lib/types/workflow";
     import LLMSettingsSection from "$lib/components/settings/LLMSettingsSection.svelte";
     import SummaryFieldsSection from "$lib/components/settings/SummaryFieldsSection.svelte";
     import PhenomenonAttributesSection from "$lib/components/settings/PhenomenonAttributesSection.svelte";
     import WorkflowStepsSection from "$lib/components/settings/WorkflowStepsSection.svelte";
     import PhaseSettingsSection from "$lib/components/settings/PhaseSettingsSection.svelte";
+    import WorkflowDefinitionsSection from "$lib/components/settings/WorkflowDefinitionsSection.svelte";
 
     // Navigation sections
-    type SectionId = "llm" | "summary" | "phenomenon" | "workflow" | "phases";
+    type SectionId = "llm" | "summary" | "phenomenon" | "workflows" | "workflow" | "phases";
 
     interface NavSection {
         id: SectionId;
@@ -21,7 +22,8 @@
         { id: "llm", label: "LLM 설정", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
         { id: "summary", label: "PPT 요약 필드", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
         { id: "phenomenon", label: "발생현상 속성", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" },
-        { id: "workflow", label: "Workflow 스텝", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
+        { id: "workflows", label: "워크플로우 정의", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+        { id: "workflow", label: "글로벌 스텝", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
         { id: "phases", label: "위상 (Phase)", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
     ];
 
@@ -56,6 +58,7 @@
         phenomenon_attributes: string[];
         workflow_steps: WorkflowSteps;
         phase_types: PhaseType[];
+        workflow_settings?: WorkflowSettings;
     }
 
     const DEFAULT_COLUMNS = [
@@ -71,6 +74,8 @@
     let availableAttributes: AttributeDefinition[] = [];
     let expandedFieldId: string | null = null;
     let expandedRowId: string | null = null;
+    let expandedWorkflowId: string | null = null;
+    let expandedWorkflowRowId: string | null = null;
 
     let settings: Settings = {
         llm: { api_type: "openai", api_endpoint: "", model_name: "" },
@@ -81,6 +86,11 @@
         phenomenon_attributes: [],
         workflow_steps: { columns: [], rows: [] },
         phase_types: [],
+        workflow_settings: {
+            workflows: [],
+            phaseTypes: [],
+            globalStepsLabel: "발생현상",
+        },
     };
 
     function scrollToSection(sectionId: SectionId) {
@@ -130,10 +140,23 @@
                     phenomenon_attributes: data.phenomenon_attributes || [],
                     workflow_steps: data.workflow_steps || { columns: DEFAULT_COLUMNS, rows: [] },
                     phase_types: data.phase_types || [],
+                    workflow_settings: data.workflow_settings || {
+                        workflows: [],
+                        phaseTypes: data.workflow_settings?.phaseTypes || [],
+                        globalStepsLabel: data.workflow_settings?.globalStepsLabel || "발생현상",
+                    },
                 };
 
                 if (!settings.workflow_steps.columns || settings.workflow_steps.columns.length === 0) {
                     settings.workflow_steps.columns = DEFAULT_COLUMNS;
+                }
+
+                // Ensure workflow_settings has workflows array
+                if (!settings.workflow_settings?.workflows) {
+                    settings.workflow_settings = {
+                        ...settings.workflow_settings,
+                        workflows: [],
+                    };
                 }
             }
         } catch (e) {
@@ -227,6 +250,27 @@
     function handlePhaseTypesUpdate(e: CustomEvent<{ phases: PhaseType[] }>) {
         settings.phase_types = e.detail.phases;
     }
+
+    // Workflow definitions handlers
+    function handleWorkflowDefinitionsUpdate(e: CustomEvent<{
+        workflows: WorkflowDefinition[];
+        phaseTypes: PhaseType[];
+        globalStepsLabel: string;
+    }>) {
+        settings.workflow_settings = {
+            workflows: e.detail.workflows,
+            phaseTypes: e.detail.phaseTypes,
+            globalStepsLabel: e.detail.globalStepsLabel,
+        };
+    }
+
+    function handleToggleWorkflowExpand(e: CustomEvent<{ workflowId: string }>) {
+        expandedWorkflowId = expandedWorkflowId === e.detail.workflowId ? null : e.detail.workflowId;
+    }
+
+    function handleToggleWorkflowRowExpand(e: CustomEvent<{ rowId: string }>) {
+        expandedWorkflowRowId = expandedWorkflowRowId === e.detail.rowId ? null : e.detail.rowId;
+    }
 </script>
 
 <div class="h-screen flex flex-col bg-gray-100">
@@ -306,7 +350,21 @@
                         />
                     </div>
 
-                    <!-- 워크플로우 스텝 설정 -->
+                    <!-- 워크플로우 정의 -->
+                    <div id="section-workflows">
+                        <WorkflowDefinitionsSection
+                            workflows={settings.workflow_settings?.workflows || []}
+                            phaseTypes={settings.workflow_settings?.phaseTypes || []}
+                            globalStepsLabel={settings.workflow_settings?.globalStepsLabel || "발생현상"}
+                            {expandedWorkflowId}
+                            expandedRowId={expandedWorkflowRowId}
+                            on:update={handleWorkflowDefinitionsUpdate}
+                            on:toggleWorkflowExpand={handleToggleWorkflowExpand}
+                            on:toggleRowExpand={handleToggleWorkflowRowExpand}
+                        />
+                    </div>
+
+                    <!-- 글로벌 스텝 설정 -->
                     <div id="section-workflow">
                         <WorkflowStepsSection
                             workflowSteps={settings.workflow_steps}

@@ -26,14 +26,65 @@
     export let project;
     export let projectId = "";
 
-    // Workflow step-based data
+    // Workflow step-based data - now supports multiple workflows
     export let workflowData = { steps: [] };
+    export let allWorkflowsData = {};  // { workflowId: ProjectWorkflowData }
     export let captureTargetStepId = null;
+
+    // Currently selected workflow tab
+    export let activeWorkflowId = null;
 
     const dispatch = createEventDispatcher();
 
+    // Get workflows from settings
+    $: workflows = settings?.workflow_settings?.workflows || [];
+
+    // Auto-select first workflow if none selected
+    $: if (workflows.length > 0 && !activeWorkflowId) {
+        activeWorkflowId = workflows[0].id;
+    }
+
+    // Get current workflow definition
+    $: currentWorkflow = workflows.find(w => w.id === activeWorkflowId);
+
+    // Get workflow steps for current workflow (either its own or global)
+    $: currentWorkflowSteps = (() => {
+        let result;
+        if (currentWorkflow?.useGlobalSteps) {
+            result = settings?.workflow_steps || { columns: [], rows: [] };
+        } else {
+            result = currentWorkflow?.steps || { columns: [], rows: [] };
+        }
+        console.log('[ViewerRightPane] currentWorkflowSteps:', {
+            activeWorkflowId,
+            useGlobalSteps: currentWorkflow?.useGlobalSteps,
+            includeGlobalSteps: currentWorkflow?.includeGlobalSteps,
+            resultRows: result.rows?.map(r => ({ id: r.id, values: r.values })),
+            globalStepsRows: settings?.workflow_steps?.rows?.map(r => ({ id: r.id, values: r.values })),
+            workflowOwnSteps: currentWorkflow?.steps?.rows?.map(r => ({ id: r.id, values: r.values })),
+            additionalSteps: currentWorkflow?.additionalSteps?.rows?.map(r => ({ id: r.id, values: r.values }))
+        });
+        return result;
+    })();
+
+    // Get current workflow data
+    $: currentWorkflowData = allWorkflowsData[activeWorkflowId] || workflowData;
+
     function toggleSection(section) {
         expandedSection = expandedSection === section ? null : section;
+    }
+
+    function selectWorkflowTab(workflowId) {
+        activeWorkflowId = workflowId;
+        dispatch("workflowTabChange", { workflowId });
+    }
+
+    function handleWorkflowChange(event) {
+        // Include the workflow ID in the event
+        dispatch("workflowChange", {
+            ...event.detail,
+            workflowId: activeWorkflowId,
+        });
     }
 </script>
 
@@ -89,22 +140,43 @@
     </div>
 
     <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
+        <!-- Workflow Tabs (if workflows are defined) -->
+        {#if workflows.length > 0}
+            <div class="flex border-b border-gray-200 bg-gray-50 px-2 pt-2 gap-1 overflow-x-auto shrink-0">
+                {#each workflows as workflow (workflow.id)}
+                    <button
+                        class="px-3 py-1.5 text-xs font-medium rounded-t-lg transition-colors whitespace-nowrap
+                            {activeWorkflowId === workflow.id
+                                ? 'bg-white text-blue-600 border border-b-0 border-gray-200 -mb-px'
+                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}"
+                        on:click={() => selectWorkflowTab(workflow.id)}
+                    >
+                        {workflow.name}
+                    </button>
+                {/each}
+                <a
+                    href="/settings#section-workflows"
+                    class="px-2 py-1.5 text-xs text-gray-400 hover:text-blue-500 transition-colors"
+                    title="워크플로우 추가"
+                >
+                    +
+                </a>
+            </div>
+        {/if}
+
         <!-- Workflow Section -->
         <WorkflowSection
             isExpanded={expandedSection === "workflow"}
             {projectId}
-            {workflowData}
-            workflowSteps={settings?.workflow_steps || {
-                columns: [],
-                rows: [],
-            }}
+            workflowData={currentWorkflowData}
+            workflowSteps={currentWorkflowSteps}
             globalPhases={settings?.phase_types || []}
             {savingWorkflow}
             {captureMode}
             {captureTargetStepId}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
-            on:workflowChange
+            on:workflowChange={handleWorkflowChange}
             on:toggleCaptureMode
             on:deleteWorkflow
             on:deleteStepDefinition

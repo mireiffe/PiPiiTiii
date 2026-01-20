@@ -165,19 +165,37 @@ export async function validateWorkflows() {
     return apiFetch("/api/workflow/validate");
 }
 
-// ========== Workflow API (Step-based) ==========
+// ========== Workflow API (Step-based, Multi-workflow) ==========
 
 import type { ProjectWorkflowData } from "$lib/types/workflow";
 
-export async function fetchProjectWorkflow(id: string) {
+/**
+ * Fetch all workflows for a project
+ * Returns: { workflows: { workflowId: ProjectWorkflowData, ... } }
+ */
+export async function fetchProjectWorkflows(id: string) {
     return apiFetch(`/api/project/${id}/workflow`);
 }
 
-export async function updateProjectWorkflow(id: string, workflow: ProjectWorkflowData) {
+/**
+ * Fetch a specific workflow by ID
+ * Returns: { workflow: ProjectWorkflowData | null }
+ */
+export async function fetchProjectWorkflow(id: string, workflowId?: string) {
+    const url = workflowId
+        ? `/api/project/${id}/workflow?workflow_id=${encodeURIComponent(workflowId)}`
+        : `/api/project/${id}/workflow`;
+    return apiFetch(url);
+}
+
+/**
+ * Update a specific workflow by ID
+ */
+export async function updateProjectWorkflow(id: string, workflow: ProjectWorkflowData, workflowId?: string) {
     return apiFetch(`/api/project/${id}/workflow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workflow }),
+        body: JSON.stringify({ workflow, workflow_id: workflowId }),
     });
 }
 

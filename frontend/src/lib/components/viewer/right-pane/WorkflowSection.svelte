@@ -387,7 +387,13 @@
     });
 
     function getStepDefinition(stepId: string): WorkflowStepRow | undefined {
-        return workflowSteps.rows.find((r) => r.id === stepId);
+        const found = workflowSteps.rows.find((r) => r.id === stepId);
+        console.log('[WorkflowSection] getStepDefinition:', {
+            stepId,
+            found: found ? found.values : 'NOT FOUND',
+            availableRows: workflowSteps.rows.map(r => ({ id: r.id, values: r.values }))
+        });
+        return found;
     }
 
     function getStepUsageCount(stepId: string): number {
@@ -396,7 +402,16 @@
 
     // Step Management
     function handleAddStep(stepRow: WorkflowStepRow) {
+        console.log('[WorkflowSection] handleAddStep:', {
+            stepRowId: stepRow.id,
+            stepRowValues: stepRow.values,
+            currentWorkflowStepsRows: workflowSteps.rows.map(r => ({ id: r.id, values: r.values }))
+        });
         const newStep = createStepInstance(stepRow.id, workflowData.steps.length);
+        console.log('[WorkflowSection] created newStep:', {
+            newStepId: newStep.id,
+            newStepStepId: newStep.stepId
+        });
         workflowData = {
             ...workflowData,
             steps: [...workflowData.steps, newStep],

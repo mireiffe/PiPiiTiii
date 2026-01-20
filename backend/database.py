@@ -337,8 +337,18 @@ class Database:
             })
         return result
 
-    def get_project_workflow(self, project_id: str) -> Optional[Dict[str, Any]]:
-        """Get workflow data (Behavior Tree) for a project."""
+    def get_project_workflow(self, project_id: str, workflow_id: str = None) -> Optional[Dict[str, Any]]:
+        """Get workflow data for a project.
+
+        Args:
+            project_id: The project ID
+            workflow_id: Optional workflow ID. If provided, returns that specific workflow's data.
+                        If not provided, returns all workflows data.
+
+        Returns:
+            If workflow_id is provided: The specific workflow data or None
+            If workflow_id is None: Dict with 'workflows' key containing all workflow data
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
@@ -347,18 +357,61 @@ class Database:
         )
         row = cursor.fetchone()
         conn.close()
-        if row and row[0]:
-            workflow = json.loads(row[0])
-            # Return None if workflow is empty or missing required structure
-            if not workflow or not isinstance(workflow, dict) or 'steps' not in workflow:
-                return None
-            return workflow
-        return None
 
-    def update_project_workflow(self, project_id: str, workflow_data: Dict[str, Any]):
-        """Update workflow data (Behavior Tree) for a project."""
+        if not row or not row[0]:
+            return {"workflows": {}} if workflow_id is None else None
+
+        data = json.loads(row[0])
+
+        # Migration: convert old single-workflow format to new multi-workflow format
+        if isinstance(data, dict) and 'steps' in data and 'workflows' not in data:
+            # Old format: { steps: [], ... }
+            # Convert to new format: { workflows: { "default": { steps: [], ... } } }
+            data = {"workflows": {"default": data}}
+
+        # Ensure workflows key exists
+        if not isinstance(data, dict) or 'workflows' not in data:
+            data = {"workflows": {}}
+
+        if workflow_id is not None:
+            # Return specific workflow data
+            return data.get("workflows", {}).get(workflow_id)
+
+        return data
+
+    def update_project_workflow(self, project_id: str, workflow_data: Dict[str, Any], workflow_id: str = None):
+        """Update workflow data for a project.
+
+        Args:
+            project_id: The project ID
+            workflow_data: The workflow data to save
+            workflow_id: Optional workflow ID. If provided, updates only that workflow's data.
+                        If not provided, replaces all workflow data (expects { workflows: {...} } format).
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
+
+        if workflow_id is not None:
+            # Update specific workflow - first get existing data
+            cursor.execute(
+                "SELECT workflow_data FROM projects WHERE id = ?",
+                (project_id,),
+            )
+            row = cursor.fetchone()
+
+            existing_data = {"workflows": {}}
+            if row and row[0]:
+                existing_data = json.loads(row[0])
+                # Migration from old format
+                if isinstance(existing_data, dict) and 'steps' in existing_data and 'workflows' not in existing_data:
+                    existing_data = {"workflows": {"default": existing_data}}
+                elif not isinstance(existing_data, dict) or 'workflows' not in existing_data:
+                    existing_data = {"workflows": {}}
+
+            # Update specific workflow
+            existing_data["workflows"][workflow_id] = workflow_data
+            workflow_data = existing_data
+
         cursor.execute(
             "UPDATE projects SET workflow_data = ? WHERE id = ?",
             (json.dumps(workflow_data, ensure_ascii=False), project_id),
@@ -367,7 +420,11 @@ class Database:
         conn.close()
 
     def get_all_workflows(self) -> List[Dict[str, Any]]:
-        """Get workflow data for all projects (for validation)."""
+        """Get workflow data for all projects (for validation).
+
+        Returns list of { id, workflows: { workflowId: ProjectWorkflowData, ... } }
+        Handles migration from old single-workflow format.
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT id, workflow_data FROM projects")
@@ -375,14 +432,19 @@ class Database:
         conn.close()
         result = []
         for row in rows:
-            workflow = None
+            workflows = {}
             if row[1]:
                 try:
-                    workflow = json.loads(row[1])
+                    data = json.loads(row[1])
+                    # Migration from old format
+                    if isinstance(data, dict) and 'steps' in data and 'workflows' not in data:
+                        workflows = {"default": data}
+                    elif isinstance(data, dict) and 'workflows' in data:
+                        workflows = data.get("workflows", {})
                 except json.JSONDecodeError:
-                    workflow = None
+                    workflows = {}
             result.append({
                 "id": row[0],
-                "workflow": workflow
+                "workflows": workflows
             })
         return result

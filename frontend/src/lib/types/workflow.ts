@@ -21,6 +21,55 @@ export interface WorkflowSteps {
     rows: WorkflowStepRow[];
 }
 
+// ========== Workflow Definition (Multiple Workflows) ==========
+
+// A single workflow definition with its own steps
+export interface WorkflowDefinition {
+    id: string;
+    name: string;
+    order: number;
+    useGlobalSteps: boolean;  // If true, uses global workflow_steps; if false, uses its own steps
+    steps: WorkflowSteps | null;  // Own step definitions (only used when useGlobalSteps is false)
+    createdAt: string;
+}
+
+// Workflow Settings Container
+export interface WorkflowSettings {
+    workflows: WorkflowDefinition[];
+    phaseTypes: PhaseType[];
+    globalStepsLabel: string;  // Label for global steps (e.g., "발생현상")
+}
+
+// Generate unique ID for workflow definitions
+export function generateWorkflowId(): string {
+    return `wf_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Create a new workflow definition
+export function createWorkflowDefinition(
+    name: string,
+    order: number,
+    useGlobalSteps: boolean = true
+): WorkflowDefinition {
+    return {
+        id: generateWorkflowId(),
+        name,
+        order,
+        useGlobalSteps,
+        steps: useGlobalSteps ? null : { columns: [], rows: [] },
+        createdAt: new Date().toISOString(),
+    };
+}
+
+// Default columns for workflow steps
+export const DEFAULT_WORKFLOW_COLUMNS: WorkflowStepColumn[] = [
+    { id: "step_category", name: "스텝 구분", isDefault: true },
+    { id: "system", name: "System", isDefault: true },
+    { id: "access_target", name: "접근 Target", isDefault: true },
+    { id: "purpose", name: "목적", isDefault: true },
+    { id: "related_db_table", name: "연관 DB Table", isDefault: true },
+];
+
 // ========== Phase System (Support Steps) ==========
 
 // Phase type definition - defines types of phases (main is always implicit)

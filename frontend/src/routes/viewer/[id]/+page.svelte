@@ -25,7 +25,7 @@
         generateSummaryStream,
         updateProjectSummaryLLM,
         updateProjectPromptVersion,
-        fetchProjectWorkflow,
+        fetchProjectWorkflows,
         updateProjectWorkflow,
     } from "$lib/api/project";
 
@@ -87,8 +87,10 @@
     let summaryDataLLM = {}; // LLM-generated version (original)
     let savingSummary = false;
 
-    // Workflow state (step-based)
-    let workflowData = createEmptyWorkflowData();
+    // Workflow state (step-based) - supports multiple workflows
+    let workflowData = createEmptyWorkflowData();  // Default/legacy workflow data
+    let allWorkflowsData: Record<string, any> = {};  // { workflowId: ProjectWorkflowData }
+    let activeWorkflowId: string | null = null;
     let savingWorkflow = false;
     let captureMode = false;
     let captureTargetStepId = null; // Which step is capturing
@@ -214,6 +216,12 @@
             if (res.ok) {
                 settings = await res.json();
                 useThumbnails = settings.use_thumbnails || false;
+
+                // Set initial active workflow if workflows are defined
+                const workflows = settings.workflow_settings?.workflows || [];
+                if (workflows.length > 0 && !activeWorkflowId) {
+                    activeWorkflowId = workflows[0].id;
+                }
             }
         } catch (e) {
             console.error("Failed to load settings", e);
@@ -260,19 +268,29 @@
 
     async function loadWorkflow() {
         try {
-            const res = await fetchProjectWorkflow(projectId);
+            const res = await fetchProjectWorkflows(projectId);
             if (res.ok) {
                 const data = await res.json();
-                // Ensure workflow data has proper structure with steps array
-                const workflow = data.workflow;
-                if (
-                    workflow &&
-                    typeof workflow === "object" &&
-                    Array.isArray(workflow.steps)
-                ) {
-                    workflowData = workflow;
+                // data format: { workflows: { workflowId: ProjectWorkflowData, ... } }
+                const workflows = data.workflows || {};
+
+                // Populate allWorkflowsData
+                allWorkflowsData = {};
+                for (const [wfId, wfData] of Object.entries(workflows)) {
+                    if (wfData && typeof wfData === "object" && Array.isArray((wfData as any).steps)) {
+                        allWorkflowsData[wfId] = wfData as ProjectWorkflowData;
+                    } else {
+                        allWorkflowsData[wfId] = createEmptyWorkflowData();
+                    }
+                }
+
+                // Set current workflowData based on activeWorkflowId
+                if (activeWorkflowId && allWorkflowsData[activeWorkflowId]) {
+                    workflowData = allWorkflowsData[activeWorkflowId];
                 } else {
-                    workflowData = createEmptyWorkflowData();
+                    // Fallback to first workflow or empty
+                    const firstWfId = Object.keys(allWorkflowsData)[0];
+                    workflowData = firstWfId ? allWorkflowsData[firstWfId] : createEmptyWorkflowData();
                 }
             }
         } catch (e) {
@@ -280,11 +298,20 @@
         }
     }
 
-    async function saveWorkflow(newWorkflow) {
+    async function saveWorkflow(newWorkflow: ProjectWorkflowData, workflowId?: string) {
         savingWorkflow = true;
         try {
+            const wfId = workflowId || activeWorkflowId;
             workflowData = newWorkflow;
-            await updateProjectWorkflow(projectId, newWorkflow);
+
+            // Update allWorkflowsData
+            if (wfId) {
+                allWorkflowsData[wfId] = newWorkflow;
+                allWorkflowsData = { ...allWorkflowsData };
+            }
+
+            // Save to backend with workflow ID
+            await updateProjectWorkflow(projectId, newWorkflow, wfId || undefined);
         } catch (e) {
             console.error("Failed to save workflow", e);
         } finally {
@@ -293,9 +320,27 @@
     }
 
     function handleWorkflowChange(event) {
-        const newWorkflow = event.detail;
-        saveWorkflow(newWorkflow);
+        const { workflowId, ...newWorkflow } = event.detail;
+
+        // Save to the specific workflow (use provided workflowId or activeWorkflowId)
+        const targetWorkflowId = workflowId || activeWorkflowId;
+
+        if (targetWorkflowId) {
+            allWorkflowsData[targetWorkflowId] = newWorkflow;
+            allWorkflowsData = { ...allWorkflowsData };
+        }
+
+        workflowData = newWorkflow;
+        saveWorkflow(newWorkflow, targetWorkflowId);
         // Update capture overlays after workflow change
+        updateCaptureOverlays();
+    }
+
+    function handleWorkflowTabChange(event) {
+        const { workflowId } = event.detail;
+        activeWorkflowId = workflowId;
+        // Update workflowData to current workflow's data from allWorkflowsData
+        workflowData = allWorkflowsData[workflowId] || createEmptyWorkflowData();
         updateCaptureOverlays();
     }
 
@@ -1018,6 +1063,8 @@
         bind:workflowSectionRef
         {expandedSection}
         {workflowData}
+        {allWorkflowsData}
+        {activeWorkflowId}
         {captureTargetStepId}
         {settings}
         {allowEdit}
@@ -1037,6 +1084,7 @@
         {project}
         {projectId}
         on:workflowChange={handleWorkflowChange}
+        on:workflowTabChange={handleWorkflowTabChange}
         on:toggleCaptureMode={handleToggleCaptureMode}
         on:deleteWorkflow={handleDeleteWorkflow}
         on:deleteStepDefinition={handleDeleteStepDefinition}

@@ -285,6 +285,24 @@ class PhaseType(BaseModel):
     order: int
 
 
+class WorkflowDefinition(BaseModel):
+    id: str
+    name: str
+    order: int
+    useGlobalSteps: bool = True
+    steps: Optional[WorkflowSteps] = None
+    createdAt: str = ""
+    # Legacy fields (for backwards compatibility)
+    includeGlobalSteps: Optional[bool] = None
+    additionalSteps: Optional[WorkflowSteps] = None
+
+
+class WorkflowSettingsModel(BaseModel):
+    workflows: List[WorkflowDefinition] = []
+    phaseTypes: List[PhaseType] = []
+    globalStepsLabel: str = "발생현상"
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     workflow_llm: Optional[LLMConfig] = None
@@ -294,6 +312,7 @@ class Settings(BaseModel):
     workflow_steps: Optional[WorkflowSteps] = None
     step_containers: Optional[List[StepContainer]] = None
     phase_types: Optional[List[PhaseType]] = None
+    workflow_settings: Optional[WorkflowSettingsModel] = None
 
 
 class WorkflowData(BaseModel):
@@ -304,6 +323,7 @@ class WorkflowData(BaseModel):
 
 class WorkflowUpdateRequest(BaseModel):
     workflow: Optional[Dict[str, Any]] = None
+    workflow_id: Optional[str] = None  # If provided, updates specific workflow
 
 
 class SummaryData(BaseModel):
@@ -786,11 +806,22 @@ def get_all_attributes():
 
 
 @app.get("/api/project/{project_id}/workflow")
-def get_project_workflow(project_id: str):
-    """Get workflow (Behavior Tree) for a project."""
+def get_project_workflow(project_id: str, workflow_id: str = None):
+    """Get workflow data for a project.
+
+    Args:
+        project_id: The project ID
+        workflow_id: Optional query param. If provided, returns only that workflow's data.
+                    If not provided, returns all workflows data.
+    """
     try:
-        workflow = db.get_project_workflow(project_id)
-        return {"workflow": workflow}
+        data = db.get_project_workflow(project_id, workflow_id)
+        if workflow_id is not None:
+            # Return specific workflow data
+            return {"workflow": data}
+        else:
+            # Return all workflows data
+            return data
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to load workflow: {str(e)}"
@@ -799,9 +830,13 @@ def get_project_workflow(project_id: str):
 
 @app.post("/api/project/{project_id}/workflow")
 def update_project_workflow(project_id: str, request: WorkflowUpdateRequest):
-    """Update workflow (Behavior Tree) for a project. Pass null to delete workflow."""
+    """Update workflow data for a project.
+
+    If workflow_id is provided in the request, updates only that workflow.
+    Otherwise, replaces all workflow data.
+    """
     try:
-        db.update_project_workflow(project_id, request.workflow)
+        db.update_project_workflow(project_id, request.workflow, request.workflow_id)
         return {"status": "success", "message": "Workflow updated successfully"}
     except Exception as e:
         raise HTTPException(
@@ -939,37 +974,58 @@ def validate_all_workflows():
     """
     Validate all project workflows against current settings.
     Returns list of projects with invalid workflow steps.
+    Supports multi-workflow format: each workflow can use global or its own step definitions.
     """
     try:
         settings = load_settings()
-        workflow_steps = settings.get("workflow_steps", {})
-        valid_step_ids = {row["id"] for row in workflow_steps.get("rows", [])}
+        global_steps = settings.get("workflow_steps", {})
+        global_step_ids = {row["id"] for row in global_steps.get("rows", [])}
+
+        # Get workflow definitions to check which steps each workflow uses
+        workflow_settings = settings.get("workflow_settings", {})
+        workflow_defs = {wf["id"]: wf for wf in workflow_settings.get("workflows", [])}
 
         # Check all workflows
-        all_workflows = db.get_all_workflows()
+        all_projects = db.get_all_workflows()
         invalid_projects = []
 
-        for project in all_workflows:
-            workflow = project.get("workflow")
-            if not workflow:
+        for project in all_projects:
+            project_workflows = project.get("workflows", {})
+            if not project_workflows:
                 continue
 
-            # Validate workflow steps if present
-            steps = workflow.get("steps", [])
-            issues = []
+            project_issues = []
 
-            for step in steps:
-                step_id = step.get("stepId")
-                if step_id and step_id not in valid_step_ids:
-                    issues.append(
-                        {
+            for workflow_id, workflow_data in project_workflows.items():
+                if not workflow_data:
+                    continue
+
+                # Determine valid step IDs for this workflow
+                workflow_def = workflow_defs.get(workflow_id)
+                if workflow_def and not workflow_def.get("useGlobalSteps", True):
+                    # Use workflow's own steps
+                    wf_steps = workflow_def.get("steps", {})
+                    valid_step_ids = {row["id"] for row in wf_steps.get("rows", [])}
+                else:
+                    # Use global steps
+                    valid_step_ids = global_step_ids
+
+                # Validate workflow steps
+                steps = workflow_data.get("steps", [])
+                for step in steps:
+                    step_id = step.get("stepId")
+                    if step_id and step_id not in valid_step_ids:
+                        project_issues.append({
                             "type": "invalid_step",
+                            "workflow_id": workflow_id,
                             "step_id": step_id,
-                        }
-                    )
+                        })
 
-            if issues:
-                invalid_projects.append({"project_id": project["id"], "issues": issues})
+            if project_issues:
+                invalid_projects.append({
+                    "project_id": project["id"],
+                    "issues": project_issues
+                })
 
         return {"invalid_projects": invalid_projects}
     except Exception as e:
