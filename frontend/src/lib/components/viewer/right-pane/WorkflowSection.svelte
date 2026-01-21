@@ -498,20 +498,45 @@
 
         // Create unified step for regular step
         const currentUnifiedSteps = workflowData.unifiedSteps ?? [];
-        const order = currentUnifiedSteps.length;
-        const newUnifiedStep = createUnifiedRegularStep(stepRow.id, order);
+
+        // Find the position to insert: before the last core step
+        // Rule: first and last items must be core steps, so insert before the last one
+        let insertIndex = currentUnifiedSteps.length;
+
+        // Find the last core step's index
+        for (let i = currentUnifiedSteps.length - 1; i >= 0; i--) {
+            if (currentUnifiedSteps[i].type === 'core') {
+                insertIndex = i;  // Insert before this core step
+                break;
+            }
+        }
+
+        // If there's only one core step (or none), just append to the end
+        // This handles the edge case mentioned by the user
+        const coreStepCount = currentUnifiedSteps.filter(s => s.type === 'core').length;
+        if (coreStepCount <= 1) {
+            insertIndex = currentUnifiedSteps.length;
+        }
+
+        const newUnifiedStep = createUnifiedRegularStep(stepRow.id, insertIndex);
 
         // Also create legacy step for backward compatibility
         const newLegacyStep = createStepInstance(stepRow.id, workflowData.steps.length);
 
         console.log('[WorkflowSection] created newStep:', {
             newStepId: newUnifiedStep.id,
-            newStepStepId: newUnifiedStep.stepId
+            newStepStepId: newUnifiedStep.stepId,
+            insertIndex
         });
+
+        // Insert at the correct position and update order values
+        const updatedUnifiedSteps = [...currentUnifiedSteps];
+        updatedUnifiedSteps.splice(insertIndex, 0, newUnifiedStep);
+        updatedUnifiedSteps.forEach((s, i) => s.order = i);
 
         workflowData = {
             ...workflowData,
-            unifiedSteps: [...currentUnifiedSteps, newUnifiedStep],
+            unifiedSteps: updatedUnifiedSteps,
             steps: [...workflowData.steps, newLegacyStep],
             updatedAt: new Date().toISOString(),
         };
