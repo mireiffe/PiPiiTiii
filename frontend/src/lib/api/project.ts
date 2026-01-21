@@ -1,64 +1,89 @@
-import { apiFetch, BASE_URL } from "./client";
+/**
+ * Project API
+ *
+ * API functions for project management, workflows, and attachments.
+ */
 
-export async function fetchProjects() {
-    return apiFetch("/api/projects");
+import { apiFetch, BASE_URL } from './client';
+import type { ProjectWorkflowData } from '$lib/types/workflow';
+import type {
+    ShapePosition,
+    ShapeDescription,
+    Settings,
+    SummaryData,
+    WorkflowsResponse,
+    AttributeDefinition,
+    Project,
+    ProjectListItem,
+} from '$lib/types/api';
+
+// ========== Project Management ==========
+
+export async function fetchProjects(): Promise<Response> {
+    return apiFetch('/api/projects');
 }
 
-export async function fetchProject(id: string) {
+export async function fetchProject(id: string): Promise<Response> {
     return apiFetch(`/api/project/${id}`);
 }
 
-export async function uploadProject(file: File) {
+export async function uploadProject(file: File): Promise<Response> {
     const formData = new FormData();
-    formData.append("file", file);
-    return apiFetch("/api/upload", {
-        method: "POST",
+    formData.append('file', file);
+    return apiFetch('/api/upload', {
+        method: 'POST',
         body: formData,
     });
 }
 
-export async function fetchProjectStatus(id: string) {
+export async function fetchProjectStatus(id: string): Promise<Response> {
     return apiFetch(`/api/project/${id}/status`);
 }
 
-export async function updateShapePositions(id: string, updates: any[]) {
+// ========== Shape Operations ==========
+
+export async function updateShapePositions(id: string, updates: ShapePosition[]): Promise<Response> {
     return apiFetch(`/api/project/${id}/update_positions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates }),
     });
 }
 
-export async function updateShapeDescription(id: string, data: { slide_index: number; shape_index: string; description: string }) {
+export async function updateShapeDescription(id: string, data: ShapeDescription): Promise<Response> {
     return apiFetch(`/api/project/${id}/update_description`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
     });
 }
 
-export async function reparseProject(id: string) {
+// ========== Reparse Operations ==========
+
+export async function reparseProject(id: string): Promise<Response> {
     return apiFetch(`/api/project/${id}/reparse_all`, {
-        method: "POST",
+        method: 'POST',
     });
 }
 
-export async function reparseSlide(id: string, slideIndex: number) {
+export async function reparseSlide(id: string, slideIndex: number): Promise<Response> {
     return apiFetch(`/api/project/${id}/slides/${slideIndex}/reparse`, {
-        method: "POST",
+        method: 'POST',
     });
 }
 
-export async function downloadProject(id: string) {
+// ========== Download ==========
+
+export async function downloadProject(id: string): Promise<Response> {
     const res = await apiFetch(`/api/project/${id}/download`);
     if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
+        const a = document.createElement('a');
         a.href = url;
-        // Extract filename from Content-Disposition header if possible, or default
-        const contentDisposition = res.headers.get("Content-Disposition");
-        let filename = "presentation.pptx";
+
+        const contentDisposition = res.headers.get('Content-Disposition');
+        let filename = 'presentation.pptx';
         if (contentDisposition) {
             const match = contentDisposition.match(/filename="?([^"]+)"?/);
             if (match && match[1]) {
@@ -74,30 +99,34 @@ export async function downloadProject(id: string) {
     return res;
 }
 
-export async function fetchFilters() {
-    return apiFetch("/api/filters");
+// ========== Filters & Settings ==========
+
+export async function fetchFilters(): Promise<Response> {
+    return apiFetch('/api/filters');
 }
 
-export async function fetchSettings() {
-    return apiFetch("/api/settings");
+export async function fetchSettings(): Promise<Response> {
+    return apiFetch('/api/settings');
 }
 
-export async function updateSettings(settings: any) {
-    return apiFetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+export async function updateSettings(settings: Settings): Promise<Response> {
+    return apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
     });
 }
 
-export async function fetchProjectSummary(id: string) {
+// ========== Summary ==========
+
+export async function fetchProjectSummary(id: string): Promise<Response> {
     return apiFetch(`/api/project/${id}/summary`);
 }
 
-export async function updateProjectSummary(id: string, data: Record<string, string>) {
+export async function updateProjectSummary(id: string, data: Record<string, string>): Promise<Response> {
     return apiFetch(`/api/project/${id}/summary`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data }),
     });
 }
@@ -105,11 +134,11 @@ export async function updateProjectSummary(id: string, data: Record<string, stri
 export async function generateSummaryStream(
     projectId: string,
     fieldId: string,
-    slideIndices: number[]
+    slideIndices: number[],
 ): Promise<ReadableStream<Uint8Array> | null> {
     const response = await apiFetch(`/api/project/${projectId}/generate_summary/${fieldId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slide_indices: slideIndices }),
     });
 
@@ -120,29 +149,29 @@ export async function generateSummaryStream(
     return response.body;
 }
 
-export async function updateProjectSummaryLLM(id: string, fieldId: string, content: string) {
+export async function updateProjectSummaryLLM(id: string, fieldId: string, content: string): Promise<Response> {
     return apiFetch(`/api/project/${id}/summary_llm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ field_id: fieldId, content }),
     });
 }
 
-export async function fetchPromptVersion() {
-    return apiFetch("/api/settings/prompt_version");
+export async function fetchPromptVersion(): Promise<Response> {
+    return apiFetch('/api/settings/prompt_version');
 }
 
-export async function fetchProjectsSummaryStatus() {
-    return apiFetch("/api/projects/summary_status");
+export async function fetchProjectsSummaryStatus(): Promise<Response> {
+    return apiFetch('/api/projects/summary_status');
 }
 
 export async function batchGenerateSummary(
     projectIds: string[],
-    slideIndices?: number[]
+    slideIndices?: number[],
 ): Promise<ReadableStream<Uint8Array> | null> {
-    const response = await apiFetch("/api/projects/batch_generate_summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+    const response = await apiFetch('/api/projects/batch_generate_summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_ids: projectIds, slide_indices: slideIndices }),
     });
 
@@ -153,27 +182,25 @@ export async function batchGenerateSummary(
     return response.body;
 }
 
-export async function updateProjectPromptVersion(id: string) {
+export async function updateProjectPromptVersion(id: string): Promise<Response> {
     return apiFetch(`/api/project/${id}/update_prompt_version`, {
-        method: "POST",
+        method: 'POST',
     });
 }
 
-// ========== Workflow API ==========
+// ========== Workflow Validation ==========
 
-export async function validateWorkflows() {
-    return apiFetch("/api/workflow/validate");
+export async function validateWorkflows(): Promise<Response> {
+    return apiFetch('/api/workflow/validate');
 }
 
 // ========== Workflow API (Step-based, Multi-workflow) ==========
-
-import type { ProjectWorkflowData } from "$lib/types/workflow";
 
 /**
  * Fetch all workflows for a project
  * Returns: { workflows: { workflowId: ProjectWorkflowData, ... } }
  */
-export async function fetchProjectWorkflows(id: string) {
+export async function fetchProjectWorkflows(id: string): Promise<Response> {
     return apiFetch(`/api/project/${id}/workflow`);
 }
 
@@ -181,7 +208,7 @@ export async function fetchProjectWorkflows(id: string) {
  * Fetch a specific workflow by ID
  * Returns: { workflow: ProjectWorkflowData | null }
  */
-export async function fetchProjectWorkflow(id: string, workflowId?: string) {
+export async function fetchProjectWorkflow(id: string, workflowId?: string): Promise<Response> {
     const url = workflowId
         ? `/api/project/${id}/workflow?workflow_id=${encodeURIComponent(workflowId)}`
         : `/api/project/${id}/workflow`;
@@ -191,25 +218,22 @@ export async function fetchProjectWorkflow(id: string, workflowId?: string) {
 /**
  * Update a specific workflow by ID
  */
-export async function updateProjectWorkflow(id: string, workflow: ProjectWorkflowData, workflowId?: string) {
+export async function updateProjectWorkflow(
+    id: string,
+    workflow: ProjectWorkflowData,
+    workflowId?: string,
+): Promise<Response> {
     return apiFetch(`/api/project/${id}/workflow`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workflow, workflow_id: workflowId }),
     });
 }
 
-// Attribute definitions (for settings page)
-export interface AttributeDefinition {
-    key: string;
-    display_name: string;
-    attr_type: {
-        variant: string;
-    };
-}
+// ========== Attributes ==========
 
-export async function fetchAllAttributes() {
-    return apiFetch("/api/attributes");
+export async function fetchAllAttributes(): Promise<Response> {
+    return apiFetch('/api/attributes');
 }
 
 // ========== Attachments API ==========
@@ -223,11 +247,11 @@ export async function fetchAllAttributes() {
 export async function uploadAttachmentImage(
     imageId: string,
     projectId: string,
-    base64Data: string
-) {
-    return apiFetch("/api/attachments/image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+    base64Data: string,
+): Promise<Response> {
+    return apiFetch('/api/attachments/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             image_id: imageId,
             project_id: projectId,
@@ -248,8 +272,8 @@ export function getAttachmentImageUrl(imageId: string): string {
  * Delete an attachment image from the BLOB database.
  * @param imageId - The image ID to delete
  */
-export async function deleteAttachmentImage(imageId: string) {
+export async function deleteAttachmentImage(imageId: string): Promise<Response> {
     return apiFetch(`/api/attachments/image/${imageId}`, {
-        method: "DELETE",
+        method: 'DELETE',
     });
 }
