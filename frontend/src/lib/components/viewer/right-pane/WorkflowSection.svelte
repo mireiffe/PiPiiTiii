@@ -688,21 +688,31 @@
 
         // Check if this is a Core Step
         if (step.type === "core") {
-            // Validate deletion
-            const validation = validateDeletion(steps, stepIndex);
-            if (!validation.isValid) {
-                toastStore.warning(validation.errorMessage!);
-                return;
+            // Check if this Core Step has a valid definition
+            const csDef = getCoreStepDefinition(step.coreStepId!);
+            const isOrphanCoreStep = !csDef;
+
+            // Skip validation for orphan Core Steps (definition deleted) - they should always be deletable
+            if (!isOrphanCoreStep) {
+                // Validate deletion only for valid Core Steps
+                const validation = validateDeletion(steps, stepIndex);
+                if (!validation.isValid) {
+                    toastStore.warning(validation.errorMessage!);
+                    return;
+                }
             }
         }
 
-        if (
-            confirm(
-                step.type === "core"
-                    ? "이 Core Step을 삭제하시겠습니까?"
-                    : "이 스텝을 정말 삭제하시겠습니까?",
-            )
-        ) {
+        // Determine the confirmation message
+        let confirmMessage = "이 스텝을 정말 삭제하시겠습니까?";
+        if (step.type === "core") {
+            const csDef = getCoreStepDefinition(step.coreStepId!);
+            confirmMessage = csDef
+                ? "이 Core Step을 삭제하시겠습니까?"
+                : "삭제된 Core Step입니다. 정리하시겠습니까?";
+        }
+
+        if (confirm(confirmMessage)) {
             if (captureTargetStepId === stepId) {
                 dispatch("toggleCaptureMode", { stepId: null });
             }
@@ -2276,6 +2286,67 @@
                                                         unifiedStep.id,
                                                     )}
                                             />
+                                        </div>
+                                    {:else}
+                                        <!-- Orphan Core Step - definition이 삭제됨 -->
+                                        <div
+                                            class="relative mb-2 pl-4"
+                                            style={isBeingDragged
+                                                ? "opacity: 0.5;"
+                                                : ""}
+                                        >
+                                            {#if showDropIndicator}
+                                                <div
+                                                    class="absolute top-0 left-10 right-0 h-0.5 bg-red-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
+                                                ></div>
+                                            {/if}
+                                            <!-- Number Badge -->
+                                            <div
+                                                class="absolute left-0 top-3 w-8 h-8 rounded-full bg-red-400 flex items-center justify-center text-white text-xs font-bold shadow-md z-20 border-2 border-red-200"
+                                            >
+                                                ?
+                                            </div>
+                                            <!-- Card -->
+                                            <div
+                                                class="ml-6 bg-white rounded-lg border border-red-200 shadow-sm"
+                                            >
+                                                <div
+                                                    class="p-3 flex items-center justify-between gap-2"
+                                                >
+                                                    <div class="flex-1 min-w-0">
+                                                        <div
+                                                            class="flex items-center gap-2"
+                                                        >
+                                                            <span
+                                                                class="text-xs font-medium text-red-600 bg-red-100 px-1.5 py-0.5 rounded"
+                                                            >
+                                                                삭제됨
+                                                            </span>
+                                                            <span
+                                                                class="text-sm font-medium text-gray-500 truncate"
+                                                            >
+                                                                Core Step (정의 없음)
+                                                            </span>
+                                                        </div>
+                                                        <p
+                                                            class="text-xs text-red-500 mt-1"
+                                                        >
+                                                            설정에서 삭제된 Core
+                                                            Step입니다. 삭제해주세요.
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        class="px-2 py-1 text-xs text-red-600 hover:text-white bg-red-50 hover:bg-red-500 border border-red-200 hover:border-red-500 rounded transition-colors"
+                                                        on:click={() =>
+                                                            handleRemoveUnifiedStep(
+                                                                unifiedStep.id,
+                                                                idx,
+                                                            )}
+                                                    >
+                                                        삭제
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     {/if}
 
