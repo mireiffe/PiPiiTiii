@@ -297,6 +297,25 @@ class WorkflowSettingsModel(BaseModel):
     globalStepsLabel: str = "발생현상"
 
 
+# Core Step Models
+class CoreStepPreset(BaseModel):
+    id: str
+    name: str
+    allowedTypes: List[str] = []  # 'capture', 'text', 'image_clipboard'
+    order: int
+
+
+class CoreStepDefinition(BaseModel):
+    id: str
+    name: str
+    presets: List[CoreStepPreset] = []
+    createdAt: str = ""
+
+
+class CoreStepsSettings(BaseModel):
+    definitions: List[CoreStepDefinition] = []
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     summary_fields: List[SummaryField]
@@ -305,6 +324,7 @@ class Settings(BaseModel):
     step_containers: Optional[List[StepContainer]] = None
     phase_types: Optional[List[PhaseType]] = None
     workflow_settings: Optional[WorkflowSettingsModel] = None
+    core_steps: Optional[CoreStepsSettings] = None
 
 
 class WorkflowData(BaseModel):
@@ -739,6 +759,9 @@ def load_settings() -> dict:
             # Ensure phase_types exists (migration for existing settings)
             if "phase_types" not in settings:
                 settings["phase_types"] = []
+            # Ensure core_steps exists (migration for existing settings)
+            if "core_steps" not in settings:
+                settings["core_steps"] = {"definitions": []}
             return settings
     else:
         return {
@@ -752,6 +775,7 @@ def load_settings() -> dict:
             "workflow_steps": get_default_workflow_steps(),
             "step_containers": [],
             "phase_types": [],
+            "core_steps": {"definitions": []},
         }
 
 
