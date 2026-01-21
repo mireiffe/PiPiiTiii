@@ -29,6 +29,11 @@
         fetchProjectWorkflows,
         updateProjectWorkflow,
     } from "$lib/api/project";
+    import {
+        ENABLE_REPARSE_ALL,
+        ENABLE_REPARSE_SLIDE,
+        ENABLE_DOWNLOAD,
+    } from "$lib/api/client";
 
     // Configure marked options
     marked.setOptions({
@@ -1005,6 +1010,9 @@
                 {scale}
                 {project}
                 showOverlays={showCaptureOverlays}
+                enableReparseAll={ENABLE_REPARSE_ALL}
+                enableReparseSlide={ENABLE_REPARSE_SLIDE}
+                enableDownload={ENABLE_DOWNLOAD}
                 on:undo={undo}
                 on:redo={redo}
                 on:saveState={handleSaveState}

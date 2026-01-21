@@ -12,6 +12,11 @@ const portSuffix = port ? `:${port}` : '';
 export const BASE_URL = `${protocol}//${host}${portSuffix}`;
 export const IMAGE_BASE_URL = BASE_URL;
 
+// Feature flags (default: true if not set or not 'false')
+export const ENABLE_REPARSE_ALL = import.meta.env.VITE_ENABLE_REPARSE_ALL !== 'false';
+export const ENABLE_REPARSE_SLIDE = import.meta.env.VITE_ENABLE_REPARSE_SLIDE !== 'false';
+export const ENABLE_DOWNLOAD = import.meta.env.VITE_ENABLE_DOWNLOAD !== 'false';
+
 /**
  * Typed fetch wrapper for API calls
  */

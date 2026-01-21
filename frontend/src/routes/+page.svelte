@@ -18,6 +18,7 @@
     validateWorkflows,
     fetchWorkflowConfirmationStatus,
   } from "$lib/api/project";
+  import { ENABLE_DOWNLOAD } from "$lib/api/client";
 
   // ============================================
   // CONFIGURATION
@@ -72,7 +73,7 @@
 
   // Feature toggles
   let enableUpload = false;
-  let enableDownload = true;
+  let enableDownload = ENABLE_DOWNLOAD;
   let allowEdit = true;
 
   // Thumbnail toggle

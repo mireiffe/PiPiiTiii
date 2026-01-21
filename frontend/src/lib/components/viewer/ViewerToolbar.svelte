@@ -13,6 +13,9 @@
     export let scale;
     export let project = null;
     export let showOverlays = true;
+    export let enableReparseAll = true;
+    export let enableReparseSlide = true;
+    export let enableDownload = true;
 
     const dispatch = createEventDispatcher();
 
@@ -134,30 +137,38 @@
             </svg>
             <span>{showOverlays ? '캡처 오버레이 보임' : '캡처 오버레이 숨김'}</span>
         </button>
-        <div class="w-px h-4 bg-gray-300 mx-1"></div>
-        <Button
-            variant="destructive"
-            size="sm"
-            on:click={() => dispatch("reparseAll")}
-        >
-            Reparse All
-        </Button>
-        <Button
-            variant="secondary"
-            size="sm"
-            on:click={() => dispatch("reparseSlide")}
-        >
-            Reparse Slide
-        </Button>
-        <Button
-            variant="success"
-            size="sm"
-            on:click={() => dispatch("download")}
-            disabled={downloading}
-            loading={downloading}
-        >
-            Download
-        </Button>
+        {#if enableReparseAll || enableReparseSlide || enableDownload}
+            <div class="w-px h-4 bg-gray-300 mx-1"></div>
+        {/if}
+        {#if enableReparseAll}
+            <Button
+                variant="destructive"
+                size="sm"
+                on:click={() => dispatch("reparseAll")}
+            >
+                Reparse All
+            </Button>
+        {/if}
+        {#if enableReparseSlide}
+            <Button
+                variant="secondary"
+                size="sm"
+                on:click={() => dispatch("reparseSlide")}
+            >
+                Reparse Slide
+            </Button>
+        {/if}
+        {#if enableDownload}
+            <Button
+                variant="success"
+                size="sm"
+                on:click={() => dispatch("download")}
+                disabled={downloading}
+                loading={downloading}
+            >
+                Download
+            </Button>
+        {/if}
         <div class="w-px h-4 bg-gray-300 mx-2"></div>
         <button
             class="p-1 hover:bg-gray-100 rounded w-8 h-8 flex items-center justify-center transition-colors text-gray-600"
