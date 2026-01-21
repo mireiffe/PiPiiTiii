@@ -16,6 +16,7 @@
     fetchProjectsSummaryStatus,
     batchGenerateSummary,
     validateWorkflows,
+    fetchWorkflowConfirmationStatus,
   } from "$lib/api/project";
 
   // ============================================
@@ -94,6 +95,10 @@
   /** @type {Set<string>} */
   let workflowWarningProjects = new Set();
 
+  // Workflow confirmation status (projects with started but unconfirmed workflows)
+  /** @type {Set<string>} */
+  let workflowPendingConfirmation = new Set();
+
   // Pinned projects (stored in localStorage)
   const PINNED_STORAGE_KEY = "pipiiitiii_pinned_projects";
   /** @type {Set<string>} */
@@ -112,7 +117,10 @@
 
   function savePinnedProjects() {
     try {
-      localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify([...pinnedProjectIds]));
+      localStorage.setItem(
+        PINNED_STORAGE_KEY,
+        JSON.stringify([...pinnedProjectIds]),
+      );
     } catch (e) {
       console.error("Failed to save pinned projects", e);
     }
@@ -315,6 +323,8 @@
       await loadSummaryStatus();
       // Load workflow validation status
       await loadWorkflowValidation();
+      // Load workflow confirmation status
+      await loadWorkflowConfirmationStatus();
     } catch (e) {
       console.error(e);
     } finally {
@@ -347,11 +357,23 @@
       if (res.ok) {
         const data = await res.json();
         workflowWarningProjects = new Set(
-          data.invalid_projects.map(p => p.project_id)
+          data.invalid_projects.map((p) => p.project_id),
         );
       }
     } catch (e) {
       console.error("Failed to load workflow validation", e);
+    }
+  }
+
+  async function loadWorkflowConfirmationStatus() {
+    try {
+      const res = await fetchWorkflowConfirmationStatus();
+      if (res.ok) {
+        const data = await res.json();
+        workflowPendingConfirmation = new Set(data.pending_project_ids);
+      }
+    } catch (e) {
+      console.error("Failed to load workflow confirmation status", e);
     }
   }
 
@@ -372,7 +394,7 @@
   }
 
   function selectAll() {
-    selectedProjectIds = new Set(filteredProjects.map(p => p.id));
+    selectedProjectIds = new Set(filteredProjects.map((p) => p.id));
   }
 
   function deselectAll() {
@@ -382,11 +404,11 @@
   function selectOutdatedOnly() {
     selectedProjectIds = new Set(
       filteredProjects
-        .filter(p => {
+        .filter((p) => {
           const status = summaryStatusMap[p.id];
           return !status?.has_summary || status?.is_outdated;
         })
-        .map(p => p.id)
+        .map((p) => p.id),
     );
   }
 
@@ -397,7 +419,11 @@
     const projectIdsToGenerate = Array.from(selectedProjectIds);
 
     batchGenerating = true;
-    batchProgress = { current: 0, total: projectIdsToGenerate.length, currentProjectId: "" };
+    batchProgress = {
+      current: 0,
+      total: projectIdsToGenerate.length,
+      currentProjectId: "",
+    };
 
     // Exit selection mode immediately - let it run in background
     selectionMode = false;
@@ -554,15 +580,25 @@
       <button
         class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200
                {selectionMode
-                   ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 ring-1 ring-purple-300'
-                   : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-sm hover:shadow-md'}"
+          ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 ring-1 ring-purple-300'
+          : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white shadow-sm hover:shadow-md'}"
         on:click={toggleSelectionMode}
         disabled={batchGenerating}
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M13 10V3L4 14h7v7l9-11h-7z"
+          />
         </svg>
-        {selectionMode ? '선택 모드 해제' : '선택 PPT 요약 자동생성'}
+        {selectionMode ? "선택 모드 해제" : "선택 PPT 요약 자동생성"}
       </button>
       <div class="w-px h-6 bg-gray-300"></div>
       <Button
@@ -732,7 +768,9 @@
       <div class="flex-1 overflow-y-auto bg-gray-50/50">
         <!-- Selection Mode Toolbar -->
         {#if selectionMode}
-          <div class="sticky top-0 z-20 bg-purple-50 border-b border-purple-200 px-4 py-3 flex items-center justify-between shadow-sm">
+          <div
+            class="sticky top-0 z-20 bg-purple-50 border-b border-purple-200 px-4 py-3 flex items-center justify-between shadow-sm"
+          >
             <div class="flex items-center gap-3">
               <span class="text-sm font-medium text-purple-700">
                 {selectedProjectIds.size}개 선택됨
@@ -768,13 +806,37 @@
             >
               {#if batchGenerating}
                 <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                    fill="none"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
-                <span>생성 중... ({batchProgress.current}/{batchProgress.total})</span>
+                <span
+                  >생성 중... ({batchProgress.current}/{batchProgress.total})</span
+                >
               {:else}
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
                 </svg>
                 <span>선택 항목 요약 생성</span>
               {/if}
@@ -798,7 +860,11 @@
               {@const isSelected = selectedProjectId === project.id}
               {@const isChecked = selectedProjectIds.has(project.id)}
               {@const summaryStatus = summaryStatusMap[project.id]}
-              {@const hasWorkflowWarning = workflowWarningProjects.has(project.id)}
+              {@const hasWorkflowWarning = workflowWarningProjects.has(
+                project.id,
+              )}
+              {@const needsWorkflowConfirmation =
+                workflowPendingConfirmation.has(project.id)}
               {@const isPinned = pinnedProjectIds.has(project.id)}
 
               <div class="relative group">
@@ -806,13 +872,15 @@
                 <button
                   class="absolute -right-1 -top-1 z-20 w-7 h-7 rounded-full flex items-center justify-center transition-all
                          {isPinned
-                         ? 'bg-amber-500 text-white shadow-md hover:bg-amber-600'
-                         : 'bg-white border-2 border-gray-200 text-gray-400 opacity-0 group-hover:opacity-100 hover:border-amber-400 hover:text-amber-500'}"
+                    ? 'bg-amber-500 text-white shadow-md hover:bg-amber-600'
+                    : 'bg-white border-2 border-gray-200 text-gray-400 opacity-0 group-hover:opacity-100 hover:border-amber-400 hover:text-amber-500'}"
                   on:click={(e) => togglePinProject(project.id, e)}
-                  title={isPinned ? '고정 해제' : '상단에 고정'}
+                  title={isPinned ? "고정 해제" : "상단에 고정"}
                 >
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C8.69 2 6 4.69 6 8c0 2.36 1.37 4.41 3.36 5.42L8 18h3v4l1 1 1-1v-4h3l-1.36-4.58C16.63 12.41 18 10.36 18 8c0-3.31-2.69-6-6-6zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
+                    <path
+                      d="M12 2C8.69 2 6 4.69 6 8c0 2.36 1.37 4.41 3.36 5.42L8 18h3v4l1 1 1-1v-4h3l-1.36-4.58C16.63 12.41 18 10.36 18 8c0-3.31-2.69-6-6-6zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"
+                    />
                   </svg>
                 </button>
 
@@ -821,21 +889,39 @@
                     {selectionMode && isChecked
                     ? 'border-purple-400 ring-1 ring-purple-300 bg-purple-50/50'
                     : isPinned
-                    ? 'border-amber-400 ring-1 ring-amber-300 bg-amber-50/30 shadow-md'
-                    : isSelected
-                    ? 'border-blue-500 ring-1 ring-blue-500 shadow-md z-10'
-                    : 'border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300'}
-                    {batchGenerating && batchProgress.currentProjectId === project.id ? 'animate-pulse' : ''}"
-                  on:click={() => selectionMode ? toggleProjectSelection(project.id) : selectProject(project)}
+                      ? 'border-amber-400 ring-1 ring-amber-300 bg-amber-50/30 shadow-md'
+                      : isSelected
+                        ? 'border-blue-500 ring-1 ring-blue-500 shadow-md z-10'
+                        : 'border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300'}
+                    {batchGenerating &&
+                  batchProgress.currentProjectId === project.id
+                    ? 'animate-pulse'
+                    : ''}"
+                  on:click={() =>
+                    selectionMode
+                      ? toggleProjectSelection(project.id)
+                      : selectProject(project)}
                 >
                   <!-- Selection Checkbox (shown in selection mode) -->
                   {#if selectionMode}
                     <div class="absolute -left-1 -top-1 z-10">
-                      <div class="w-6 h-6 rounded-full flex items-center justify-center transition-all
-                                  {isChecked ? 'bg-purple-500' : 'bg-white border-2 border-gray-300'}">
+                      <div
+                        class="w-6 h-6 rounded-full flex items-center justify-center transition-all
+                                  {isChecked
+                          ? 'bg-purple-500'
+                          : 'bg-white border-2 border-gray-300'}"
+                      >
                         {#if isChecked}
-                          <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                          <svg
+                            class="w-4 h-4 text-white"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fill-rule="evenodd"
+                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                              clip-rule="evenodd"
+                            />
                           </svg>
                         {/if}
                       </div>
@@ -846,11 +932,22 @@
                     <div class="flex items-center gap-2 min-w-0 flex-1">
                       <!-- Pinned Badge -->
                       {#if isPinned}
-                        <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300" title="고정된 프로젝트">
-                          <svg class="w-3 h-3 text-amber-600" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2C8.69 2 6 4.69 6 8c0 2.36 1.37 4.41 3.36 5.42L8 18h3v4l1 1 1-1v-4h3l-1.36-4.58C16.63 12.41 18 10.36 18 8c0-3.31-2.69-6-6-6zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
+                        <div
+                          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300"
+                          title="고정된 프로젝트"
+                        >
+                          <svg
+                            class="w-3 h-3 text-amber-600"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              d="M12 2C8.69 2 6 4.69 6 8c0 2.36 1.37 4.41 3.36 5.42L8 18h3v4l1 1 1-1v-4h3l-1.36-4.58C16.63 12.41 18 10.36 18 8c0-3.31-2.69-6-6-6zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"
+                            />
                           </svg>
-                          <span class="text-[10px] font-medium text-amber-700">고정됨</span>
+                          <span class="text-[10px] font-medium text-amber-700"
+                            >고정됨</span
+                          >
                         </div>
                       {/if}
                       <h3
@@ -860,103 +957,167 @@
                           "Untitled"}
                       </h3>
                       <!-- Summary Status Indicator -->
-                    {#if summaryStatus?.has_summary}
-                      {#if summaryStatus.is_outdated}
-                        <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200" title="프롬프트가 변경되어 재생성이 필요합니다">
-                          <svg class="w-3 h-3 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                          </svg>
-                          <span class="text-[10px] font-medium text-amber-600">업데이트 필요</span>
-                        </div>
-                      {:else}
-                        <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200" title="요약이 최신 상태입니다">
-                          <svg class="w-3 h-3 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                          </svg>
-                          <span class="text-[10px] font-medium text-emerald-600">요약 완료</span>
-                        </div>
-                      {/if}
-                    {/if}
-                    <!-- Workflow Warning -->
-                    {#if hasWorkflowWarning}
-                      <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-200" title="워크플로우에 삭제된 액션 또는 파라미터가 사용되고 있습니다">
-                        <svg class="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                        </svg>
-                        <span class="text-[10px] font-medium text-red-600">워크플로우 오류</span>
-                      </div>
-                    {/if}
-                  </div>
-                  {#if CARD_CONFIG.header.date && project[CARD_CONFIG.header.date]}
-                    <span
-                      class="text-xs font-medium text-gray-400 whitespace-nowrap bg-gray-50 px-2 py-1 rounded shrink-0"
-                    >
-                      {new Date(
-                        project[CARD_CONFIG.header.date],
-                      ).toLocaleDateString()}
-                    </span>
-                  {/if}
-                </div>
-
-                {#if CARD_CONFIG.subtitle}
-                  {@const subtitleValue = getFieldValue(
-                    project,
-                    CARD_CONFIG.subtitle,
-                  )}
-                  {#if subtitleValue}
-                    <p class="text-sm text-gray-600 truncate">
-                      {subtitleValue}
-                    </p>
-                  {/if}
-                {/if}
-
-                <div class="h-px bg-gray-100 w-full my-1"></div>
-
-                <div class="flex items-end justify-between gap-3">
-                  <div
-                    class="flex items-center gap-3 text-xs text-gray-500 shrink-0"
-                  >
-                    {#each CARD_CONFIG.footer.left as field}
-                      {@const fieldValue = getFieldValue(project, field)}
-                      {#if fieldValue}
-                        <span class="flex items-center gap-1">
-                          <span class="w-1.5 h-1.5 rounded-full bg-gray-300"
-                          ></span>
-                          {fieldValue}
-                        </span>
-                      {/if}
-                    {/each}
-                  </div>
-
-                  {#if primaryBadges.length || secondaryBadges.length}
-                    <div class="flex flex-col items-end gap-1.5 min-w-0">
-                      {#if primaryBadges.length}
-                        <div class="flex flex-wrap gap-1.5 justify-end">
-                          {#each primaryBadges as badge}
-                            <span
-                              class="text-xs leading-none px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 font-semibold truncate max-w-[150px]"
-                              title={`${badge.label}: ${badge.value}`}
+                      {#if summaryStatus?.has_summary}
+                        {#if summaryStatus.is_outdated}
+                          <div
+                            class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200"
+                            title="프롬프트가 변경되어 재생성이 필요합니다"
+                          >
+                            <svg
+                              class="w-3 h-3 text-amber-500"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
                             >
-                              {badge.value}
-                            </span>
-                          {/each}
+                              <path
+                                fill-rule="evenodd"
+                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                clip-rule="evenodd"
+                              />
+                            </svg>
+                            <span class="text-[10px] font-medium text-amber-600"
+                              >업데이트 필요</span
+                            >
+                          </div>
+                        {:else}
+                          <div
+                            class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200"
+                            title="요약이 최신 상태입니다"
+                          >
+                            <svg
+                              class="w-3 h-3 text-emerald-500"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                clip-rule="evenodd"
+                              />
+                            </svg>
+                            <span
+                              class="text-[10px] font-medium text-emerald-600"
+                              >요약 완료</span
+                            >
+                          </div>
+                        {/if}
+                      {/if}
+                      <!-- Workflow Warning -->
+                      {#if hasWorkflowWarning}
+                        <div
+                          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-200"
+                          title="워크플로우에 삭제된 액션 또는 파라미터가 사용되고 있습니다"
+                        >
+                          <svg
+                            class="w-3 h-3 text-red-500"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fill-rule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                              clip-rule="evenodd"
+                            />
+                          </svg>
+                          <span class="text-[10px] font-medium text-red-600"
+                            >워크플로우 오류</span
+                          >
                         </div>
                       {/if}
-                      {#if secondaryBadges.length}
-                        <div class="flex flex-wrap gap-1.5 justify-end">
-                          {#each secondaryBadges as badge}
-                            <span
-                              class="text-[11px] leading-none px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 border border-gray-200 truncate max-w-[120px]"
-                              title={`${badge.label}: ${badge.value}`}
-                            >
-                              {badge.value}
-                            </span>
-                          {/each}
+                      <!-- Workflow Confirmation Needed -->
+                      {#if needsWorkflowConfirmation}
+                        <div
+                          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200"
+                          title="워크플로우가 시작되었으나 아직 확정되지 않았습니다"
+                        >
+                          <svg
+                            class="w-3 h-3 text-orange-500"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <span class="text-[10px] font-medium text-orange-600"
+                            >확정 필요</span
+                          >
                         </div>
                       {/if}
                     </div>
+                    {#if CARD_CONFIG.header.date && project[CARD_CONFIG.header.date]}
+                      <span
+                        class="text-xs font-medium text-gray-400 whitespace-nowrap bg-gray-50 px-2 py-1 rounded shrink-0"
+                      >
+                        {new Date(
+                          project[CARD_CONFIG.header.date],
+                        ).toLocaleDateString()}
+                      </span>
+                    {/if}
+                  </div>
+
+                  {#if CARD_CONFIG.subtitle}
+                    {@const subtitleValue = getFieldValue(
+                      project,
+                      CARD_CONFIG.subtitle,
+                    )}
+                    {#if subtitleValue}
+                      <p class="text-sm text-gray-600 truncate">
+                        {subtitleValue}
+                      </p>
+                    {/if}
                   {/if}
-                </div>
+
+                  <div class="h-px bg-gray-100 w-full my-1"></div>
+
+                  <div class="flex items-end justify-between gap-3">
+                    <div
+                      class="flex items-center gap-3 text-xs text-gray-500 shrink-0"
+                    >
+                      {#each CARD_CONFIG.footer.left as field}
+                        {@const fieldValue = getFieldValue(project, field)}
+                        {#if fieldValue}
+                          <span class="flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-gray-300"
+                            ></span>
+                            {fieldValue}
+                          </span>
+                        {/if}
+                      {/each}
+                    </div>
+
+                    {#if primaryBadges.length || secondaryBadges.length}
+                      <div class="flex flex-col items-end gap-1.5 min-w-0">
+                        {#if primaryBadges.length}
+                          <div class="flex flex-wrap gap-1.5 justify-end">
+                            {#each primaryBadges as badge}
+                              <span
+                                class="text-xs leading-none px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 font-semibold truncate max-w-[150px]"
+                                title={`${badge.label}: ${badge.value}`}
+                              >
+                                {badge.value}
+                              </span>
+                            {/each}
+                          </div>
+                        {/if}
+                        {#if secondaryBadges.length}
+                          <div class="flex flex-wrap gap-1.5 justify-end">
+                            {#each secondaryBadges as badge}
+                              <span
+                                class="text-[11px] leading-none px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 border border-gray-200 truncate max-w-[120px]"
+                                title={`${badge.label}: ${badge.value}`}
+                              >
+                                {badge.value}
+                              </span>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
                 </button>
               </div>
             {/each}

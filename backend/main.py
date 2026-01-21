@@ -291,6 +291,9 @@ class CoreStepDefinition(BaseModel):
     id: str
     name: str
     presets: List[CoreStepPreset] = []
+    requiresKeyStepLinking: bool = (
+        False  # Whether this Core Step requires linking to prior key steps
+    )
     createdAt: str = ""
 
 
@@ -898,22 +901,59 @@ def validate_all_workflows():
                 for step in steps:
                     step_id = step.get("stepId")
                     if step_id and step_id not in valid_step_ids:
-                        project_issues.append({
-                            "type": "invalid_step",
-                            "workflow_id": workflow_id,
-                            "step_id": step_id,
-                        })
+                        project_issues.append(
+                            {
+                                "type": "invalid_step",
+                                "workflow_id": workflow_id,
+                                "step_id": step_id,
+                            }
+                        )
 
             if project_issues:
-                invalid_projects.append({
-                    "project_id": project["id"],
-                    "issues": project_issues
-                })
+                invalid_projects.append(
+                    {"project_id": project["id"], "issues": project_issues}
+                )
 
         return {"invalid_projects": invalid_projects}
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to validate workflows: {str(e)}"
+        )
+
+
+@app.get("/api/projects/workflow-confirmation-status")
+def get_workflow_confirmation_status():
+    """
+    Get list of projects with workflows that have started but not confirmed.
+    Returns project IDs where unifiedSteps exist but isConfirmed is false/missing.
+    """
+    try:
+        all_projects = db.get_all_workflows()
+        pending_project_ids = []
+
+        for project in all_projects:
+            project_workflows = project.get("workflows", {})
+            if not project_workflows:
+                continue
+
+            # Check each workflow in the project
+            for workflow_id, workflow_data in project_workflows.items():
+                if not workflow_data:
+                    continue
+
+                unified_steps = workflow_data.get("unifiedSteps", [])
+                is_confirmed = workflow_data.get("isConfirmed", False)
+
+                # If there are unified steps but workflow is not confirmed
+                if len(unified_steps) > 0 and not is_confirmed:
+                    pending_project_ids.append(project["id"])
+                    break  # Only need to add project once
+
+        return {"pending_project_ids": pending_project_ids}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get workflow confirmation status: {str(e)}",
         )
 
 
@@ -1239,9 +1279,7 @@ def upload_attachment_image(request: AttachmentImageUpload):
     """Upload an attachment image to the separate BLOB database."""
     try:
         success = attachments_db.save_image(
-            request.image_id,
-            request.project_id,
-            request.data
+            request.image_id, request.project_id, request.data
         )
         if success:
             return {"status": "success", "image_id": request.image_id}
@@ -1261,21 +1299,24 @@ def get_attachment_image(image_id: str):
 
         # Detect image type from magic bytes
         content_type = "image/png"  # Default
-        if image_data[:3] == b'\xff\xd8\xff':
+        if image_data[:3] == b"\xff\xd8\xff":
             content_type = "image/jpeg"
-        elif image_data[:4] == b'\x89PNG':
+        elif image_data[:4] == b"\x89PNG":
             content_type = "image/png"
-        elif image_data[:6] in (b'GIF87a', b'GIF89a'):
+        elif image_data[:6] in (b"GIF87a", b"GIF89a"):
             content_type = "image/gif"
-        elif image_data[:4] == b'RIFF' and image_data[8:12] == b'WEBP':
+        elif image_data[:4] == b"RIFF" and image_data[8:12] == b"WEBP":
             content_type = "image/webp"
 
         from fastapi.responses import Response
+
         return Response(content=image_data, media_type=content_type)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve image: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to retrieve image: {str(e)}"
+        )
 
 
 @app.delete("/api/attachments/image/{image_id}")

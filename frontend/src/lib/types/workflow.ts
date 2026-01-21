@@ -20,6 +20,7 @@ export interface CoreStepDefinition {
     id: string;
     name: string;
     presets: CoreStepPreset[];
+    requiresKeyStepLinking: boolean;  // Whether this Core Step requires linking to prior key steps
     createdAt: string;
 }
 
@@ -74,11 +75,12 @@ export function generateCoreStepInstanceId(): string {
 }
 
 // Create a new core step definition
-export function createCoreStepDefinition(name: string): CoreStepDefinition {
+export function createCoreStepDefinition(name: string, requiresKeyStepLinking: boolean = false): CoreStepDefinition {
     return {
         id: generateCoreStepId(),
         name,
         presets: [],
+        requiresKeyStepLinking,
         createdAt: new Date().toISOString(),
     };
 }
@@ -120,6 +122,26 @@ export function getInputTypeDisplayName(type: CoreStepInputType): string {
         case 'image_clipboard': return '이미지 붙여넣기';
         default: return type;
     }
+}
+
+// ========== Key Step Linking ==========
+
+// A single key step link with priority
+export interface KeyStepLink {
+    stepId: string;              // ID of the linked step (UnifiedStepItem.id)
+    priority: number;            // Priority rank (1 = highest, ties allowed)
+}
+
+// Key step linking data for a Core Step instance
+export interface KeyStepLinkingData {
+    coreStepInstanceId: string;  // The Core Step instance this links to
+    linkedSteps: KeyStepLink[];  // Ordered list of linked steps with priorities
+    confirmedAt: string;         // When the linking was confirmed
+}
+
+// Generate unique ID for key step linking data
+export function generateKeyStepLinkId(): string {
+    return `ksl_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
 // ========== End Core Step Definitions ==========
@@ -462,6 +484,11 @@ export interface ProjectWorkflowData {
     phaseTypes?: PhaseType[];
     // Support relations - steps that support other steps in specific phases
     supportRelations?: SupportRelation[];
+    // Key step linking data - links Core Steps to their key predecessor steps
+    keyStepLinks?: KeyStepLinkingData[];
+    // Workflow confirmation status
+    isConfirmed?: boolean;
+    confirmedAt?: string;
     createdAt?: string;
     updatedAt?: string;
 }
@@ -927,6 +954,113 @@ export function syncUnifiedToLegacy(
         ...data,
         steps,
         coreStepInstances,
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+// ========== Key Step Linking Functions ==========
+
+/**
+ * Key step linking completion status
+ */
+export interface KeyStepLinkingStatus {
+    isComplete: boolean;
+    pendingCoreSteps: UnifiedStepItem[];  // Core Steps that need linking but haven't been linked yet
+}
+
+/**
+ * Check if all Core Steps requiring linking have been linked
+ */
+export function checkKeyStepLinkingComplete(
+    unifiedSteps: UnifiedStepItem[],
+    definitions: CoreStepDefinition[],
+    keyStepLinks: KeyStepLinkingData[] | undefined
+): KeyStepLinkingStatus {
+    const coreStepsRequiringLinking = unifiedSteps
+        .filter(s => s.type === 'core')
+        .filter(s => {
+            const def = definitions.find(d => d.id === s.coreStepId);
+            return def?.requiresKeyStepLinking;
+        });
+
+    const linkedCoreStepIds = new Set((keyStepLinks ?? []).map(l => l.coreStepInstanceId));
+    const pendingCoreSteps = coreStepsRequiringLinking.filter(cs => !linkedCoreStepIds.has(cs.id));
+
+    return {
+        isComplete: pendingCoreSteps.length === 0,
+        pendingCoreSteps,
+    };
+}
+
+/**
+ * Get steps available for linking (steps before the target Core Step)
+ */
+export function getAvailableStepsForLinking(
+    unifiedSteps: UnifiedStepItem[],
+    targetCoreStepId: string
+): UnifiedStepItem[] {
+    const sortedSteps = [...unifiedSteps].sort((a, b) => a.order - b.order);
+    const targetIndex = sortedSteps.findIndex(s => s.id === targetCoreStepId);
+    if (targetIndex <= 0) return [];
+
+    // Return all steps before the target Core Step
+    return sortedSteps.slice(0, targetIndex);
+}
+
+/**
+ * Get key step links for a specific Core Step instance
+ */
+export function getKeyStepLinksForCoreStep(
+    coreStepInstanceId: string,
+    keyStepLinks: KeyStepLinkingData[] | undefined
+): KeyStepLinkingData | undefined {
+    return (keyStepLinks ?? []).find(l => l.coreStepInstanceId === coreStepInstanceId);
+}
+
+/**
+ * Save key step links for a Core Step
+ */
+export function saveKeyStepLinks(
+    workflowData: ProjectWorkflowData,
+    coreStepInstanceId: string,
+    linkedSteps: KeyStepLink[]
+): ProjectWorkflowData {
+    const existingLinks = workflowData.keyStepLinks ?? [];
+    const filteredLinks = existingLinks.filter(l => l.coreStepInstanceId !== coreStepInstanceId);
+
+    const newLinkData: KeyStepLinkingData = {
+        coreStepInstanceId,
+        linkedSteps,
+        confirmedAt: new Date().toISOString(),
+    };
+
+    return {
+        ...workflowData,
+        keyStepLinks: [...filteredLinks, newLinkData],
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Confirm workflow (mark as confirmed)
+ */
+export function confirmWorkflow(workflowData: ProjectWorkflowData): ProjectWorkflowData {
+    return {
+        ...workflowData,
+        isConfirmed: true,
+        confirmedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Unconfirm workflow (allow editing again)
+ */
+export function unconfirmWorkflow(workflowData: ProjectWorkflowData): ProjectWorkflowData {
+    return {
+        ...workflowData,
+        isConfirmed: false,
+        confirmedAt: undefined,
         updatedAt: new Date().toISOString(),
     };
 }

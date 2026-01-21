@@ -95,6 +95,12 @@ b = (rgb_val >> 16) & 0xFF
 
 Individual shape failures don't stop parsing - log warnings and continue.
 
+### Backend-Frontend Type Sync (IMPORTANT)
+
+When adding new fields to frontend TypeScript types (e.g., in `workflow.ts`), **always check and update the corresponding Pydantic models in the backend**. Otherwise, the backend will silently drop unknown fields during validation, causing data to not be saved.
+
+Example: Adding `requiresKeyStepLinking` to `CoreStepDefinition` in TypeScript requires also adding it to the Pydantic model in `backend/main.py`.
+
 ## API Endpoints
 
 - `POST /api/upload` - Upload PPT, start background parsing

@@ -194,6 +194,15 @@ export async function validateWorkflows(): Promise<Response> {
     return apiFetch('/api/workflow/validate');
 }
 
+/**
+ * Fetch workflow confirmation status for all projects
+ * Returns: { pending_project_ids: string[] }
+ * Projects with started but unconfirmed workflows
+ */
+export async function fetchWorkflowConfirmationStatus(): Promise<Response> {
+    return apiFetch('/api/projects/workflow-confirmation-status');
+}
+
 // ========== Workflow API (Step-based, Multi-workflow) ==========
 
 /**
