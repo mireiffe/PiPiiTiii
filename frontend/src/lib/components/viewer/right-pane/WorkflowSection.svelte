@@ -39,7 +39,6 @@
         getMainFlowSteps,
         createCoreStepInstance,
     } from "$lib/types/workflow";
-    import CoreStepInputModal from "./workflow/CoreStepInputModal.svelte";
     import CoreStepItem from "./workflow/CoreStepItem.svelte";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
     import {
@@ -103,10 +102,7 @@
 
     // Core Step state
     let showCoreStepSelector = false;
-    let showCoreStepInputModal = false;
-    let selectedCoreStepDef: CoreStepDefinition | null = null;
     let expandedCoreStepId: string | null = null;
-    let coreStepInputModalRef: CoreStepInputModal | null = null;
     let capturingForCoreStepPresetId: string | null = null;
 
     // Multi-selection state
@@ -745,18 +741,13 @@
     }
 
     function selectCoreStepToAdd(coreStepDef: CoreStepDefinition) {
-        selectedCoreStepDef = coreStepDef;
         showCoreStepSelector = false;
-        showCoreStepInputModal = true;
-    }
 
-    function handleCoreStepConfirm(event: CustomEvent<{ presetValues: CoreStepPresetValue[] }>) {
-        if (!selectedCoreStepDef) return;
-
+        // Create instance with empty preset values (to be filled in the list)
         const order = (workflowData.coreStepInstances?.length ?? 0);
         const newInstance = createCoreStepInstance(
-            selectedCoreStepDef.id,
-            event.detail.presetValues,
+            coreStepDef.id,
+            [], // Start with empty values
             order
         );
 
@@ -767,21 +758,30 @@
         };
         dispatch("workflowChange", workflowData);
 
-        showCoreStepInputModal = false;
-        selectedCoreStepDef = null;
+        // Auto-expand the new instance for editing
         expandedCoreStepId = newInstance.id;
     }
 
-    function handleCoreStepCancel() {
-        showCoreStepInputModal = false;
-        selectedCoreStepDef = null;
-        capturingForCoreStepPresetId = null;
+    function handleCoreStepUpdate(event: CustomEvent<{ instance: CoreStepInstance }>) {
+        const updatedInstance = event.detail.instance;
+        workflowData = {
+            ...workflowData,
+            coreStepInstances: (workflowData.coreStepInstances ?? []).map(inst =>
+                inst.id === updatedInstance.id ? updatedInstance : inst
+            ),
+            updatedAt: new Date().toISOString(),
+        };
+        dispatch("workflowChange", workflowData);
     }
 
-    function handleCoreStepStartCapture(event: CustomEvent<{ presetId: string }>) {
-        capturingForCoreStepPresetId = event.detail.presetId;
-        dispatch("toggleCaptureMode", { stepId: `coreStep:${event.detail.presetId}` });
+    function handleCoreStepStartCapture(instanceId: string, presetId: string) {
+        capturingForCoreStepPresetId = presetId;
+        capturingCoreStepInstanceId = instanceId;
+        dispatch("toggleCaptureMode", { stepId: `coreStep:${instanceId}:${presetId}` });
     }
+
+    // Track which core step instance is being captured for
+    let capturingCoreStepInstanceId: string | null = null;
 
     // Called from parent when capture is completed for core step preset
     export function addCoreStepCapture(capture: {
@@ -791,10 +791,38 @@
         width: number;
         height: number;
     }) {
-        if (!capturingForCoreStepPresetId || !coreStepInputModalRef) return;
+        if (!capturingForCoreStepPresetId || !capturingCoreStepInstanceId) return;
 
-        coreStepInputModalRef.setCaptureValue(capturingForCoreStepPresetId, capture);
+        // Find and update the instance directly
+        const instanceIdx = (workflowData.coreStepInstances ?? []).findIndex(
+            inst => inst.id === capturingCoreStepInstanceId
+        );
+        if (instanceIdx >= 0) {
+            const instance = workflowData.coreStepInstances![instanceIdx];
+            const presetIdx = instance.presetValues.findIndex(
+                pv => pv.presetId === capturingForCoreStepPresetId
+            );
+
+            if (presetIdx >= 0) {
+                instance.presetValues[presetIdx].captureValue = capture;
+            } else {
+                instance.presetValues = [...instance.presetValues, {
+                    presetId: capturingForCoreStepPresetId,
+                    type: 'capture',
+                    captureValue: capture,
+                }];
+            }
+
+            workflowData = {
+                ...workflowData,
+                coreStepInstances: [...workflowData.coreStepInstances!],
+                updatedAt: new Date().toISOString(),
+            };
+            dispatch("workflowChange", workflowData);
+        }
+
         capturingForCoreStepPresetId = null;
+        capturingCoreStepInstanceId = null;
         dispatch("toggleCaptureMode", { stepId: null });
     }
 
@@ -1093,10 +1121,13 @@
                                         definition={csDef}
                                         displayNumber={idx + 1}
                                         isExpanded={expandedCoreStepId === instance.id}
+                                        {projectId}
                                         on:toggleExpand={() => toggleCoreStepExpand(instance.id)}
                                         on:remove={() => removeCoreStepInstance(instance.id)}
                                         on:moveUp={() => moveCoreStepUp(idx)}
                                         on:moveDown={() => moveCoreStepDown(idx)}
+                                        on:update={handleCoreStepUpdate}
+                                        on:startCapture={(e) => handleCoreStepStartCapture(instance.id, e.detail.presetId)}
                                     />
                                 {/if}
                             {/each}
@@ -1309,18 +1340,6 @@
                             </button>
                         </div>
                     </div>
-                {/if}
-
-                <!-- Core Step Input Modal -->
-                {#if showCoreStepInputModal && selectedCoreStepDef}
-                    <CoreStepInputModal
-                        bind:this={coreStepInputModalRef}
-                        coreStepDef={selectedCoreStepDef}
-                        {projectId}
-                        on:confirm={handleCoreStepConfirm}
-                        on:cancel={handleCoreStepCancel}
-                        on:startCapture={handleCoreStepStartCapture}
-                    />
                 {/if}
 
             {/if}
