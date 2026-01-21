@@ -1523,9 +1523,10 @@
 
     {#if isExpanded}
         <div
-            transition:slide={{ duration: 200 }}
-            class="flex-1 flex flex-col min-h-[400px] bg-gray-50/50 relative overflow-hidden"
+            transition:slide={{ duration: 200, axis: "y" }}
+            class="border-t border-gray-100 bg-gray-50/50 flex-1 flex flex-col min-h-0"
         >
+            <div class="flex-1 flex flex-col min-h-0 overflow-hidden relative">
             <!-- Workflow Tabs (inside accordion) -->
             {#if workflows.length > 0}
                 <div class="flex border-b border-gray-200 bg-gray-50 px-2 pt-2 gap-1 overflow-x-auto shrink-0">
@@ -1896,6 +1897,7 @@
                 {/if}
 
             {/if}
+            </div>
         </div>
     {/if}
 </div>
