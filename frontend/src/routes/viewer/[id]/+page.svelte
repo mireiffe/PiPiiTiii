@@ -96,6 +96,7 @@
     let captureTargetStepId = null; // Which step is capturing
     let workflowSectionRef; // Reference to WorkflowSection component
     let captureOverlays = []; // Capture regions to display on canvas
+    let showCaptureOverlays = true; // Toggle visibility of capture overlays
 
     // Accordion state for right pane sections
     let expandedSection = "workflow"; // 'workflow' | 'summary' | 'objects' - default is workflow
@@ -997,11 +998,13 @@
                 {downloading}
                 {scale}
                 {project}
+                showOverlays={showCaptureOverlays}
                 on:undo={undo}
                 on:redo={redo}
                 on:saveState={handleSaveState}
                 on:reset={handleReset}
                 on:toggleThumbnailView={toggleThumbnailView}
+                on:toggleOverlays={() => (showCaptureOverlays = !showCaptureOverlays)}
                 on:reparseAll={handleReparseAll}
                 on:reparseSlide={handleReparseSlide}
                 on:download={handleDownload}
@@ -1022,6 +1025,7 @@
                 {selectedShapeId}
                 {captureMode}
                 {captureOverlays}
+                showOverlays={showCaptureOverlays}
                 on:wheel={handleWheel}
                 on:canvasMouseDown={handleCanvasMouseDown}
                 on:shapeMouseDown={(e) =>
