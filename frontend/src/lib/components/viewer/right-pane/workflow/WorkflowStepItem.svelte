@@ -59,6 +59,11 @@
         if (!stepDef) return "Unknown Step";
         return stepDef.values["purpose"] || stepDef.values["step_category"] || stepDef.id;
     }
+
+    // Auto-focus action for input element
+    function autoFocus(node: HTMLInputElement) {
+        node.focus();
+    }
 </script>
 
 <div
@@ -253,7 +258,7 @@
                                 placeholder="내용 입력 또는 이미지 붙여넣기 (Ctrl+V)"
                                 on:keydown={(e) => e.key === "Enter" && dispatch("addTextAttachment")}
                                 on:paste={(e) => dispatch("paste", e)}
-                                autofocus
+                                use:autoFocus
                             />
                             <button
                                 class="absolute right-1 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 hover:bg-amber-100 rounded"

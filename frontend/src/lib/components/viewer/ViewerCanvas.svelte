@@ -15,18 +15,19 @@
     export let captureOverlays = []; // Capture regions to display when phenomenon node is selected
     export let highlightedCaptureIndex = null; // Index of currently highlighted capture (for candidate search)
     export let isActionCapture = false; // True when capturing for action (gray color)
+    export let showOverlays = true; // Toggle visibility of capture overlays
 
     // Candidate Cause Linking Props
     export let isCandidateLinkingMode = false;
     export let linkedEvidenceIds: string[] = [];
 
     // Create a map of slideIndex -> overlays for reactive updates
-    $: overlaysBySlide = captureOverlays.reduce((acc, overlay) => {
+    $: overlaysBySlide = showOverlays ? captureOverlays.reduce((acc, overlay) => {
         const idx = overlay.slideIndex;
         if (!acc[idx]) acc[idx] = [];
         acc[idx].push(overlay);
         return acc;
-    }, {});
+    }, {}) : {};
 
     const dispatch = createEventDispatcher();
     let slideElements = {};
@@ -348,7 +349,7 @@
                                 title={overlay.isActionCapture ? `Action: ${overlay.actionName || ''}\nCause: ${overlay.causeName || ''}` : overlay.label || ''}
                             >
                                 <div
-                                    class="absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] font-bold text-white rounded-t whitespace-nowrap
+                                    class="absolute -top-4 left-0 px-1 py-px text-[7px] font-bold text-white rounded-t whitespace-nowrap
                                            {isHighlighted ? 'scale-110' : ''}"
                                     style="background-color: {color.border};"
                                 >
