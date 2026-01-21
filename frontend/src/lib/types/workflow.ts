@@ -152,6 +152,7 @@ export interface WorkflowDefinition {
     order: number;
     useGlobalSteps: boolean;  // If true, uses global workflow_steps; if false, uses its own steps
     steps: WorkflowSteps | null;  // Own step definitions (only used when useGlobalSteps is false)
+    coreSteps?: CoreStepsSettings;  // Core steps defined for this workflow
     createdAt: string;
 }
 

@@ -5,7 +5,7 @@
  * Removes 'any' types and provides type safety for API calls.
  */
 
-import type { WorkflowSteps, WorkflowSettings, CoreStepsSettings, ProjectWorkflowData, PhaseType } from './workflow';
+import type { WorkflowSteps, WorkflowSettings, ProjectWorkflowData, PhaseType } from './workflow';
 
 // ========== Shape Types ==========
 
@@ -88,7 +88,6 @@ export interface Settings {
     summary_fields: SummaryField[];
     workflow_steps: WorkflowSteps;
     workflow_settings?: WorkflowSettings;
-    core_steps_settings?: CoreStepsSettings;
     use_thumbnails?: boolean;
 }
 

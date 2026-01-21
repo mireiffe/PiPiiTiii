@@ -1,17 +1,16 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fetchSettings, updateSettings, fetchAllAttributes } from "$lib/api/project";
-    import type { WorkflowSteps, PhaseType, WorkflowDefinition, WorkflowSettings, CoreStepsSettings } from "$lib/types/workflow";
+    import type { WorkflowSteps, PhaseType, WorkflowDefinition, WorkflowSettings } from "$lib/types/workflow";
     import LLMSettingsSection from "$lib/components/settings/LLMSettingsSection.svelte";
     import SummaryFieldsSection from "$lib/components/settings/SummaryFieldsSection.svelte";
     import PhenomenonAttributesSection from "$lib/components/settings/PhenomenonAttributesSection.svelte";
     import WorkflowStepsSection from "$lib/components/settings/WorkflowStepsSection.svelte";
     import PhaseSettingsSection from "$lib/components/settings/PhaseSettingsSection.svelte";
     import WorkflowDefinitionsSection from "$lib/components/settings/WorkflowDefinitionsSection.svelte";
-    import CoreStepsSection from "$lib/components/settings/CoreStepsSection.svelte";
 
     // Navigation sections
-    type SectionId = "llm" | "summary" | "phenomenon" | "workflows" | "workflow" | "core_steps" | "phases";
+    type SectionId = "llm" | "summary" | "phenomenon" | "workflows" | "workflow" | "phases";
 
     interface NavSection {
         id: SectionId;
@@ -25,7 +24,6 @@
         { id: "phenomenon", label: "발생현상 속성", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" },
         { id: "workflows", label: "워크플로우 정의", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
         { id: "workflow", label: "글로벌 스텝", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
-        { id: "core_steps", label: "Core Step", icon: "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" },
         { id: "phases", label: "위상 (Phase)", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
     ];
 
@@ -59,7 +57,6 @@
         workflow_steps: WorkflowSteps;
         phase_types: PhaseType[];
         workflow_settings?: WorkflowSettings;
-        core_steps?: CoreStepsSettings;
     }
 
     const DEFAULT_COLUMNS = [
@@ -77,7 +74,6 @@
     let expandedRowId: string | null = null;
     let expandedWorkflowId: string | null = null;
     let expandedWorkflowRowId: string | null = null;
-    let expandedCoreStepId: string | null = null;
 
     let settings: Settings = {
         llm: { api_type: "openai", api_endpoint: "", model_name: "" },
@@ -90,9 +86,6 @@
             workflows: [],
             phaseTypes: [],
             globalStepsLabel: "발생현상",
-        },
-        core_steps: {
-            definitions: [],
         },
     };
 
@@ -136,10 +129,9 @@
                     phase_types: data.phase_types || [],
                     workflow_settings: data.workflow_settings || {
                         workflows: [],
-                        phaseTypes: data.workflow_settings?.phaseTypes || [],
-                        globalStepsLabel: data.workflow_settings?.globalStepsLabel || "발생현상",
+                        phaseTypes: [],
+                        globalStepsLabel: "발생현상",
                     },
-                    core_steps: data.core_steps || { definitions: [] },
                 };
 
                 if (!settings.workflow_steps.columns || settings.workflow_steps.columns.length === 0) {
@@ -149,14 +141,10 @@
                 // Ensure workflow_settings has workflows array
                 if (!settings.workflow_settings?.workflows) {
                     settings.workflow_settings = {
-                        ...settings.workflow_settings,
                         workflows: [],
+                        phaseTypes: settings.workflow_settings?.phaseTypes || [],
+                        globalStepsLabel: settings.workflow_settings?.globalStepsLabel || "발생현상",
                     };
-                }
-
-                // Ensure core_steps is initialized
-                if (!settings.core_steps) {
-                    settings.core_steps = { definitions: [] };
                 }
             }
         } catch (e) {
@@ -272,15 +260,7 @@
         expandedWorkflowRowId = expandedWorkflowRowId === e.detail.rowId ? null : e.detail.rowId;
     }
 
-    // Core steps handlers
-    function handleCoreStepsUpdate(e: CustomEvent<{ coreSteps: CoreStepsSettings }>) {
-        settings.core_steps = e.detail.coreSteps;
-    }
-
-    function handleToggleCoreStepExpand(e: CustomEvent<{ stepId: string }>) {
-        expandedCoreStepId = expandedCoreStepId === e.detail.stepId ? null : e.detail.stepId;
-    }
-</script>
+    </script>
 
 <div class="h-screen flex flex-col bg-gray-100">
     <!-- Header -->
@@ -380,16 +360,6 @@
                             {expandedRowId}
                             on:update={handleWorkflowStepsUpdate}
                             on:toggleRowExpand={handleToggleRowExpand}
-                        />
-                    </div>
-
-                    <!-- Core Step 설정 -->
-                    <div id="section-core_steps">
-                        <CoreStepsSection
-                            coreSteps={settings.core_steps || { definitions: [] }}
-                            expandedStepId={expandedCoreStepId}
-                            on:update={handleCoreStepsUpdate}
-                            on:toggleStepExpand={handleToggleCoreStepExpand}
                         />
                     </div>
 

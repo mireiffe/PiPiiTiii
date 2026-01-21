@@ -1256,10 +1256,10 @@
                             </div>
                             <div class="border-t border-gray-100 mt-2 pt-2">
                                 <a
-                                    href="/settings#section-core_steps"
+                                    href="/settings#section-workflows"
                                     class="block px-3 py-1.5 text-xs text-purple-600 hover:bg-purple-50 rounded-lg"
                                 >
-                                    설정에서 Core Step 관리
+                                    설정에서 워크플로우 Core Step 관리
                                 </a>
                             </div>
                         </div>

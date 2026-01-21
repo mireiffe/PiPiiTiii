@@ -70,6 +70,9 @@
     // Get current workflow data
     $: currentWorkflowData = allWorkflowsData[activeWorkflowId] || workflowData;
 
+    // Get core steps for current workflow
+    $: currentCoreStepsSettings = currentWorkflow?.coreSteps || { definitions: [] };
+
     function toggleSection(section) {
         expandedSection = expandedSection === section ? null : section;
     }
@@ -147,7 +150,7 @@
             workflowData={currentWorkflowData}
             workflowSteps={currentWorkflowSteps}
             globalPhases={settings?.phase_types || []}
-            coreStepsSettings={settings?.core_steps || { definitions: [] }}
+            coreStepsSettings={currentCoreStepsSettings}
             workflowName={currentWorkflow?.name || "Workflow"}
             {savingWorkflow}
             {captureMode}

@@ -279,25 +279,7 @@ class PhaseType(BaseModel):
     order: int
 
 
-class WorkflowDefinition(BaseModel):
-    id: str
-    name: str
-    order: int
-    useGlobalSteps: bool = True
-    steps: Optional[WorkflowSteps] = None
-    createdAt: str = ""
-    # Legacy fields (for backwards compatibility)
-    includeGlobalSteps: Optional[bool] = None
-    additionalSteps: Optional[WorkflowSteps] = None
-
-
-class WorkflowSettingsModel(BaseModel):
-    workflows: List[WorkflowDefinition] = []
-    phaseTypes: List[PhaseType] = []
-    globalStepsLabel: str = "발생현상"
-
-
-# Core Step Models
+# Core Step Models (defined before WorkflowDefinition since it references them)
 class CoreStepPreset(BaseModel):
     id: str
     name: str
@@ -316,6 +298,25 @@ class CoreStepsSettings(BaseModel):
     definitions: List[CoreStepDefinition] = []
 
 
+class WorkflowDefinition(BaseModel):
+    id: str
+    name: str
+    order: int
+    useGlobalSteps: bool = True
+    steps: Optional[WorkflowSteps] = None
+    coreSteps: Optional[CoreStepsSettings] = None  # Core steps for this workflow
+    createdAt: str = ""
+    # Legacy fields (for backwards compatibility)
+    includeGlobalSteps: Optional[bool] = None
+    additionalSteps: Optional[WorkflowSteps] = None
+
+
+class WorkflowSettingsModel(BaseModel):
+    workflows: List[WorkflowDefinition] = []
+    phaseTypes: List[PhaseType] = []
+    globalStepsLabel: str = "발생현상"
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     summary_fields: List[SummaryField]
@@ -325,7 +326,6 @@ class Settings(BaseModel):
     step_containers: Optional[List[StepContainer]] = None
     phase_types: Optional[List[PhaseType]] = None
     workflow_settings: Optional[WorkflowSettingsModel] = None
-    core_steps: Optional[CoreStepsSettings] = None
 
 
 class WorkflowData(BaseModel):
@@ -760,9 +760,6 @@ def load_settings() -> dict:
             # Ensure phase_types exists (migration for existing settings)
             if "phase_types" not in settings:
                 settings["phase_types"] = []
-            # Ensure core_steps exists (migration for existing settings)
-            if "core_steps" not in settings:
-                settings["core_steps"] = {"definitions": []}
             # Ensure phenomenon_attributes exists (migration for existing settings)
             if "phenomenon_attributes" not in settings:
                 settings["phenomenon_attributes"] = []
@@ -780,7 +777,6 @@ def load_settings() -> dict:
             "workflow_steps": get_default_workflow_steps(),
             "step_containers": [],
             "phase_types": [],
-            "core_steps": {"definitions": []},
         }
 
 
