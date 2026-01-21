@@ -26,6 +26,8 @@
     }>();
 
     let isUploading = false;
+    // Track which preset is in edit mode (for text input)
+    let editingPresetId: string | null = null;
 
     function getPresetDefinition(presetId: string): CoreStepPreset | undefined {
         return definition.presets.find(p => p.id === presetId);
@@ -38,8 +40,8 @@
     function getPreviewText(): string {
         const filledPresets = instance.presetValues.filter(pv => {
             if (pv.type === 'text') return pv.textValue && pv.textValue.trim().length > 0;
-            if (pv.type === 'capture') return pv.captureValue !== null;
-            if (pv.type === 'image_clipboard') return pv.imageId !== null;
+            if (pv.type === 'capture') return pv.captureValue !== null && pv.captureValue !== undefined;
+            if (pv.type === 'image_clipboard') return pv.imageId !== null && pv.imageId !== undefined;
             return false;
         });
 
@@ -95,30 +97,23 @@
         dispatch('update', { instance });
     }
 
-    function startCapture(presetId: string) {
-        dispatch('startCapture', { presetId });
+    function startEditing(presetId: string) {
+        editingPresetId = presetId;
     }
 
-    export function setCaptureValue(presetId: string, captureValue: {
-        slideIndex: number;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        label?: string;
-    }) {
-        const idx = instance.presetValues.findIndex(pv => pv.presetId === presetId);
-        if (idx >= 0) {
-            instance.presetValues[idx].captureValue = captureValue;
-        } else {
-            instance.presetValues = [...instance.presetValues, {
-                presetId,
-                type: 'capture',
-                captureValue,
-            }];
+    function stopEditing() {
+        editingPresetId = null;
+    }
+
+    function handleTextKeydown(event: KeyboardEvent, presetId: string) {
+        if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+            event.preventDefault();
+            stopEditing();
         }
-        instance = { ...instance };
-        dispatch('update', { instance });
+    }
+
+    function startCapture(presetId: string) {
+        dispatch('startCapture', { presetId });
     }
 
     function clearCapture(presetId: string) {
@@ -130,7 +125,7 @@
         }
     }
 
-    async function handlePaste(event: ClipboardEvent, presetId: string) {
+    async function handleImagePaste(event: ClipboardEvent, presetId: string) {
         const items = event.clipboardData?.items;
         if (!items) return;
 
@@ -149,6 +144,27 @@
                 return;
             }
         }
+    }
+
+    // Trigger paste from global clipboard (for click to paste)
+    function handleImageAreaClick(presetId: string) {
+        // Create a temporary input to trigger paste
+        const input = document.createElement('input');
+        input.style.position = 'fixed';
+        input.style.left = '-9999px';
+        document.body.appendChild(input);
+        input.focus();
+
+        const handlePaste = async (e: ClipboardEvent) => {
+            await handleImagePaste(e, presetId);
+            document.removeEventListener('paste', handlePaste);
+            document.body.removeChild(input);
+        };
+
+        document.addEventListener('paste', handlePaste);
+
+        // Show hint
+        alert('이미지를 복사한 후 Ctrl+V를 눌러주세요.');
     }
 
     async function uploadImage(presetId: string, base64Data: string) {
@@ -199,6 +215,22 @@
                 }];
             }
         });
+    }
+
+    // Handle global paste for image clipboard type
+    function setupGlobalPaste(presetId: string) {
+        const handleGlobalPaste = (e: ClipboardEvent) => {
+            // Only process if this preset is focused
+            const target = e.target as HTMLElement;
+            if (target.closest(`[data-preset-id="${presetId}"]`)) {
+                handleImagePaste(e, presetId);
+            }
+        };
+        return {
+            destroy() {
+                // cleanup if needed
+            }
+        };
     }
 </script>
 
@@ -283,8 +315,9 @@
                 {#each definition.presets.sort((a, b) => a.order - b.order) as preset (preset.id)}
                     {@const presetValue = getPresetValue(preset.id)}
                     {@const currentType = presetValue?.type || preset.allowedTypes[0] || 'text'}
+                    {@const isEditingThis = editingPresetId === preset.id}
 
-                    <div class="bg-purple-50/50 rounded-lg p-2 border border-purple-100">
+                    <div class="bg-purple-50/50 rounded-lg p-2 border border-purple-100" data-preset-id={preset.id}>
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-medium text-purple-700">{preset.name}</span>
 
@@ -306,15 +339,34 @@
                             {/if}
                         </div>
 
-                        <!-- Text Input -->
+                        <!-- Text Input (click to edit, Ctrl+S to save) -->
                         {#if currentType === 'text'}
-                            <textarea
-                                value={presetValue?.textValue || ''}
-                                on:input={(e) => updateTextValue(preset.id, e.currentTarget.value)}
-                                placeholder="{preset.name} 입력..."
-                                class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none bg-white"
-                                rows="2"
-                            ></textarea>
+                            {#if isEditingThis}
+                                <textarea
+                                    value={presetValue?.textValue || ''}
+                                    on:input={(e) => updateTextValue(preset.id, e.currentTarget.value)}
+                                    on:blur={stopEditing}
+                                    on:keydown={(e) => handleTextKeydown(e, preset.id)}
+                                    placeholder="{preset.name} 입력... (Ctrl+S로 저장)"
+                                    class="w-full border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white"
+                                    rows="3"
+                                    autofocus
+                                ></textarea>
+                            {:else}
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                <div
+                                    class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
+                                    on:click={() => startEditing(preset.id)}
+                                    title="클릭하여 편집"
+                                >
+                                    {#if presetValue?.textValue && presetValue.textValue.trim()}
+                                        <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.textValue}</p>
+                                    {:else}
+                                        <p class="text-gray-400 italic">클릭하여 입력...</p>
+                                    {/if}
+                                </div>
+                            {/if}
 
                         <!-- Capture Input -->
                         {:else if currentType === 'capture'}
@@ -324,8 +376,14 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                                     </svg>
                                     <span class="text-xs text-green-700 flex-1">
-                                        슬라이드 {presetValue.captureValue.slideIndex + 1}
+                                        슬라이드 {presetValue.captureValue.slideIndex + 1} 캡처됨
                                     </span>
+                                    <button
+                                        class="text-xs text-gray-500 hover:text-green-600 px-2 py-0.5 border border-gray-200 rounded hover:border-green-300 transition"
+                                        on:click={() => startCapture(preset.id)}
+                                    >
+                                        다시 캡처
+                                    </button>
                                     <button
                                         class="text-xs text-red-500 hover:text-red-700"
                                         on:click={() => clearCapture(preset.id)}
@@ -348,34 +406,46 @@
                         <!-- Image Clipboard Input -->
                         {:else if currentType === 'image_clipboard'}
                             {#if presetValue?.imageId}
-                                <div class="relative">
+                                <div class="relative group">
                                     <img
                                         src={getAttachmentImageUrl(presetValue.imageId)}
-                                        alt="붙여넣은 이미지"
-                                        class="w-full max-h-24 object-contain rounded border border-gray-200"
+                                        alt="첨부된 이미지"
+                                        class="w-full max-h-32 object-contain rounded border border-gray-200 bg-gray-50"
                                     />
-                                    <button
-                                        class="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition text-xs"
-                                        on:click={() => clearImage(preset.id)}
-                                    >
-                                        ×
-                                    </button>
+                                    <div class="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            class="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition text-xs shadow"
+                                            on:click={() => clearImage(preset.id)}
+                                            title="이미지 삭제"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
                                 </div>
                             {:else}
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
-                                    class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 flex flex-col items-center justify-center gap-1 cursor-text hover:border-purple-400 hover:bg-purple-50/50 transition-all"
-                                    contenteditable="true"
-                                    on:paste={(e) => handlePaste(e, preset.id)}
-                                    role="textbox"
+                                    class="w-full py-4 border border-dashed border-gray-300 rounded text-gray-500 flex flex-col items-center justify-center gap-1.5 hover:border-purple-400 hover:bg-purple-50/50 transition-all cursor-pointer"
+                                    on:paste={(e) => handleImagePaste(e, preset.id)}
+                                    on:click={() => {
+                                        // Focus this element to receive paste events
+                                        const el = document.querySelector(`[data-preset-id="${preset.id}"]`);
+                                        if (el) (el as HTMLElement).focus();
+                                    }}
                                     tabindex="0"
+                                    role="button"
                                 >
                                     {#if isUploading}
+                                        <svg class="animate-spin w-5 h-5 text-purple-500" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
                                         <span class="text-xs">업로드 중...</span>
                                     {:else}
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                         </svg>
-                                        <span class="text-[10px]">Ctrl+V로 붙여넣기</span>
+                                        <span class="text-xs">클릭 후 Ctrl+V로 이미지 붙여넣기</span>
                                     {/if}
                                 </div>
                             {/if}
