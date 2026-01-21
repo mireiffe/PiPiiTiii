@@ -19,6 +19,10 @@
         StepAttachment,
         PhaseType,
         LayoutRow,
+        CoreStepsSettings,
+        CoreStepDefinition,
+        CoreStepInstance,
+        CoreStepPresetValue,
     } from "$lib/types/workflow";
     import {
         createEmptyWorkflowData,
@@ -33,11 +37,14 @@
         cleanupOrphanedSupports,
         isStepSupporter,
         getMainFlowSteps,
+        createCoreStepInstance,
     } from "$lib/types/workflow";
+    import CoreStepItem from "./workflow/CoreStepItem.svelte";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
     import {
         uploadAttachmentImage,
         deleteAttachmentImage,
+        getAttachmentImageUrl,
     } from "$lib/api/project";
 
     export let isExpanded = false;
@@ -45,6 +52,7 @@
     export let workflowData: ProjectWorkflowData = createEmptyWorkflowData();
     export let workflowSteps: WorkflowSteps = { columns: [], rows: [] };
     export let globalPhases: PhaseType[] = [];  // Global phases from settings
+    export let coreStepsSettings: CoreStepsSettings = { definitions: [] };  // Core step definitions from settings
     export let savingWorkflow = false;
     export let captureMode = false;
     export let captureTargetStepId: string | null = null;
@@ -92,6 +100,21 @@
     // Phase list popup state
     let showPhaseListPopup = false;
     let phaseListPopupRef: HTMLDivElement | null = null;
+
+    // Core Step state
+    let showCoreStepSelector = false;
+    let expandedCoreStepId: string | null = null;
+    let capturingForCoreStepPresetId: string | null = null;
+
+    // Core Step Image Modal State
+    let showCoreStepImageModal = false;
+    let coreStepImagePresetId: string | null = null;
+    let coreStepImageInstanceId: string | null = null;
+    let coreStepPendingImageData: string | null = null;
+    let coreStepImageCaption = "";
+    let coreStepImageIsEditing = false;  // true if editing existing image caption
+    let coreStepImageIsUploading = false;
+    let coreStepItemRefs: Record<string, any> = {};  // Reference to CoreStepItem components
 
     // Multi-selection state
     let selectedStepIds: Set<string> = new Set();
@@ -383,6 +406,7 @@
         if (event.key === "Escape") {
             if (showAttachmentModal) closeAttachmentModal();
             else if (showImageAddModal) closeImageAddModal();
+            else if (showCoreStepImageModal) closeCoreStepImageModal();
             else if (captureMode) exitCaptureMode();
         }
     }
@@ -568,6 +592,35 @@
             }
             colorIndex++;
         }
+
+        // Add Core Step captures
+        if (workflowData.coreStepInstances) {
+            const coreStepColor = '#9333ea'; // purple-600
+            workflowData.coreStepInstances.forEach((instance, instanceIdx) => {
+                const csDef = getCoreStepDefinition(instance.coreStepId);
+                if (!csDef) return;
+
+                instance.presetValues.forEach(pv => {
+                    if (pv.type === 'capture' && pv.captureValue) {
+                        const presetDef = csDef.presets.find(p => p.id === pv.presetId);
+                        overlays.push({
+                            ...pv.captureValue,
+                            id: `${instance.id}_${pv.presetId}`,
+                            stepId: instance.id,
+                            workflowName,
+                            stepNumber: `C${instanceIdx + 1}`,
+                            captureIndexInStep: 0,
+                            color: coreStepColor,
+                            colorIndex: colorIndex + instanceIdx,
+                            isCoreStep: true,
+                            coreStepName: csDef.name,
+                            presetName: presetDef?.name || '',
+                        });
+                    }
+                });
+            });
+        }
+
         return overlays;
     }
 
@@ -720,6 +773,201 @@
     function handleDeleteWorkflow() {
         if (confirm("워크플로우 전체를 삭제하시겠습니까?")) {
             dispatch("deleteWorkflow");
+        }
+    }
+
+    // Core Step Management
+    function openCoreStepSelector() {
+        showCoreStepSelector = !showCoreStepSelector;
+    }
+
+    function selectCoreStepToAdd(coreStepDef: CoreStepDefinition) {
+        showCoreStepSelector = false;
+
+        // Create instance with empty preset values (to be filled in the list)
+        const order = (workflowData.coreStepInstances?.length ?? 0);
+        const newInstance = createCoreStepInstance(
+            coreStepDef.id,
+            [], // Start with empty values
+            order
+        );
+
+        workflowData = {
+            ...workflowData,
+            coreStepInstances: [...(workflowData.coreStepInstances ?? []), newInstance],
+            updatedAt: new Date().toISOString(),
+        };
+        dispatch("workflowChange", workflowData);
+
+        // Auto-expand the new instance for editing
+        expandedCoreStepId = newInstance.id;
+    }
+
+    function handleCoreStepUpdate(event: CustomEvent<{ instance: CoreStepInstance }>) {
+        const updatedInstance = event.detail.instance;
+        workflowData = {
+            ...workflowData,
+            coreStepInstances: (workflowData.coreStepInstances ?? []).map(inst =>
+                inst.id === updatedInstance.id ? updatedInstance : inst
+            ),
+            updatedAt: new Date().toISOString(),
+        };
+        dispatch("workflowChange", workflowData);
+    }
+
+    function handleCoreStepStartCapture(instanceId: string, presetId: string) {
+        capturingForCoreStepPresetId = presetId;
+        capturingCoreStepInstanceId = instanceId;
+        dispatch("toggleCaptureMode", { stepId: `coreStep:${instanceId}:${presetId}` });
+    }
+
+    // Track which core step instance is being captured for
+    let capturingCoreStepInstanceId: string | null = null;
+
+    // Called from parent when capture is completed for core step preset
+    export function addCoreStepCapture(capture: {
+        slideIndex: number;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    }) {
+        if (!capturingForCoreStepPresetId || !capturingCoreStepInstanceId) return;
+
+        // Find and update the instance directly
+        const instanceIdx = (workflowData.coreStepInstances ?? []).findIndex(
+            inst => inst.id === capturingCoreStepInstanceId
+        );
+        if (instanceIdx >= 0) {
+            const instance = workflowData.coreStepInstances![instanceIdx];
+            const presetIdx = instance.presetValues.findIndex(
+                pv => pv.presetId === capturingForCoreStepPresetId
+            );
+
+            if (presetIdx >= 0) {
+                instance.presetValues[presetIdx].captureValue = capture;
+            } else {
+                instance.presetValues = [...instance.presetValues, {
+                    presetId: capturingForCoreStepPresetId,
+                    type: 'capture',
+                    captureValue: capture,
+                }];
+            }
+
+            workflowData = {
+                ...workflowData,
+                coreStepInstances: [...workflowData.coreStepInstances!],
+                updatedAt: new Date().toISOString(),
+            };
+            dispatch("workflowChange", workflowData);
+        }
+
+        capturingForCoreStepPresetId = null;
+        capturingCoreStepInstanceId = null;
+        dispatch("toggleCaptureMode", { stepId: null });
+    }
+
+    function removeCoreStepInstance(instanceId: string) {
+        if (confirm("이 Core Step을 삭제하시겠습니까?")) {
+            workflowData = {
+                ...workflowData,
+                coreStepInstances: (workflowData.coreStepInstances ?? []).filter(i => i.id !== instanceId),
+                updatedAt: new Date().toISOString(),
+            };
+            dispatch("workflowChange", workflowData);
+        }
+    }
+
+    function moveCoreStepUp(index: number) {
+        if (index === 0 || !workflowData.coreStepInstances) return;
+        const instances = [...workflowData.coreStepInstances];
+        [instances[index - 1], instances[index]] = [instances[index], instances[index - 1]];
+        instances.forEach((inst, i) => inst.order = i);
+        workflowData = { ...workflowData, coreStepInstances: instances, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
+    }
+
+    function moveCoreStepDown(index: number) {
+        if (!workflowData.coreStepInstances || index >= workflowData.coreStepInstances.length - 1) return;
+        const instances = [...workflowData.coreStepInstances];
+        [instances[index], instances[index + 1]] = [instances[index + 1], instances[index]];
+        instances.forEach((inst, i) => inst.order = i);
+        workflowData = { ...workflowData, coreStepInstances: instances, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
+    }
+
+    function toggleCoreStepExpand(instanceId: string) {
+        expandedCoreStepId = expandedCoreStepId === instanceId ? null : instanceId;
+    }
+
+    function getCoreStepDefinition(coreStepId: string): CoreStepDefinition | undefined {
+        return coreStepsSettings.definitions.find(d => d.id === coreStepId);
+    }
+
+    // Core Step Image Modal Handlers
+    function handleCoreStepImagePaste(event: CustomEvent<{ presetId: string; imageData: string }>, instanceId: string) {
+        coreStepImageInstanceId = instanceId;
+        coreStepImagePresetId = event.detail.presetId;
+        coreStepPendingImageData = event.detail.imageData;
+        coreStepImageCaption = "";
+        coreStepImageIsEditing = false;
+        showCoreStepImageModal = true;
+    }
+
+    function handleCoreStepImageClick(event: CustomEvent<{ presetId: string; imageId: string; caption?: string }>, instanceId: string) {
+        coreStepImageInstanceId = instanceId;
+        coreStepImagePresetId = event.detail.presetId;
+        // For editing existing image, we'll get the image URL to show in modal
+        const instance = (workflowData.coreStepInstances ?? []).find(i => i.id === instanceId);
+        if (instance) {
+            const presetValue = instance.presetValues.find(pv => pv.presetId === event.detail.presetId);
+            if (presetValue?.imageId) {
+                coreStepPendingImageData = getAttachmentImageUrl(presetValue.imageId);
+                coreStepImageCaption = event.detail.caption || "";
+                coreStepImageIsEditing = true;
+                showCoreStepImageModal = true;
+            }
+        }
+    }
+
+    function closeCoreStepImageModal() {
+        showCoreStepImageModal = false;
+        coreStepPendingImageData = null;
+        coreStepImagePresetId = null;
+        coreStepImageInstanceId = null;
+        coreStepImageCaption = "";
+        coreStepImageIsEditing = false;
+    }
+
+    async function confirmCoreStepImage() {
+        if (!coreStepImageInstanceId || !coreStepImagePresetId || !projectId) return;
+
+        const coreStepItemRef = coreStepItemRefs[coreStepImageInstanceId];
+        if (!coreStepItemRef) return;
+
+        if (coreStepImageIsEditing) {
+            // Just updating caption for existing image
+            coreStepItemRef.updateImageCaption(coreStepImagePresetId, coreStepImageCaption.trim() || undefined);
+            closeCoreStepImageModal();
+        } else {
+            // Uploading new image
+            if (!coreStepPendingImageData) return;
+
+            coreStepImageIsUploading = true;
+            try {
+                const imageId = generateAttachmentId();
+                const response = await uploadAttachmentImage(imageId, projectId, coreStepPendingImageData);
+
+                if (!response.ok) throw new Error("Failed to upload image");
+
+                coreStepItemRef.setImage(coreStepImagePresetId, imageId, coreStepImageCaption.trim() || undefined);
+                closeCoreStepImageModal();
+            } catch (error) {
+                console.error("Failed to upload image:", error);
+                alert("이미지 업로드에 실패했습니다.");
+            } finally {
+                coreStepImageIsUploading = false;
+            }
         }
     }
 
@@ -899,14 +1147,27 @@
                     </div>
                 {/if}
 
-                <!-- Add Step Button -->
+                <!-- Add Step Buttons -->
                 <div class="p-3 pb-0 bg-gray-50/50 border-b border-gray-100 relative">
-                    <button
-                        class="w-full py-2.5 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
-                        on:click|stopPropagation={() => (showAddStepPopup = !showAddStepPopup)}
-                    >
-                        <span class="text-xs font-medium">＋ 다음 스텝 연결</span>
-                    </button>
+                    <div class="flex gap-2">
+                        <!-- Regular Step Button -->
+                        <button
+                            class="flex-1 py-2.5 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
+                            on:click|stopPropagation={() => (showAddStepPopup = !showAddStepPopup)}
+                        >
+                            <span class="text-xs font-medium">＋ 스텝 연결</span>
+                        </button>
+
+                        <!-- Core Step Button (if core steps defined) -->
+                        {#if coreStepsSettings.definitions.length > 0}
+                            <button
+                                class="flex-1 py-2.5 border border-dashed border-purple-300 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-600 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
+                                on:click|stopPropagation={openCoreStepSelector}
+                            >
+                                <span class="text-xs font-medium">＋ Core Step</span>
+                            </button>
+                        {/if}
+                    </div>
 
                     {#if showAddStepPopup}
                         <div bind:this={popupRef}>
@@ -921,7 +1182,70 @@
                             />
                         </div>
                     {/if}
+
+                    <!-- Core Step Selector Popup -->
+                    {#if showCoreStepSelector}
+                        <div class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-50">
+                            <div class="text-xs font-medium text-gray-500 mb-2 px-2">Core Step 선택</div>
+                            <div class="space-y-1 max-h-[200px] overflow-y-auto">
+                                {#each coreStepsSettings.definitions as csDef (csDef.id)}
+                                    <button
+                                        class="w-full px-3 py-2 text-left text-sm rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-2"
+                                        on:click={() => selectCoreStepToAdd(csDef)}
+                                    >
+                                        <span class="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-medium">C</span>
+                                        <span class="flex-1 truncate">{csDef.name}</span>
+                                        <span class="text-xs text-gray-400">{csDef.presets.length}개 필드</span>
+                                    </button>
+                                {/each}
+                            </div>
+                            <div class="border-t border-gray-100 mt-2 pt-2">
+                                <a
+                                    href="/settings#section-core_steps"
+                                    class="block px-3 py-1.5 text-xs text-purple-600 hover:bg-purple-50 rounded-lg"
+                                >
+                                    설정에서 Core Step 관리
+                                </a>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
+
+                <!-- Core Step Instances -->
+                {#if workflowData.coreStepInstances && workflowData.coreStepInstances.length > 0}
+                    <div class="px-3 pt-3 pb-1">
+                        <div class="text-xs font-medium text-purple-600 mb-2 flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                            Core Steps ({workflowData.coreStepInstances.length})
+                        </div>
+                        <div class="space-y-2">
+                            {#each workflowData.coreStepInstances.sort((a, b) => a.order - b.order) as instance, idx (instance.id)}
+                                {@const csDef = getCoreStepDefinition(instance.coreStepId)}
+                                {#if csDef}
+                                    <CoreStepItem
+                                        bind:this={coreStepItemRefs[instance.id]}
+                                        {instance}
+                                        definition={csDef}
+                                        displayNumber={idx + 1}
+                                        isExpanded={expandedCoreStepId === instance.id}
+                                        {projectId}
+                                        on:toggleExpand={() => toggleCoreStepExpand(instance.id)}
+                                        on:remove={() => removeCoreStepInstance(instance.id)}
+                                        on:moveUp={() => moveCoreStepUp(idx)}
+                                        on:moveDown={() => moveCoreStepDown(idx)}
+                                        on:update={handleCoreStepUpdate}
+                                        on:startCapture={(e) => handleCoreStepStartCapture(instance.id, e.detail.presetId)}
+                                        on:imagePaste={(e) => handleCoreStepImagePaste(e, instance.id)}
+                                        on:imageClick={(e) => handleCoreStepImageClick(e, instance.id)}
+                                    />
+                                {/if}
+                            {/each}
+                        </div>
+                    </div>
+                    <div class="border-b border-purple-100 mx-3"></div>
+                {/if}
 
                 <!-- Step List with Phase Support -->
                 <div class="flex-1 overflow-y-auto p-3 space-y-3 relative flex flex-col">
@@ -1100,6 +1424,20 @@
                             confirmAddImage();
                         }}
                         on:cancel={closeImageAddModal}
+                    />
+                {/if}
+
+                <!-- Core Step Image Modal -->
+                {#if showCoreStepImageModal && coreStepPendingImageData}
+                    <ImageAddModal
+                        imageData={coreStepPendingImageData}
+                        caption={coreStepImageCaption}
+                        isUploading={coreStepImageIsUploading}
+                        on:confirm={(e) => {
+                            coreStepImageCaption = e.detail.caption;
+                            confirmCoreStepImage();
+                        }}
+                        on:cancel={closeCoreStepImageModal}
                     />
                 {/if}
 

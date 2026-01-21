@@ -349,7 +349,12 @@
         const capture = event.detail;
         // Add capture to the workflow section
         if (workflowSectionRef && captureTargetStepId) {
-            workflowSectionRef.addCapture(capture);
+            // Check if this is a Core Step capture
+            if (typeof captureTargetStepId === 'string' && captureTargetStepId.startsWith('coreStep:')) {
+                workflowSectionRef.addCoreStepCapture(capture);
+            } else {
+                workflowSectionRef.addCapture(capture);
+            }
         }
     }
 

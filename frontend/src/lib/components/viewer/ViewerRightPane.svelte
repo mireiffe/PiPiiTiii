@@ -147,6 +147,7 @@
             workflowData={currentWorkflowData}
             workflowSteps={currentWorkflowSteps}
             globalPhases={settings?.phase_types || []}
+            coreStepsSettings={settings?.core_steps || { definitions: [] }}
             workflowName={currentWorkflow?.name || "Workflow"}
             {savingWorkflow}
             {captureMode}
