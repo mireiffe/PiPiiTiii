@@ -9,6 +9,7 @@
     import Toast from "$lib/components/ui/Toast.svelte";
     import {
         createEmptyWorkflowData,
+        migrateToUnifiedSteps,
         type ProjectWorkflowData,
     } from "$lib/types/workflow";
 
@@ -281,11 +282,12 @@
                 // data format: { workflows: { workflowId: ProjectWorkflowData, ... } }
                 const workflows = data.workflows || {};
 
-                // Populate allWorkflowsData
+                // Populate allWorkflowsData with migration for legacy data
                 allWorkflowsData = {};
                 for (const [wfId, wfData] of Object.entries(workflows)) {
                     if (wfData && typeof wfData === "object" && Array.isArray((wfData as any).steps)) {
-                        allWorkflowsData[wfId] = wfData as ProjectWorkflowData;
+                        // Migrate legacy steps to unifiedSteps if needed
+                        allWorkflowsData[wfId] = migrateToUnifiedSteps(wfData as ProjectWorkflowData);
                     } else {
                         allWorkflowsData[wfId] = createEmptyWorkflowData();
                     }
