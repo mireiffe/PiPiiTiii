@@ -320,6 +320,7 @@ class Settings(BaseModel):
     llm: LLMConfig
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
+    phenomenon_attributes: Optional[List[str]] = None
     workflow_steps: Optional[WorkflowSteps] = None
     step_containers: Optional[List[StepContainer]] = None
     phase_types: Optional[List[PhaseType]] = None
@@ -762,6 +763,9 @@ def load_settings() -> dict:
             # Ensure core_steps exists (migration for existing settings)
             if "core_steps" not in settings:
                 settings["core_steps"] = {"definitions": []}
+            # Ensure phenomenon_attributes exists (migration for existing settings)
+            if "phenomenon_attributes" not in settings:
+                settings["phenomenon_attributes"] = []
             return settings
     else:
         return {
@@ -772,6 +776,7 @@ def load_settings() -> dict:
             },
             "summary_fields": [],
             "use_thumbnails": True,
+            "phenomenon_attributes": [],
             "workflow_steps": get_default_workflow_steps(),
             "step_containers": [],
             "phase_types": [],
