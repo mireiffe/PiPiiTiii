@@ -19,6 +19,10 @@
         StepAttachment,
         PhaseType,
         LayoutRow,
+        CoreStepsSettings,
+        CoreStepDefinition,
+        CoreStepInstance,
+        CoreStepPresetValue,
     } from "$lib/types/workflow";
     import {
         createEmptyWorkflowData,
@@ -33,7 +37,10 @@
         cleanupOrphanedSupports,
         isStepSupporter,
         getMainFlowSteps,
+        createCoreStepInstance,
     } from "$lib/types/workflow";
+    import CoreStepInputModal from "./workflow/CoreStepInputModal.svelte";
+    import CoreStepItem from "./workflow/CoreStepItem.svelte";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
     import {
         uploadAttachmentImage,
@@ -45,6 +52,7 @@
     export let workflowData: ProjectWorkflowData = createEmptyWorkflowData();
     export let workflowSteps: WorkflowSteps = { columns: [], rows: [] };
     export let globalPhases: PhaseType[] = [];  // Global phases from settings
+    export let coreStepsSettings: CoreStepsSettings = { definitions: [] };  // Core step definitions from settings
     export let savingWorkflow = false;
     export let captureMode = false;
     export let captureTargetStepId: string | null = null;
@@ -92,6 +100,14 @@
     // Phase list popup state
     let showPhaseListPopup = false;
     let phaseListPopupRef: HTMLDivElement | null = null;
+
+    // Core Step state
+    let showCoreStepSelector = false;
+    let showCoreStepInputModal = false;
+    let selectedCoreStepDef: CoreStepDefinition | null = null;
+    let expandedCoreStepId: string | null = null;
+    let coreStepInputModalRef: CoreStepInputModal | null = null;
+    let capturingForCoreStepPresetId: string | null = null;
 
     // Multi-selection state
     let selectedStepIds: Set<string> = new Set();
@@ -723,6 +739,102 @@
         }
     }
 
+    // Core Step Management
+    function openCoreStepSelector() {
+        showCoreStepSelector = !showCoreStepSelector;
+    }
+
+    function selectCoreStepToAdd(coreStepDef: CoreStepDefinition) {
+        selectedCoreStepDef = coreStepDef;
+        showCoreStepSelector = false;
+        showCoreStepInputModal = true;
+    }
+
+    function handleCoreStepConfirm(event: CustomEvent<{ presetValues: CoreStepPresetValue[] }>) {
+        if (!selectedCoreStepDef) return;
+
+        const order = (workflowData.coreStepInstances?.length ?? 0);
+        const newInstance = createCoreStepInstance(
+            selectedCoreStepDef.id,
+            event.detail.presetValues,
+            order
+        );
+
+        workflowData = {
+            ...workflowData,
+            coreStepInstances: [...(workflowData.coreStepInstances ?? []), newInstance],
+            updatedAt: new Date().toISOString(),
+        };
+        dispatch("workflowChange", workflowData);
+
+        showCoreStepInputModal = false;
+        selectedCoreStepDef = null;
+        expandedCoreStepId = newInstance.id;
+    }
+
+    function handleCoreStepCancel() {
+        showCoreStepInputModal = false;
+        selectedCoreStepDef = null;
+        capturingForCoreStepPresetId = null;
+    }
+
+    function handleCoreStepStartCapture(event: CustomEvent<{ presetId: string }>) {
+        capturingForCoreStepPresetId = event.detail.presetId;
+        dispatch("toggleCaptureMode", { stepId: `coreStep:${event.detail.presetId}` });
+    }
+
+    // Called from parent when capture is completed for core step preset
+    export function addCoreStepCapture(capture: {
+        slideIndex: number;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    }) {
+        if (!capturingForCoreStepPresetId || !coreStepInputModalRef) return;
+
+        coreStepInputModalRef.setCaptureValue(capturingForCoreStepPresetId, capture);
+        capturingForCoreStepPresetId = null;
+        dispatch("toggleCaptureMode", { stepId: null });
+    }
+
+    function removeCoreStepInstance(instanceId: string) {
+        if (confirm("이 Core Step을 삭제하시겠습니까?")) {
+            workflowData = {
+                ...workflowData,
+                coreStepInstances: (workflowData.coreStepInstances ?? []).filter(i => i.id !== instanceId),
+                updatedAt: new Date().toISOString(),
+            };
+            dispatch("workflowChange", workflowData);
+        }
+    }
+
+    function moveCoreStepUp(index: number) {
+        if (index === 0 || !workflowData.coreStepInstances) return;
+        const instances = [...workflowData.coreStepInstances];
+        [instances[index - 1], instances[index]] = [instances[index], instances[index - 1]];
+        instances.forEach((inst, i) => inst.order = i);
+        workflowData = { ...workflowData, coreStepInstances: instances, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
+    }
+
+    function moveCoreStepDown(index: number) {
+        if (!workflowData.coreStepInstances || index >= workflowData.coreStepInstances.length - 1) return;
+        const instances = [...workflowData.coreStepInstances];
+        [instances[index], instances[index + 1]] = [instances[index + 1], instances[index]];
+        instances.forEach((inst, i) => inst.order = i);
+        workflowData = { ...workflowData, coreStepInstances: instances, updatedAt: new Date().toISOString() };
+        dispatch("workflowChange", workflowData);
+    }
+
+    function toggleCoreStepExpand(instanceId: string) {
+        expandedCoreStepId = expandedCoreStepId === instanceId ? null : instanceId;
+    }
+
+    function getCoreStepDefinition(coreStepId: string): CoreStepDefinition | undefined {
+        return coreStepsSettings.definitions.find(d => d.id === coreStepId);
+    }
+
     function handleClickOutside(event: MouseEvent) {
         if (popupRef && !popupRef.contains(event.target as Node)) {
             showAddStepPopup = false;
@@ -899,14 +1011,27 @@
                     </div>
                 {/if}
 
-                <!-- Add Step Button -->
+                <!-- Add Step Buttons -->
                 <div class="p-3 pb-0 bg-gray-50/50 border-b border-gray-100 relative">
-                    <button
-                        class="w-full py-2.5 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
-                        on:click|stopPropagation={() => (showAddStepPopup = !showAddStepPopup)}
-                    >
-                        <span class="text-xs font-medium">＋ 다음 스텝 연결</span>
-                    </button>
+                    <div class="flex gap-2">
+                        <!-- Regular Step Button -->
+                        <button
+                            class="flex-1 py-2.5 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
+                            on:click|stopPropagation={() => (showAddStepPopup = !showAddStepPopup)}
+                        >
+                            <span class="text-xs font-medium">＋ 스텝 연결</span>
+                        </button>
+
+                        <!-- Core Step Button (if core steps defined) -->
+                        {#if coreStepsSettings.definitions.length > 0}
+                            <button
+                                class="flex-1 py-2.5 border border-dashed border-purple-300 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-600 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
+                                on:click|stopPropagation={openCoreStepSelector}
+                            >
+                                <span class="text-xs font-medium">＋ Core Step</span>
+                            </button>
+                        {/if}
+                    </div>
 
                     {#if showAddStepPopup}
                         <div bind:this={popupRef}>
@@ -921,7 +1046,64 @@
                             />
                         </div>
                     {/if}
+
+                    <!-- Core Step Selector Popup -->
+                    {#if showCoreStepSelector}
+                        <div class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-50">
+                            <div class="text-xs font-medium text-gray-500 mb-2 px-2">Core Step 선택</div>
+                            <div class="space-y-1 max-h-[200px] overflow-y-auto">
+                                {#each coreStepsSettings.definitions as csDef (csDef.id)}
+                                    <button
+                                        class="w-full px-3 py-2 text-left text-sm rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-2"
+                                        on:click={() => selectCoreStepToAdd(csDef)}
+                                    >
+                                        <span class="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-medium">C</span>
+                                        <span class="flex-1 truncate">{csDef.name}</span>
+                                        <span class="text-xs text-gray-400">{csDef.presets.length}개 필드</span>
+                                    </button>
+                                {/each}
+                            </div>
+                            <div class="border-t border-gray-100 mt-2 pt-2">
+                                <a
+                                    href="/settings#section-core_steps"
+                                    class="block px-3 py-1.5 text-xs text-purple-600 hover:bg-purple-50 rounded-lg"
+                                >
+                                    설정에서 Core Step 관리
+                                </a>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
+
+                <!-- Core Step Instances -->
+                {#if workflowData.coreStepInstances && workflowData.coreStepInstances.length > 0}
+                    <div class="px-3 pt-3 pb-1">
+                        <div class="text-xs font-medium text-purple-600 mb-2 flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                            Core Steps ({workflowData.coreStepInstances.length})
+                        </div>
+                        <div class="space-y-2">
+                            {#each workflowData.coreStepInstances.sort((a, b) => a.order - b.order) as instance, idx (instance.id)}
+                                {@const csDef = getCoreStepDefinition(instance.coreStepId)}
+                                {#if csDef}
+                                    <CoreStepItem
+                                        {instance}
+                                        definition={csDef}
+                                        displayNumber={idx + 1}
+                                        isExpanded={expandedCoreStepId === instance.id}
+                                        on:toggleExpand={() => toggleCoreStepExpand(instance.id)}
+                                        on:remove={() => removeCoreStepInstance(instance.id)}
+                                        on:moveUp={() => moveCoreStepUp(idx)}
+                                        on:moveDown={() => moveCoreStepDown(idx)}
+                                    />
+                                {/if}
+                            {/each}
+                        </div>
+                    </div>
+                    <div class="border-b border-purple-100 mx-3"></div>
+                {/if}
 
                 <!-- Step List with Phase Support -->
                 <div class="flex-1 overflow-y-auto p-3 space-y-3 relative flex flex-col">
@@ -1127,6 +1309,18 @@
                             </button>
                         </div>
                     </div>
+                {/if}
+
+                <!-- Core Step Input Modal -->
+                {#if showCoreStepInputModal && selectedCoreStepDef}
+                    <CoreStepInputModal
+                        bind:this={coreStepInputModalRef}
+                        coreStepDef={selectedCoreStepDef}
+                        {projectId}
+                        on:confirm={handleCoreStepConfirm}
+                        on:cancel={handleCoreStepCancel}
+                        on:startCapture={handleCoreStepStartCapture}
+                    />
                 {/if}
 
             {/if}

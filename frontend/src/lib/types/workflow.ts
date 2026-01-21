@@ -2,6 +2,127 @@
  * Workflow step type definitions
  */
 
+// ========== Core Step Definitions ==========
+
+// Allowed input types for Core Step presets
+export type CoreStepInputType = 'capture' | 'text' | 'image_clipboard';
+
+// Core Step Preset Field Definition
+export interface CoreStepPreset {
+    id: string;
+    name: string;
+    allowedTypes: CoreStepInputType[];  // Which input types are allowed for this preset
+    order: number;
+}
+
+// Core Step Definition (defined in settings)
+export interface CoreStepDefinition {
+    id: string;
+    name: string;
+    presets: CoreStepPreset[];
+    createdAt: string;
+}
+
+// Core Step Preset Value (the actual input for a preset)
+export interface CoreStepPresetValue {
+    presetId: string;
+    type: CoreStepInputType;
+    // Value depends on type:
+    // - capture: StepCapture object
+    // - text: string
+    // - image_clipboard: imageId reference
+    captureValue?: {
+        slideIndex: number;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        label?: string;
+    };
+    textValue?: string;
+    imageId?: string;  // Reference to image in attachments.db
+}
+
+// Core Step Instance (added to a project's workflow)
+export interface CoreStepInstance {
+    id: string;
+    coreStepId: string;  // Reference to CoreStepDefinition.id
+    presetValues: CoreStepPresetValue[];
+    order: number;
+    createdAt: string;
+}
+
+// Core Steps Settings Container
+export interface CoreStepsSettings {
+    definitions: CoreStepDefinition[];
+}
+
+// Generate unique ID for core step definitions
+export function generateCoreStepId(): string {
+    return `cs_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Generate unique ID for core step presets
+export function generateCoreStepPresetId(): string {
+    return `csp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Generate unique ID for core step instances
+export function generateCoreStepInstanceId(): string {
+    return `csi_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Create a new core step definition
+export function createCoreStepDefinition(name: string): CoreStepDefinition {
+    return {
+        id: generateCoreStepId(),
+        name,
+        presets: [],
+        createdAt: new Date().toISOString(),
+    };
+}
+
+// Create a new core step preset
+export function createCoreStepPreset(
+    name: string,
+    allowedTypes: CoreStepInputType[],
+    order: number
+): CoreStepPreset {
+    return {
+        id: generateCoreStepPresetId(),
+        name,
+        allowedTypes,
+        order,
+    };
+}
+
+// Create a new core step instance
+export function createCoreStepInstance(
+    coreStepId: string,
+    presetValues: CoreStepPresetValue[],
+    order: number
+): CoreStepInstance {
+    return {
+        id: generateCoreStepInstanceId(),
+        coreStepId,
+        presetValues,
+        order,
+        createdAt: new Date().toISOString(),
+    };
+}
+
+// Get input type display name (Korean)
+export function getInputTypeDisplayName(type: CoreStepInputType): string {
+    switch (type) {
+        case 'capture': return '캡처';
+        case 'text': return '텍스트';
+        case 'image_clipboard': return '이미지 붙여넣기';
+        default: return type;
+    }
+}
+
+// ========== End Core Step Definitions ==========
+
 // Workflow Step Column Definition
 export interface WorkflowStepColumn {
     id: string;
@@ -164,6 +285,8 @@ export interface WorkflowStepInstance {
 // Project's Workflow Data
 export interface ProjectWorkflowData {
     steps: WorkflowStepInstance[];
+    // Core step instances - independent from regular workflow steps
+    coreStepInstances?: CoreStepInstance[];
     // Phase types (user-defined phases, 'main' phase is implicit)
     phaseTypes?: PhaseType[];
     // Support relations - steps that support other steps in specific phases
