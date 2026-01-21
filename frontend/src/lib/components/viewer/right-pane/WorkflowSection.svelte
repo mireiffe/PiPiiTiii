@@ -44,6 +44,7 @@
     import {
         uploadAttachmentImage,
         deleteAttachmentImage,
+        getAttachmentImageUrl,
     } from "$lib/api/project";
 
     export let isExpanded = false;
@@ -104,6 +105,16 @@
     let showCoreStepSelector = false;
     let expandedCoreStepId: string | null = null;
     let capturingForCoreStepPresetId: string | null = null;
+
+    // Core Step Image Modal State
+    let showCoreStepImageModal = false;
+    let coreStepImagePresetId: string | null = null;
+    let coreStepImageInstanceId: string | null = null;
+    let coreStepPendingImageData: string | null = null;
+    let coreStepImageCaption = "";
+    let coreStepImageIsEditing = false;  // true if editing existing image caption
+    let coreStepImageIsUploading = false;
+    let coreStepItemRefs: Record<string, any> = {};  // Reference to CoreStepItem components
 
     // Multi-selection state
     let selectedStepIds: Set<string> = new Set();
@@ -395,6 +406,7 @@
         if (event.key === "Escape") {
             if (showAttachmentModal) closeAttachmentModal();
             else if (showImageAddModal) closeImageAddModal();
+            else if (showCoreStepImageModal) closeCoreStepImageModal();
             else if (captureMode) exitCaptureMode();
         }
     }
@@ -580,6 +592,35 @@
             }
             colorIndex++;
         }
+
+        // Add Core Step captures
+        if (workflowData.coreStepInstances) {
+            const coreStepColor = '#9333ea'; // purple-600
+            workflowData.coreStepInstances.forEach((instance, instanceIdx) => {
+                const csDef = getCoreStepDefinition(instance.coreStepId);
+                if (!csDef) return;
+
+                instance.presetValues.forEach(pv => {
+                    if (pv.type === 'capture' && pv.captureValue) {
+                        const presetDef = csDef.presets.find(p => p.id === pv.presetId);
+                        overlays.push({
+                            ...pv.captureValue,
+                            id: `${instance.id}_${pv.presetId}`,
+                            stepId: instance.id,
+                            workflowName,
+                            stepNumber: `C${instanceIdx + 1}`,
+                            captureIndexInStep: 0,
+                            color: coreStepColor,
+                            colorIndex: colorIndex + instanceIdx,
+                            isCoreStep: true,
+                            coreStepName: csDef.name,
+                            presetName: presetDef?.name || '',
+                        });
+                    }
+                });
+            });
+        }
+
         return overlays;
     }
 
@@ -863,6 +904,73 @@
         return coreStepsSettings.definitions.find(d => d.id === coreStepId);
     }
 
+    // Core Step Image Modal Handlers
+    function handleCoreStepImagePaste(event: CustomEvent<{ presetId: string; imageData: string }>, instanceId: string) {
+        coreStepImageInstanceId = instanceId;
+        coreStepImagePresetId = event.detail.presetId;
+        coreStepPendingImageData = event.detail.imageData;
+        coreStepImageCaption = "";
+        coreStepImageIsEditing = false;
+        showCoreStepImageModal = true;
+    }
+
+    function handleCoreStepImageClick(event: CustomEvent<{ presetId: string; imageId: string; caption?: string }>, instanceId: string) {
+        coreStepImageInstanceId = instanceId;
+        coreStepImagePresetId = event.detail.presetId;
+        // For editing existing image, we'll get the image URL to show in modal
+        const instance = (workflowData.coreStepInstances ?? []).find(i => i.id === instanceId);
+        if (instance) {
+            const presetValue = instance.presetValues.find(pv => pv.presetId === event.detail.presetId);
+            if (presetValue?.imageId) {
+                coreStepPendingImageData = getAttachmentImageUrl(presetValue.imageId);
+                coreStepImageCaption = event.detail.caption || "";
+                coreStepImageIsEditing = true;
+                showCoreStepImageModal = true;
+            }
+        }
+    }
+
+    function closeCoreStepImageModal() {
+        showCoreStepImageModal = false;
+        coreStepPendingImageData = null;
+        coreStepImagePresetId = null;
+        coreStepImageInstanceId = null;
+        coreStepImageCaption = "";
+        coreStepImageIsEditing = false;
+    }
+
+    async function confirmCoreStepImage() {
+        if (!coreStepImageInstanceId || !coreStepImagePresetId || !projectId) return;
+
+        const coreStepItemRef = coreStepItemRefs[coreStepImageInstanceId];
+        if (!coreStepItemRef) return;
+
+        if (coreStepImageIsEditing) {
+            // Just updating caption for existing image
+            coreStepItemRef.updateImageCaption(coreStepImagePresetId, coreStepImageCaption.trim() || undefined);
+            closeCoreStepImageModal();
+        } else {
+            // Uploading new image
+            if (!coreStepPendingImageData) return;
+
+            coreStepImageIsUploading = true;
+            try {
+                const imageId = generateAttachmentId();
+                const response = await uploadAttachmentImage(imageId, projectId, coreStepPendingImageData);
+
+                if (!response.ok) throw new Error("Failed to upload image");
+
+                coreStepItemRef.setImage(coreStepImagePresetId, imageId, coreStepImageCaption.trim() || undefined);
+                closeCoreStepImageModal();
+            } catch (error) {
+                console.error("Failed to upload image:", error);
+                alert("이미지 업로드에 실패했습니다.");
+            } finally {
+                coreStepImageIsUploading = false;
+            }
+        }
+    }
+
     function handleClickOutside(event: MouseEvent) {
         if (popupRef && !popupRef.contains(event.target as Node)) {
             showAddStepPopup = false;
@@ -1117,6 +1225,7 @@
                                 {@const csDef = getCoreStepDefinition(instance.coreStepId)}
                                 {#if csDef}
                                     <CoreStepItem
+                                        bind:this={coreStepItemRefs[instance.id]}
                                         {instance}
                                         definition={csDef}
                                         displayNumber={idx + 1}
@@ -1128,6 +1237,8 @@
                                         on:moveDown={() => moveCoreStepDown(idx)}
                                         on:update={handleCoreStepUpdate}
                                         on:startCapture={(e) => handleCoreStepStartCapture(instance.id, e.detail.presetId)}
+                                        on:imagePaste={(e) => handleCoreStepImagePaste(e, instance.id)}
+                                        on:imageClick={(e) => handleCoreStepImageClick(e, instance.id)}
                                     />
                                 {/if}
                             {/each}
@@ -1313,6 +1424,20 @@
                             confirmAddImage();
                         }}
                         on:cancel={closeImageAddModal}
+                    />
+                {/if}
+
+                <!-- Core Step Image Modal -->
+                {#if showCoreStepImageModal && coreStepPendingImageData}
+                    <ImageAddModal
+                        imageData={coreStepPendingImageData}
+                        caption={coreStepImageCaption}
+                        isUploading={coreStepImageIsUploading}
+                        on:confirm={(e) => {
+                            coreStepImageCaption = e.detail.caption;
+                            confirmCoreStepImage();
+                        }}
+                        on:cancel={closeCoreStepImageModal}
                     />
                 {/if}
 

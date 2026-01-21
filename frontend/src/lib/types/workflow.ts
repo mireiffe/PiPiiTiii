@@ -41,6 +41,7 @@ export interface CoreStepPresetValue {
     };
     textValue?: string;
     imageId?: string;  // Reference to image in attachments.db
+    imageCaption?: string;  // Caption for image
 }
 
 // Core Step Instance (added to a project's workflow)

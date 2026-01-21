@@ -23,6 +23,8 @@
         moveDown: void;
         update: { instance: CoreStepInstance };
         startCapture: { presetId: string };
+        imagePaste: { presetId: string; imageData: string };
+        imageClick: { presetId: string; imageId: string; caption?: string };
     }>();
 
     let isUploading = false;
@@ -138,7 +140,8 @@
                 const reader = new FileReader();
                 reader.onload = async () => {
                     const base64Data = reader.result as string;
-                    await uploadImage(presetId, base64Data);
+                    // Dispatch event to open modal instead of direct upload
+                    dispatch('imagePaste', { presetId, imageData: base64Data });
                 };
                 reader.readAsDataURL(blob);
                 return;
@@ -167,32 +170,42 @@
         alert('이미지를 복사한 후 Ctrl+V를 눌러주세요.');
     }
 
-    async function uploadImage(presetId: string, base64Data: string) {
-        if (!projectId) return;
-        isUploading = true;
-        try {
-            const imageId = generateAttachmentId();
-            const response = await uploadAttachmentImage(imageId, projectId, base64Data);
+    // Set image for a preset (called from parent after modal confirm)
+    export function setImage(presetId: string, imageId: string, caption?: string) {
+        const idx = instance.presetValues.findIndex(pv => pv.presetId === presetId);
+        if (idx >= 0) {
+            instance.presetValues[idx].imageId = imageId;
+            instance.presetValues[idx].imageCaption = caption;
+        } else {
+            instance.presetValues = [...instance.presetValues, {
+                presetId,
+                type: 'image_clipboard',
+                imageId,
+                imageCaption: caption,
+            }];
+        }
+        instance = { ...instance };
+        dispatch('update', { instance });
+    }
 
-            if (!response.ok) throw new Error("Failed to upload image");
-
-            const idx = instance.presetValues.findIndex(pv => pv.presetId === presetId);
-            if (idx >= 0) {
-                instance.presetValues[idx].imageId = imageId;
-            } else {
-                instance.presetValues = [...instance.presetValues, {
-                    presetId,
-                    type: 'image_clipboard',
-                    imageId,
-                }];
-            }
+    // Update image caption (called from parent when editing existing image)
+    export function updateImageCaption(presetId: string, caption?: string) {
+        const idx = instance.presetValues.findIndex(pv => pv.presetId === presetId);
+        if (idx >= 0) {
+            instance.presetValues[idx].imageCaption = caption;
             instance = { ...instance };
             dispatch('update', { instance });
-        } catch (error) {
-            console.error("Failed to upload image:", error);
-            alert("이미지 업로드에 실패했습니다.");
-        } finally {
-            isUploading = false;
+        }
+    }
+
+    function handleImageClick(presetId: string) {
+        const presetValue = getPresetValue(presetId);
+        if (presetValue?.imageId) {
+            dispatch('imageClick', {
+                presetId,
+                imageId: presetValue.imageId,
+                caption: presetValue.imageCaption,
+            });
         }
     }
 
@@ -406,16 +419,36 @@
                         <!-- Image Clipboard Input -->
                         {:else if currentType === 'image_clipboard'}
                             {#if presetValue?.imageId}
-                                <div class="relative group">
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                <div
+                                    class="relative group cursor-pointer"
+                                    on:click={() => handleImageClick(preset.id)}
+                                    title="클릭하여 캡션 편집"
+                                >
                                     <img
                                         src={getAttachmentImageUrl(presetValue.imageId)}
                                         alt="첨부된 이미지"
-                                        class="w-full max-h-32 object-contain rounded border border-gray-200 bg-gray-50"
+                                        class="w-full max-h-32 object-contain rounded border border-gray-200 bg-gray-50 hover:border-purple-300 transition"
                                     />
+                                    {#if presetValue.imageCaption}
+                                        <div class="mt-1 px-2 py-1 bg-gray-50 rounded border border-gray-200 text-xs text-gray-600">
+                                            {presetValue.imageCaption}
+                                        </div>
+                                    {/if}
                                     <div class="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
+                                            class="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center hover:bg-purple-600 transition text-xs shadow"
+                                            on:click|stopPropagation={() => handleImageClick(preset.id)}
+                                            title="캡션 편집"
+                                        >
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                            </svg>
+                                        </button>
+                                        <button
                                             class="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition text-xs shadow"
-                                            on:click={() => clearImage(preset.id)}
+                                            on:click|stopPropagation={() => clearImage(preset.id)}
                                             title="이미지 삭제"
                                         >
                                             ×
