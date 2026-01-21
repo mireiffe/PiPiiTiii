@@ -106,6 +106,10 @@
     let expandedCoreStepId: string | null = null;
     let capturingForCoreStepPresetId: string | null = null;
 
+    // Core Step Drag & Drop state
+    let coreStepDraggedIdx: number | null = null;
+    let coreStepDropTargetIdx: number | null = null;
+
     // Core Step Image Modal State
     let showCoreStepImageModal = false;
     let coreStepImagePresetId: string | null = null;
@@ -603,18 +607,19 @@
                 instance.presetValues.forEach(pv => {
                     if (pv.type === 'capture' && pv.captureValue) {
                         const presetDef = csDef.presets.find(p => p.id === pv.presetId);
+                        const presetName = presetDef?.name || '';
                         overlays.push({
                             ...pv.captureValue,
                             id: `${instance.id}_${pv.presetId}`,
                             stepId: instance.id,
                             workflowName,
-                            stepNumber: `C${instanceIdx + 1}`,
+                            stepNumber: `C${instanceIdx + 1}-${presetName}`,
                             captureIndexInStep: 0,
                             color: coreStepColor,
                             colorIndex: colorIndex + instanceIdx,
                             isCoreStep: true,
                             coreStepName: csDef.name,
-                            presetName: presetDef?.name || '',
+                            presetName,
                         });
                     }
                 });
@@ -894,6 +899,56 @@
         instances.forEach((inst, i) => inst.order = i);
         workflowData = { ...workflowData, coreStepInstances: instances, updatedAt: new Date().toISOString() };
         dispatch("workflowChange", workflowData);
+    }
+
+    // Core Step Drag & Drop handlers
+    function handleCoreStepDragStart(e: DragEvent, index: number) {
+        coreStepDraggedIdx = index;
+        coreStepDropTargetIdx = null;
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', `coreStep:${index}`);
+        }
+    }
+
+    function handleCoreStepDragOver(e: DragEvent, index: number) {
+        e.preventDefault();
+        if (coreStepDraggedIdx === null) return;
+        if (coreStepDraggedIdx === index) {
+            coreStepDropTargetIdx = null;
+            return;
+        }
+        coreStepDropTargetIdx = index;
+    }
+
+    function handleCoreStepDragEnd() {
+        coreStepDraggedIdx = null;
+        coreStepDropTargetIdx = null;
+    }
+
+    function handleCoreStepDrop(e: DragEvent) {
+        e.preventDefault();
+        if (coreStepDraggedIdx === null || coreStepDropTargetIdx === null) {
+            handleCoreStepDragEnd();
+            return;
+        }
+        if (!workflowData.coreStepInstances) {
+            handleCoreStepDragEnd();
+            return;
+        }
+
+        const sortedInstances = [...workflowData.coreStepInstances].sort((a, b) => a.order - b.order);
+        const [removed] = sortedInstances.splice(coreStepDraggedIdx, 1);
+        sortedInstances.splice(coreStepDropTargetIdx, 0, removed);
+        sortedInstances.forEach((inst, i) => inst.order = i);
+
+        workflowData = {
+            ...workflowData,
+            coreStepInstances: sortedInstances,
+            updatedAt: new Date().toISOString(),
+        };
+        dispatch("workflowChange", workflowData);
+        handleCoreStepDragEnd();
     }
 
     function toggleCoreStepExpand(instanceId: string) {
@@ -1223,23 +1278,38 @@
                         <div class="space-y-2">
                             {#each workflowData.coreStepInstances.sort((a, b) => a.order - b.order) as instance, idx (instance.id)}
                                 {@const csDef = getCoreStepDefinition(instance.coreStepId)}
+                                {@const isBeingDragged = coreStepDraggedIdx === idx}
+                                {@const showDropIndicator = coreStepDropTargetIdx === idx && coreStepDraggedIdx !== idx}
                                 {#if csDef}
-                                    <CoreStepItem
-                                        bind:this={coreStepItemRefs[instance.id]}
-                                        {instance}
-                                        definition={csDef}
-                                        displayNumber={idx + 1}
-                                        isExpanded={expandedCoreStepId === instance.id}
-                                        {projectId}
-                                        on:toggleExpand={() => toggleCoreStepExpand(instance.id)}
-                                        on:remove={() => removeCoreStepInstance(instance.id)}
-                                        on:moveUp={() => moveCoreStepUp(idx)}
-                                        on:moveDown={() => moveCoreStepDown(idx)}
-                                        on:update={handleCoreStepUpdate}
-                                        on:startCapture={(e) => handleCoreStepStartCapture(instance.id, e.detail.presetId)}
-                                        on:imagePaste={(e) => handleCoreStepImagePaste(e, instance.id)}
-                                        on:imageClick={(e) => handleCoreStepImageClick(e, instance.id)}
-                                    />
+                                    <div
+                                        class="relative core-step-item"
+                                        style={isBeingDragged ? "opacity: 0.5;" : ""}
+                                        draggable="true"
+                                        on:dragstart={(e) => handleCoreStepDragStart(e, idx)}
+                                        on:dragend={handleCoreStepDragEnd}
+                                        on:dragover={(e) => handleCoreStepDragOver(e, idx)}
+                                        on:drop={handleCoreStepDrop}
+                                    >
+                                        {#if showDropIndicator}
+                                            <div class="absolute top-0 left-10 right-0 h-0.5 bg-purple-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"></div>
+                                        {/if}
+                                        <CoreStepItem
+                                            bind:this={coreStepItemRefs[instance.id]}
+                                            {instance}
+                                            definition={csDef}
+                                            displayNumber={idx + 1}
+                                            isExpanded={expandedCoreStepId === instance.id}
+                                            {projectId}
+                                            on:toggleExpand={() => toggleCoreStepExpand(instance.id)}
+                                            on:remove={() => removeCoreStepInstance(instance.id)}
+                                            on:moveUp={() => moveCoreStepUp(idx)}
+                                            on:moveDown={() => moveCoreStepDown(idx)}
+                                            on:update={handleCoreStepUpdate}
+                                            on:startCapture={(e) => handleCoreStepStartCapture(instance.id, e.detail.presetId)}
+                                            on:imagePaste={(e) => handleCoreStepImagePaste(e, instance.id)}
+                                            on:imageClick={(e) => handleCoreStepImageClick(e, instance.id)}
+                                        />
+                                    </div>
                                 {/if}
                             {/each}
                         </div>
@@ -1491,5 +1561,13 @@
     .support-guide-indicator {
         display: flex;
         align-items: center;
+    }
+
+    /* Core step item cursor for drag */
+    .core-step-item {
+        cursor: grab;
+    }
+    .core-step-item:active {
+        cursor: grabbing;
     }
 </style>

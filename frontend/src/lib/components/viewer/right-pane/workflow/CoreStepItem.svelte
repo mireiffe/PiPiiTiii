@@ -261,12 +261,23 @@
     >
         <!-- Header -->
         <div
-            class="px-3 py-2 flex items-center gap-2 cursor-pointer"
+            class="p-2 flex items-start justify-between gap-2 cursor-pointer hover:bg-gray-50/50 group"
             on:click={() => dispatch('toggleExpand')}
             role="button"
             tabindex="0"
             on:keydown={(e) => e.key === 'Enter' && dispatch('toggleExpand')}
         >
+            <!-- Drag Handle -->
+            <div
+                class="flex items-center pr-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity self-center"
+            >
+                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="6" r="2" /><circle cx="15" cy="6" r="2" />
+                    <circle cx="9" cy="12" r="2" /><circle cx="15" cy="12" r="2" />
+                    <circle cx="9" cy="18" r="2" /><circle cx="15" cy="18" r="2" />
+                </svg>
+            </div>
+
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
                     <span class="text-xs font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">
@@ -283,42 +294,26 @@
                 {/if}
             </div>
 
-            <div class="flex items-center gap-1">
+            <!-- Up/Down Buttons -->
+            <div class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity {isExpanded ? 'opacity-100' : ''}">
                 <button
-                    class="p-1 text-gray-400 hover:text-gray-600 transition"
+                    class="p-0.5 hover:bg-gray-100 rounded text-gray-300 hover:text-gray-500"
                     on:click|stopPropagation={() => dispatch('moveUp')}
                     title="위로 이동"
                 >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
                     </svg>
                 </button>
                 <button
-                    class="p-1 text-gray-400 hover:text-gray-600 transition"
+                    class="p-0.5 hover:bg-gray-100 rounded text-gray-300 hover:text-gray-500"
                     on:click|stopPropagation={() => dispatch('moveDown')}
                     title="아래로 이동"
                 >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
-                <button
-                    class="p-1 text-gray-400 hover:text-red-500 transition"
-                    on:click|stopPropagation={() => dispatch('remove')}
-                    title="삭제"
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                </button>
-                <svg
-                    class="w-4 h-4 text-gray-400 transition-transform {isExpanded ? 'rotate-180' : ''}"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
             </div>
         </div>
 
@@ -538,6 +533,16 @@
                         {/each}
                     </div>
                 {/if}
+
+                <!-- Delete Button -->
+                <div class="pt-1 border-t border-purple-50 flex justify-end">
+                    <button
+                        class="text-[10px] text-red-300 hover:text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
+                        on:click={() => dispatch('remove')}
+                    >
+                        삭제
+                    </button>
+                </div>
             </div>
         {/if}
     </div>
