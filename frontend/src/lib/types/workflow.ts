@@ -251,6 +251,173 @@ export function createSupportRelation(
     };
 }
 
+// ========== Unified Step System ==========
+
+// Unified Step type discriminator
+export type UnifiedStepType = 'core' | 'regular';
+
+// Unified Step Item - combines Core and Regular steps into single ordered list
+export interface UnifiedStepItem {
+    id: string;
+    type: UnifiedStepType;
+    order: number;
+    createdAt: string;
+    // Core Step specific fields (when type === 'core')
+    coreStepId?: string;
+    presetValues?: CoreStepPresetValue[];
+    // Regular Step specific fields (when type === 'regular')
+    stepId?: string;
+    captures?: StepCapture[];
+    attachments?: StepAttachment[];
+}
+
+// Generate unique ID for unified step items
+export function generateUnifiedStepId(): string {
+    return `us_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Core Step completion status
+export interface CoreStepCompletionStatus {
+    isComplete: boolean;
+    addedIds: Set<string>;
+    missingDefinitions: CoreStepDefinition[];
+}
+
+/**
+ * Check if all required Core Steps have been added
+ */
+export function checkCoreStepCompletion(
+    unifiedSteps: UnifiedStepItem[],
+    definitions: CoreStepDefinition[]
+): CoreStepCompletionStatus {
+    const coreSteps = unifiedSteps.filter(s => s.type === 'core');
+    const addedIds = new Set(coreSteps.map(cs => cs.coreStepId!).filter(Boolean));
+    const missingDefinitions = definitions.filter(def => !addedIds.has(def.id));
+
+    return {
+        isComplete: missingDefinitions.length === 0 && definitions.length > 0,
+        addedIds,
+        missingDefinitions,
+    };
+}
+
+// Validation result for position checks
+export interface PositionValidationResult {
+    isValid: boolean;
+    errorMessage: string | null;
+}
+
+/**
+ * Validate that first and last steps are Core Steps
+ */
+export function validateFirstLastCore(
+    steps: UnifiedStepItem[]
+): PositionValidationResult {
+    if (steps.length === 0) {
+        return { isValid: true, errorMessage: null };
+    }
+
+    const first = steps[0];
+    const last = steps[steps.length - 1];
+
+    if (first.type !== 'core') {
+        return {
+            isValid: false,
+            errorMessage: '첫 번째 스텝은 반드시 Core Step이어야 합니다.',
+        };
+    }
+
+    if (last.type !== 'core') {
+        return {
+            isValid: false,
+            errorMessage: '마지막 스텝은 반드시 Core Step이어야 합니다.',
+        };
+    }
+
+    return { isValid: true, errorMessage: null };
+}
+
+/**
+ * Validate a reorder operation before committing
+ * Simulates the reorder and checks if result is valid
+ */
+export function validateReorder(
+    steps: UnifiedStepItem[],
+    fromIndex: number,
+    toIndex: number
+): PositionValidationResult {
+    if (fromIndex === toIndex) {
+        return { isValid: true, errorMessage: null };
+    }
+
+    // Simulate the reorder
+    const simulatedSteps = [...steps];
+    const [removed] = simulatedSteps.splice(fromIndex, 1);
+    simulatedSteps.splice(toIndex, 0, removed);
+
+    // Validate the result
+    return validateFirstLastCore(simulatedSteps);
+}
+
+/**
+ * Validate deletion of a step
+ * Checks if deletion would leave first/last as non-core step
+ */
+export function validateDeletion(
+    steps: UnifiedStepItem[],
+    deleteIndex: number
+): PositionValidationResult {
+    if (steps.length <= 1) {
+        return { isValid: true, errorMessage: null };
+    }
+
+    // Simulate the deletion
+    const simulatedSteps = steps.filter((_, idx) => idx !== deleteIndex);
+
+    if (simulatedSteps.length === 0) {
+        return { isValid: true, errorMessage: null };
+    }
+
+    // Validate the result
+    return validateFirstLastCore(simulatedSteps);
+}
+
+/**
+ * Create a unified step item from a Core Step instance
+ */
+export function createUnifiedCoreStep(
+    coreStepId: string,
+    presetValues: CoreStepPresetValue[],
+    order: number
+): UnifiedStepItem {
+    return {
+        id: generateUnifiedStepId(),
+        type: 'core',
+        order,
+        createdAt: new Date().toISOString(),
+        coreStepId,
+        presetValues,
+    };
+}
+
+/**
+ * Create a unified step item from a Regular Step
+ */
+export function createUnifiedRegularStep(
+    stepId: string,
+    order: number
+): UnifiedStepItem {
+    return {
+        id: generateUnifiedStepId(),
+        type: 'regular',
+        order,
+        createdAt: new Date().toISOString(),
+        stepId,
+        captures: [],
+        attachments: [],
+    };
+}
+
 // ========== Project Workflow Data ==========
 
 // Capture for a workflow step instance
@@ -287,8 +454,10 @@ export interface WorkflowStepInstance {
 // Project's Workflow Data
 export interface ProjectWorkflowData {
     steps: WorkflowStepInstance[];
-    // Core step instances - independent from regular workflow steps
+    // Core step instances - independent from regular workflow steps (legacy, for backward compat)
     coreStepInstances?: CoreStepInstance[];
+    // Unified steps - new integrated list of Core + Regular steps
+    unifiedSteps?: UnifiedStepItem[];
     // Phase types (user-defined phases, 'main' phase is implicit)
     phaseTypes?: PhaseType[];
     // Support relations - steps that support other steps in specific phases
@@ -667,4 +836,97 @@ export function getPhaseById(
     phaseTypes: PhaseType[] | undefined
 ): PhaseType | undefined {
     return (phaseTypes ?? []).find(p => p.id === phaseId);
+}
+
+// ========== Migration Functions ==========
+
+/**
+ * Migrate legacy data (separate steps + coreStepInstances) to unified steps
+ * This is called when loading workflow data that doesn't have unifiedSteps yet
+ */
+export function migrateToUnifiedSteps(
+    data: ProjectWorkflowData
+): ProjectWorkflowData {
+    // If already has unified steps and they're not empty, skip migration
+    if (data.unifiedSteps && data.unifiedSteps.length > 0) {
+        return data;
+    }
+
+    const unifiedSteps: UnifiedStepItem[] = [];
+
+    // Convert core step instances first (they go at the beginning)
+    const sortedCoreSteps = [...(data.coreStepInstances ?? [])].sort((a, b) => a.order - b.order);
+    sortedCoreSteps.forEach((cs, idx) => {
+        unifiedSteps.push({
+            id: generateUnifiedStepId(),
+            type: 'core',
+            order: idx,
+            createdAt: cs.createdAt,
+            coreStepId: cs.coreStepId,
+            presetValues: cs.presetValues,
+        });
+    });
+
+    // Then add regular steps
+    const sortedSteps = [...(data.steps ?? [])].sort((a, b) => a.order - b.order);
+    sortedSteps.forEach((s, idx) => {
+        unifiedSteps.push({
+            id: generateUnifiedStepId(),
+            type: 'regular',
+            order: sortedCoreSteps.length + idx,
+            createdAt: s.createdAt,
+            stepId: s.stepId,
+            captures: s.captures,
+            attachments: s.attachments,
+        });
+    });
+
+    return {
+        ...data,
+        unifiedSteps,
+        updatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Convert unified steps back to legacy format for backward compatibility
+ * This can be used when saving to ensure old systems can read the data
+ */
+export function syncUnifiedToLegacy(
+    data: ProjectWorkflowData
+): ProjectWorkflowData {
+    if (!data.unifiedSteps) {
+        return data;
+    }
+
+    const coreStepInstances: CoreStepInstance[] = [];
+    const steps: WorkflowStepInstance[] = [];
+
+    data.unifiedSteps.forEach((item, idx) => {
+        if (item.type === 'core') {
+            coreStepInstances.push({
+                id: item.id,
+                coreStepId: item.coreStepId!,
+                presetValues: item.presetValues ?? [],
+                order: coreStepInstances.length,
+                createdAt: item.createdAt,
+            });
+        } else {
+            steps.push({
+                id: item.id,
+                stepId: item.stepId!,
+                captures: item.captures ?? [],
+                attachments: item.attachments ?? [],
+                order: steps.length,
+                createdAt: item.createdAt,
+            });
+        }
+    });
+
+    return {
+        ...data,
+        steps,
+        coreStepInstances,
+        updatedAt: new Date().toISOString(),
+    };
 }

@@ -6,6 +6,7 @@
     import ViewerSidebar from "$lib/components/viewer/ViewerSidebar.svelte";
     import ViewerCanvas from "$lib/components/viewer/ViewerCanvas.svelte";
     import ViewerRightPane from "$lib/components/viewer/ViewerRightPane.svelte";
+    import Toast from "$lib/components/ui/Toast.svelte";
     import {
         createEmptyWorkflowData,
         type ProjectWorkflowData,
@@ -1110,3 +1111,6 @@
         on:handleSaveDescription={handleSaveDescription}
     />
 </div>
+
+<!-- Toast Notifications -->
+<Toast />

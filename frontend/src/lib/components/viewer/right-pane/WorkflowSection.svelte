@@ -18,11 +18,10 @@
         ProjectWorkflowData,
         StepAttachment,
         PhaseType,
-        LayoutRow,
         CoreStepsSettings,
         CoreStepDefinition,
         CoreStepInstance,
-        CoreStepPresetValue,
+        UnifiedStepItem,
     } from "$lib/types/workflow";
     import {
         createEmptyWorkflowData,
@@ -35,11 +34,17 @@
         addSupportRelation,
         removeSupportByStepId,
         cleanupOrphanedSupports,
-        isStepSupporter,
-        getMainFlowSteps,
         createCoreStepInstance,
+        // Unified step system
+        checkCoreStepCompletion,
+        validateReorder,
+        validateDeletion,
+        createUnifiedCoreStep,
+        createUnifiedRegularStep,
+        syncUnifiedToLegacy,
     } from "$lib/types/workflow";
     import CoreStepItem from "./workflow/CoreStepItem.svelte";
+    import { toastStore } from "$lib/stores/toast";
     import { EVIDENCE_COLORS } from "$lib/types/phenomenon";
     import {
         uploadAttachmentImage,
@@ -119,6 +124,47 @@
     let coreStepImageIsEditing = false;  // true if editing existing image caption
     let coreStepImageIsUploading = false;
     let coreStepItemRefs: Record<string, any> = {};  // Reference to CoreStepItem components
+
+    // ========== Unified Step System ==========
+    // Check if all Core Steps have been added
+    $: coreStepStatus = checkCoreStepCompletion(
+        workflowData.unifiedSteps ?? [],
+        coreStepsSettings.definitions
+    );
+    $: allCoreStepsAdded = coreStepsSettings.definitions.length === 0 || coreStepStatus.isComplete;
+
+    // Get unified steps sorted by order
+    $: sortedUnifiedSteps = [...(workflowData.unifiedSteps ?? [])].sort((a, b) => a.order - b.order);
+
+    // Count of regular steps (for display when hidden)
+    $: regularStepCount = sortedUnifiedSteps.filter(s => s.type === 'regular').length;
+
+    // Unified drag & drop state
+    let unifiedDraggedIdx: number | null = null;
+    let unifiedDropTargetIdx: number | null = null;
+
+    // Convert UnifiedStepItem to CoreStepInstance for CoreStepItem component
+    function asCoreStepInstance(item: UnifiedStepItem): CoreStepInstance {
+        return {
+            id: item.id,
+            coreStepId: item.coreStepId!,
+            presetValues: item.presetValues ?? [],
+            order: item.order,
+            createdAt: item.createdAt,
+        };
+    }
+
+    // Convert UnifiedStepItem to WorkflowStepInstance for WorkflowStepItem component
+    function asWorkflowStepInstance(item: UnifiedStepItem): WorkflowStepInstance {
+        return {
+            id: item.id,
+            stepId: item.stepId!,
+            captures: item.captures ?? [],
+            attachments: item.attachments ?? [],
+            order: item.order,
+            createdAt: item.createdAt,
+        };
+    }
 
     // Multi-selection state
     let selectedStepIds: Set<string> = new Set();
@@ -437,24 +483,41 @@
 
     // Step Management
     function handleAddStep(stepRow: WorkflowStepRow) {
+        // Check if all Core Steps are added before allowing regular step addition
+        if (!allCoreStepsAdded) {
+            toastStore.warning('먼저 모든 Core Step을 추가해주세요.');
+            showAddStepPopup = false;
+            return;
+        }
+
         console.log('[WorkflowSection] handleAddStep:', {
             stepRowId: stepRow.id,
             stepRowValues: stepRow.values,
             currentWorkflowStepsRows: workflowSteps.rows.map(r => ({ id: r.id, values: r.values }))
         });
-        const newStep = createStepInstance(stepRow.id, workflowData.steps.length);
+
+        // Create unified step for regular step
+        const currentUnifiedSteps = workflowData.unifiedSteps ?? [];
+        const order = currentUnifiedSteps.length;
+        const newUnifiedStep = createUnifiedRegularStep(stepRow.id, order);
+
+        // Also create legacy step for backward compatibility
+        const newLegacyStep = createStepInstance(stepRow.id, workflowData.steps.length);
+
         console.log('[WorkflowSection] created newStep:', {
-            newStepId: newStep.id,
-            newStepStepId: newStep.stepId
+            newStepId: newUnifiedStep.id,
+            newStepStepId: newUnifiedStep.stepId
         });
+
         workflowData = {
             ...workflowData,
-            steps: [...workflowData.steps, newStep],
+            unifiedSteps: [...currentUnifiedSteps, newUnifiedStep],
+            steps: [...workflowData.steps, newLegacyStep],
             updatedAt: new Date().toISOString(),
         };
         dispatch("workflowChange", workflowData);
         showAddStepPopup = false;
-        expandedStepId = newStep.id;
+        expandedStepId = newUnifiedStep.id;
     }
 
     function handleRemoveStep(stepId: string) {
@@ -462,15 +525,304 @@
             if (captureTargetStepId === stepId) {
                 dispatch("toggleCaptureMode", { stepId: null });
             }
-            let updatedWorkflow = {
+            const filteredUnifiedSteps = (workflowData.unifiedSteps ?? [])
+                .filter(s => s.id !== stepId)
+                .map((s, i) => ({ ...s, order: i }));
+
+            let updatedWorkflow: ProjectWorkflowData = {
                 ...workflowData,
                 steps: workflowData.steps.filter((s) => s.id !== stepId),
+                unifiedSteps: filteredUnifiedSteps,
                 updatedAt: new Date().toISOString(),
             };
             // Clean up any orphaned support relations
             updatedWorkflow = cleanupOrphanedSupports(updatedWorkflow);
             workflowData = updatedWorkflow;
             dispatch("workflowChange", workflowData);
+        }
+    }
+
+    // ========== Unified Step Reorder with Validation ==========
+    function handleUnifiedReorder(fromIndex: number, toIndex: number) {
+        if (fromIndex === toIndex) return;
+
+        const steps = workflowData.unifiedSteps ?? [];
+
+        // Validate the reorder before committing
+        const validation = validateReorder(steps, fromIndex, toIndex);
+        if (!validation.isValid) {
+            toastStore.warning(validation.errorMessage!);
+            return;
+        }
+
+        // Perform the reorder
+        const updatedSteps = [...steps];
+        const [removed] = updatedSteps.splice(fromIndex, 1);
+        updatedSteps.splice(toIndex, 0, removed);
+
+        // Update order values
+        updatedSteps.forEach((s, i) => s.order = i);
+
+        // Sync to legacy arrays
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
+        dispatch("workflowChange", workflowData);
+    }
+
+    // Remove a unified step by ID with validation
+    function handleRemoveUnifiedStep(stepId: string, stepIndex: number) {
+        const steps = workflowData.unifiedSteps ?? [];
+        const step = steps.find(s => s.id === stepId);
+
+        if (!step) return;
+
+        // Check if this is a Core Step
+        if (step.type === 'core') {
+            // Validate deletion
+            const validation = validateDeletion(steps, stepIndex);
+            if (!validation.isValid) {
+                toastStore.warning(validation.errorMessage!);
+                return;
+            }
+        }
+
+        if (confirm(step.type === 'core' ? "이 Core Step을 삭제하시겠습니까?" : "이 스텝을 정말 삭제하시겠습니까?")) {
+            if (captureTargetStepId === stepId) {
+                dispatch("toggleCaptureMode", { stepId: null });
+            }
+
+            const updatedSteps = steps.filter(s => s.id !== stepId).map((s, i) => ({ ...s, order: i }));
+
+            // Sync to legacy arrays
+            const syncedData = syncUnifiedToLegacy({
+                ...workflowData,
+                unifiedSteps: updatedSteps,
+                updatedAt: new Date().toISOString(),
+            });
+
+            // Also clean up orphaned support relations
+            const cleanedData = cleanupOrphanedSupports(syncedData);
+            workflowData = cleanedData;
+            dispatch("workflowChange", workflowData);
+        }
+    }
+
+    // ========== Unified Drag & Drop Handlers ==========
+    function handleUnifiedDragStart(e: DragEvent, idx: number) {
+        unifiedDraggedIdx = idx;
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', idx.toString());
+        }
+    }
+
+    function handleUnifiedDragEnd() {
+        unifiedDraggedIdx = null;
+        unifiedDropTargetIdx = null;
+    }
+
+    function handleUnifiedDragOver(e: DragEvent, idx: number) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'move';
+        }
+        unifiedDropTargetIdx = idx;
+    }
+
+    function handleUnifiedDrop(e: DragEvent) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (unifiedDraggedIdx !== null && unifiedDropTargetIdx !== null) {
+            let toIndex = unifiedDropTargetIdx;
+            if (unifiedDraggedIdx < toIndex) toIndex -= 1;
+
+            if (toIndex !== unifiedDraggedIdx) {
+                const steps = workflowData.unifiedSteps ?? [];
+
+                // Validate the reorder before committing
+                const validation = validateReorder(steps, unifiedDraggedIdx, toIndex);
+                if (!validation.isValid) {
+                    toastStore.warning(validation.errorMessage!);
+                } else {
+                    // Perform the reorder
+                    const updatedSteps = [...steps];
+                    const [removed] = updatedSteps.splice(unifiedDraggedIdx, 1);
+                    updatedSteps.splice(toIndex, 0, removed);
+                    updatedSteps.forEach((s, i) => s.order = i);
+
+                    // Sync to legacy arrays
+                    const syncedData = syncUnifiedToLegacy({
+                        ...workflowData,
+                        unifiedSteps: updatedSteps,
+                        updatedAt: new Date().toISOString(),
+                    });
+
+                    workflowData = syncedData;
+                    dispatch("workflowChange", workflowData);
+                }
+            }
+        }
+
+        unifiedDraggedIdx = null;
+        unifiedDropTargetIdx = null;
+    }
+
+    function handleUnifiedMoveUp(idx: number) {
+        if (idx === 0) return;
+
+        const steps = workflowData.unifiedSteps ?? [];
+        const validation = validateReorder(steps, idx, idx - 1);
+
+        if (!validation.isValid) {
+            toastStore.warning(validation.errorMessage!);
+            return;
+        }
+
+        const updatedSteps = [...steps];
+        [updatedSteps[idx - 1], updatedSteps[idx]] = [updatedSteps[idx], updatedSteps[idx - 1]];
+        updatedSteps.forEach((s, i) => s.order = i);
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
+        dispatch("workflowChange", workflowData);
+    }
+
+    function handleUnifiedMoveDown(idx: number) {
+        const steps = workflowData.unifiedSteps ?? [];
+        if (idx >= steps.length - 1) return;
+
+        const validation = validateReorder(steps, idx, idx + 1);
+
+        if (!validation.isValid) {
+            toastStore.warning(validation.errorMessage!);
+            return;
+        }
+
+        const updatedSteps = [...steps];
+        [updatedSteps[idx], updatedSteps[idx + 1]] = [updatedSteps[idx + 1], updatedSteps[idx]];
+        updatedSteps.forEach((s, i) => s.order = i);
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
+        dispatch("workflowChange", workflowData);
+    }
+
+    // Update Core Step in unified list
+    function handleUnifiedCoreStepUpdate(event: CustomEvent<{ instance: CoreStepInstance }>, unifiedStepId: string) {
+        const updatedInstance = event.detail.instance;
+        const steps = workflowData.unifiedSteps ?? [];
+        const updatedSteps = steps.map(s => {
+            if (s.id === unifiedStepId && s.type === 'core') {
+                return {
+                    ...s,
+                    presetValues: updatedInstance.presetValues,
+                };
+            }
+            return s;
+        });
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
+        dispatch("workflowChange", workflowData);
+    }
+
+    // ========== Unified Regular Step Helpers ==========
+    function removeUnifiedCapture(stepId: string, captureId: string) {
+        const steps = workflowData.unifiedSteps ?? [];
+        const updatedSteps = steps.map(s => {
+            if (s.id === stepId && s.type === 'regular') {
+                return {
+                    ...s,
+                    captures: (s.captures ?? []).filter(c => c.id !== captureId),
+                };
+            }
+            return s;
+        });
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
+        dispatch("workflowChange", workflowData);
+    }
+
+    function openUnifiedAttachmentModal(stepId: string, attachment: StepAttachment) {
+        editingAttachmentStepId = stepId;
+        editingAttachment = attachment;
+        modalCaption = attachment.caption || "";
+        showAttachmentModal = true;
+    }
+
+    function addUnifiedTextAttachment(stepId: string) {
+        if (!attachmentTextInput.trim()) return;
+
+        const newAttachment = createAttachment("text", attachmentTextInput.trim());
+        const steps = workflowData.unifiedSteps ?? [];
+        const updatedSteps = steps.map(s => {
+            if (s.id === stepId && s.type === 'regular') {
+                return {
+                    ...s,
+                    attachments: [...(s.attachments ?? []), newAttachment],
+                };
+            }
+            return s;
+        });
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
+        dispatch("workflowChange", workflowData);
+        attachmentTextInput = "";
+        addingAttachmentToStepId = null;
+    }
+
+    function handleUnifiedPaste(event: ClipboardEvent, stepId: string) {
+        const items = event.clipboardData?.items;
+        if (!items) return;
+
+        for (const item of items) {
+            if (item.type.startsWith("image/")) {
+                const blob = item.getAsFile();
+                if (blob) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        pendingImageData = e.target?.result as string;
+                        pendingImageStepId = stepId;
+                        pendingImageCaption = "";
+                        showImageAddModal = true;
+                    };
+                    reader.readAsDataURL(blob);
+                }
+                break;
+            }
         }
     }
 
@@ -513,8 +865,6 @@
         height: number;
     }) {
         if (!captureTargetStepId) return;
-        const stepIndex = workflowData.steps.findIndex((s) => s.id === captureTargetStepId);
-        if (stepIndex === -1) return;
 
         const newCapture = createStepCapture(
             capture.slideIndex,
@@ -523,11 +873,26 @@
             capture.width,
             capture.height
         );
-        workflowData.steps[stepIndex].captures = [
-            ...workflowData.steps[stepIndex].captures,
-            newCapture,
-        ];
-        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+
+        // Update unifiedSteps and sync to legacy arrays
+        const steps = workflowData.unifiedSteps ?? [];
+        const updatedSteps = steps.map(s => {
+            if (s.id === captureTargetStepId && s.type === 'regular') {
+                return {
+                    ...s,
+                    captures: [...(s.captures ?? []), newCapture],
+                };
+            }
+            return s;
+        });
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
         dispatch("workflowChange", workflowData);
     }
 
@@ -789,23 +1154,36 @@
     function selectCoreStepToAdd(coreStepDef: CoreStepDefinition) {
         showCoreStepSelector = false;
 
-        // Create instance with empty preset values (to be filled in the list)
-        const order = (workflowData.coreStepInstances?.length ?? 0);
-        const newInstance = createCoreStepInstance(
+        // Check if this Core Step is already added (can only add each Core Step once)
+        if (coreStepStatus.addedIds.has(coreStepDef.id)) {
+            toastStore.warning('이미 추가된 Core Step입니다.');
+            return;
+        }
+
+        // Create unified step item for Core Step
+        const currentSteps = workflowData.unifiedSteps ?? [];
+        const order = currentSteps.length;
+        const newStep = createUnifiedCoreStep(coreStepDef.id, [], order);
+
+        const updatedSteps = [...currentSteps, newStep];
+
+        // Also update legacy coreStepInstances for backward compatibility
+        const newLegacyInstance = createCoreStepInstance(
             coreStepDef.id,
-            [], // Start with empty values
-            order
+            [],
+            (workflowData.coreStepInstances?.length ?? 0)
         );
 
         workflowData = {
             ...workflowData,
-            coreStepInstances: [...(workflowData.coreStepInstances ?? []), newInstance],
+            unifiedSteps: updatedSteps,
+            coreStepInstances: [...(workflowData.coreStepInstances ?? []), newLegacyInstance],
             updatedAt: new Date().toISOString(),
         };
         dispatch("workflowChange", workflowData);
 
         // Auto-expand the new instance for editing
-        expandedCoreStepId = newInstance.id;
+        expandedCoreStepId = newStep.id;
     }
 
     function handleCoreStepUpdate(event: CustomEvent<{ instance: CoreStepInstance }>) {
@@ -1202,19 +1580,47 @@
                     </div>
                 {/if}
 
+                <!-- Missing Core Steps Indicator -->
+                {#if coreStepsSettings.definitions.length > 0 && !allCoreStepsAdded}
+                    <div class="px-3 pt-3 pb-2 bg-amber-50/80 border-b border-amber-200">
+                        <div class="text-xs font-medium text-amber-700 mb-2 flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            다음 Core Step을 먼저 추가해주세요:
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            {#each coreStepStatus.missingDefinitions as def (def.id)}
+                                <button
+                                    class="px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-medium text-amber-700 hover:bg-amber-100 hover:border-amber-400 transition-colors flex items-center gap-1.5 shadow-sm"
+                                    on:click={() => selectCoreStepToAdd(def)}
+                                >
+                                    <span class="w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] flex items-center justify-center font-bold">C</span>
+                                    {def.name}
+                                </button>
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
+
                 <!-- Add Step Buttons -->
                 <div class="p-3 pb-0 bg-gray-50/50 border-b border-gray-100 relative">
                     <div class="flex gap-2">
-                        <!-- Regular Step Button -->
+                        <!-- Regular Step Button (disabled if core steps not complete) -->
                         <button
-                            class="flex-1 py-2.5 border border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
-                            on:click|stopPropagation={() => (showAddStepPopup = !showAddStepPopup)}
+                            class="flex-1 py-2.5 border border-dashed rounded-lg transition-all flex items-center justify-center gap-1.5 group bg-white/80
+                                {allCoreStepsAdded
+                                    ? 'border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50'
+                                    : 'border-gray-200 text-gray-300 cursor-not-allowed opacity-60'}"
+                            on:click|stopPropagation={() => allCoreStepsAdded && (showAddStepPopup = !showAddStepPopup)}
+                            disabled={!allCoreStepsAdded}
+                            title={allCoreStepsAdded ? '일반 스텝 추가' : '먼저 모든 Core Step을 추가하세요'}
                         >
                             <span class="text-xs font-medium">＋ 스텝 연결</span>
                         </button>
 
-                        <!-- Core Step Button (if core steps defined) -->
-                        {#if coreStepsSettings.definitions.length > 0}
+                        <!-- Core Step Button (if any core steps are missing) -->
+                        {#if coreStepsSettings.definitions.length > 0 && !allCoreStepsAdded}
                             <button
                                 class="flex-1 py-2.5 border border-dashed border-purple-300 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-600 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1.5 group bg-white/80"
                                 on:click|stopPropagation={openCoreStepSelector}
@@ -1224,7 +1630,7 @@
                         {/if}
                     </div>
 
-                    {#if showAddStepPopup}
+                    {#if showAddStepPopup && allCoreStepsAdded}
                         <div bind:this={popupRef}>
                             <StepDefinitionPopup
                                 {workflowSteps}
@@ -1238,19 +1644,30 @@
                         </div>
                     {/if}
 
-                    <!-- Core Step Selector Popup -->
+                    <!-- Core Step Selector Popup (only shows missing ones) -->
                     {#if showCoreStepSelector}
                         <div class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-50">
                             <div class="text-xs font-medium text-gray-500 mb-2 px-2">Core Step 선택</div>
                             <div class="space-y-1 max-h-[200px] overflow-y-auto">
                                 {#each coreStepsSettings.definitions as csDef (csDef.id)}
+                                    {@const isAlreadyAdded = coreStepStatus.addedIds.has(csDef.id)}
                                     <button
-                                        class="w-full px-3 py-2 text-left text-sm rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-2"
-                                        on:click={() => selectCoreStepToAdd(csDef)}
+                                        class="w-full px-3 py-2 text-left text-sm rounded-lg transition-colors flex items-center gap-2
+                                            {isAlreadyAdded
+                                                ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                                                : 'hover:bg-purple-50'}"
+                                        on:click={() => !isAlreadyAdded && selectCoreStepToAdd(csDef)}
+                                        disabled={isAlreadyAdded}
                                     >
-                                        <span class="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-medium">C</span>
+                                        <span class="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-medium {isAlreadyAdded ? 'bg-gray-400' : 'bg-purple-600'}">
+                                            {isAlreadyAdded ? '✓' : 'C'}
+                                        </span>
                                         <span class="flex-1 truncate">{csDef.name}</span>
-                                        <span class="text-xs text-gray-400">{csDef.presets.length}개 필드</span>
+                                        {#if isAlreadyAdded}
+                                            <span class="text-xs text-gray-400">추가됨</span>
+                                        {:else}
+                                            <span class="text-xs text-gray-400">{csDef.presets.length}개 필드</span>
+                                        {/if}
                                     </button>
                                 {/each}
                             </div>
@@ -1266,200 +1683,141 @@
                     {/if}
                 </div>
 
-                <!-- Core Step Instances -->
-                {#if workflowData.coreStepInstances && workflowData.coreStepInstances.length > 0}
-                    <div class="px-3 pt-3 pb-1">
-                        <div class="text-xs font-medium text-purple-600 mb-2 flex items-center gap-1">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                            </svg>
-                            Core Steps ({workflowData.coreStepInstances.length})
-                        </div>
-                        <div class="space-y-2">
-                            {#each workflowData.coreStepInstances.sort((a, b) => a.order - b.order) as instance, idx (instance.id)}
-                                {@const csDef = getCoreStepDefinition(instance.coreStepId)}
-                                {@const isBeingDragged = coreStepDraggedIdx === idx}
-                                {@const showDropIndicator = coreStepDropTargetIdx === idx && coreStepDraggedIdx !== idx}
+                <!-- ========== Unified Step List ========== -->
+                <div class="flex-1 overflow-y-auto p-3 space-y-2 relative flex flex-col">
+                    <div class="relative">
+                        <div class="absolute left-[23px] top-0 bottom-0 w-px bg-gray-200 z-0"></div>
+
+                        {#each sortedUnifiedSteps as unifiedStep, idx (unifiedStep.id)}
+                            {@const isBeingDragged = unifiedDraggedIdx === idx}
+                            {@const showDropIndicator = unifiedDropTargetIdx === idx && unifiedDraggedIdx !== idx}
+
+                            <!-- Core Step Item -->
+                            {#if unifiedStep.type === 'core'}
+                                {@const csDef = getCoreStepDefinition(unifiedStep.coreStepId!)}
                                 {#if csDef}
                                     <div
-                                        class="relative core-step-item"
+                                        class="relative mb-2"
                                         style={isBeingDragged ? "opacity: 0.5;" : ""}
                                         draggable="true"
-                                        on:dragstart={(e) => handleCoreStepDragStart(e, idx)}
-                                        on:dragend={handleCoreStepDragEnd}
-                                        on:dragover={(e) => handleCoreStepDragOver(e, idx)}
-                                        on:drop={handleCoreStepDrop}
+                                        on:dragstart={(e) => handleUnifiedDragStart(e, idx)}
+                                        on:dragend={handleUnifiedDragEnd}
+                                        on:dragover={(e) => handleUnifiedDragOver(e, idx)}
+                                        on:drop={handleUnifiedDrop}
                                     >
                                         {#if showDropIndicator}
                                             <div class="absolute top-0 left-10 right-0 h-0.5 bg-purple-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"></div>
                                         {/if}
                                         <CoreStepItem
-                                            bind:this={coreStepItemRefs[instance.id]}
-                                            {instance}
+                                            bind:this={coreStepItemRefs[unifiedStep.id]}
+                                            instance={asCoreStepInstance(unifiedStep)}
                                             definition={csDef}
                                             displayNumber={idx + 1}
-                                            isExpanded={expandedCoreStepId === instance.id}
+                                            isExpanded={expandedCoreStepId === unifiedStep.id}
                                             {projectId}
-                                            on:toggleExpand={() => toggleCoreStepExpand(instance.id)}
-                                            on:remove={() => removeCoreStepInstance(instance.id)}
-                                            on:moveUp={() => moveCoreStepUp(idx)}
-                                            on:moveDown={() => moveCoreStepDown(idx)}
-                                            on:update={handleCoreStepUpdate}
-                                            on:startCapture={(e) => handleCoreStepStartCapture(instance.id, e.detail.presetId)}
-                                            on:imagePaste={(e) => handleCoreStepImagePaste(e, instance.id)}
-                                            on:imageClick={(e) => handleCoreStepImageClick(e, instance.id)}
+                                            on:toggleExpand={() => toggleCoreStepExpand(unifiedStep.id)}
+                                            on:remove={() => handleRemoveUnifiedStep(unifiedStep.id, idx)}
+                                            on:moveUp={() => handleUnifiedMoveUp(idx)}
+                                            on:moveDown={() => handleUnifiedMoveDown(idx)}
+                                            on:update={(e) => handleUnifiedCoreStepUpdate(e, unifiedStep.id)}
+                                            on:startCapture={(e) => handleCoreStepStartCapture(unifiedStep.id, e.detail.presetId)}
+                                            on:imagePaste={(e) => handleCoreStepImagePaste(e, unifiedStep.id)}
+                                            on:imageClick={(e) => handleCoreStepImageClick(e, unifiedStep.id)}
                                         />
                                     </div>
                                 {/if}
-                            {/each}
-                        </div>
-                    </div>
-                    <div class="border-b border-purple-100 mx-3"></div>
-                {/if}
 
-                <!-- Step List with Phase Support -->
-                <div class="flex-1 overflow-y-auto p-3 space-y-3 relative flex flex-col">
-                    <div class="relative">
-                        <div class="absolute left-[23px] top-0 bottom-0 w-px bg-gray-200 z-0"></div>
-                        {#each layoutRows as row, rowIndex (row.mainStep.id)}
-                            {@const step = row.mainStep}
-                            {@const index = workflowData.steps.findIndex(s => s.id === step.id)}
-                            {@const stepDef = getStepDefinition(step.stepId)}
-                            {@const color = EVIDENCE_COLORS[index % EVIDENCE_COLORS.length]}
-                            {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === step.id}
-                            {@const mainStepNumber = rowIndex + 1}
+                            <!-- Regular Step Item (only visible when all core steps added) -->
+                            {:else if unifiedStep.type === 'regular'}
+                                {#if allCoreStepsAdded}
+                                    {@const stepDef = getStepDefinition(unifiedStep.stepId!)}
+                                    {@const color = EVIDENCE_COLORS[idx % EVIDENCE_COLORS.length]}
+                                    {@const showSupportGuide = dragMode === 'support' && supportGuideTargetStepId === unifiedStep.id}
 
-                            <div class="relative mb-2">
-                                <!-- Support creation guide -->
-                                {#if showSupportGuide}
-                                    <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-                                        <div class="support-guide-indicator">
-                                            <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
-                                                <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
-                                                </svg>
-                                            </div>
-                                            <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
-                                                위상 지원
-                                            </span>
-                                        </div>
-                                    </div>
-                                {/if}
+                                    <div
+                                        class="relative mb-2"
+                                        style={isBeingDragged ? "opacity: 0.5;" : ""}
+                                        draggable="true"
+                                        on:dragstart={(e) => handleUnifiedDragStart(e, idx)}
+                                        on:dragend={handleUnifiedDragEnd}
+                                        on:dragover={(e) => handleUnifiedDragOver(e, idx)}
+                                        on:drop={handleUnifiedDrop}
+                                    >
+                                        {#if showDropIndicator}
+                                            <div class="absolute top-0 left-10 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"></div>
+                                        {/if}
 
-                                <div
-                                    draggable="true"
-                                    on:dragstart={(e) => dragDropHandlers.handleDragStart(e, index)}
-                                    on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
-                                    on:drop={(e) => {
-                                        if (dragMode === 'support' && supportGuideTargetStepId === step.id) {
-                                            handleSupportDrop(e, step.id);
-                                        } else {
-                                            dragDropHandlers.handleDrop(e);
-                                        }
-                                    }}
-                                    on:dragover={(e) => {
-                                        dragDropHandlers.handleDragOver(e, index);
-                                        handleStepHoverForSupport(e, step.id, e.shiftKey);
-                                    }}
-                                    on:dragleave={(e) => handleDragLeave(e, step.id)}
-                                >
-                                    <WorkflowStepItem
-                                        {step}
-                                        {index}
-                                        {stepDef}
-                                        {color}
-                                        {workflowSteps}
-                                        displayNumber={mainStepNumber}
-                                        isExpanded={expandedStepId === step.id}
-                                        isCapturing={captureTargetStepId === step.id}
-                                        isAddingAttachment={addingAttachmentToStepId === step.id}
-                                        isBeingDragged={dragState.draggedIndex === index}
-                                        showDropIndicatorTop={dragState.dropTargetIndex === index && dragState.draggedIndex !== index && dragState.draggedIndex !== index - 1}
-                                        showDropIndicatorBottom={dragState.dropTargetIndex === index + 1 && index === workflowData.steps.length - 1 && dragState.draggedIndex !== index}
-                                        isLastStep={index === workflowData.steps.length - 1}
-                                        bind:attachmentTextInput
-                                        isSelected={selectedStepIds.has(step.id)}
-                                        showSelectionCheckbox={selectionModeActive}
-                                        on:toggleExpand={() => toggleStepExpand(step.id)}
-                                        on:startCapture={() => startCaptureForStep(step.id)}
-                                        on:toggleAttachment={() => toggleAttachmentSection(step.id)}
-                                        on:moveUp={() => moveStepUp(index)}
-                                        on:moveDown={() => moveStepDown(index)}
-                                        on:remove={() => handleRemoveStep(step.id)}
-                                        on:removeCapture={(e) => removeCapture(step.id, e.detail.captureId)}
-                                        on:openAttachmentModal={(e) => openAttachmentModal(step.id, e.detail.attachment)}
-                                        on:addTextAttachment={() => addTextAttachment(step.id)}
-                                        on:paste={(e) => handlePaste(e.detail, step.id)}
-                                        on:checkboxClick={(e) => handleCheckboxClick(step.id, e.detail)}
-                                        on:cardClick={(e) => handleCardCtrlClick(step.id, e.detail)}
-                                    />
-                                </div>
-
-                                <!-- Supporter steps (indented, with phase indicator) -->
-                                {#if row.supporters.length > 0}
-                                    <div class="ml-8 mt-1 space-y-1 border-l-2 border-purple-200 pl-2">
-                                        {#each row.supporters as supporter, supLocalIdx (supporter.step.id)}
-                                            {@const supStep = supporter.step}
-                                            {@const supIndex = workflowData.steps.findIndex(s => s.id === supStep.id)}
-                                            {@const supStepDef = getStepDefinition(supStep.stepId)}
-                                            {@const supColor = EVIDENCE_COLORS[supIndex % EVIDENCE_COLORS.length]}
-                                            {@const supporterDisplayNumber = supporter.phase?.name || '위상'}
-
-                                            <div class="relative group">
-
-                                                <div
-                                                    draggable="true"
-                                                    on:dragstart={(e) => dragDropHandlers.handleDragStart(e, supIndex)}
-                                                    on:dragend={() => { dragDropHandlers.handleDragEnd(); clearAllDragGuides(); }}
-                                                    on:drop={dragDropHandlers.handleDrop}
-                                                    on:dragover={(e) => dragDropHandlers.handleDragOver(e, supIndex)}
-                                                >
-                                                    <WorkflowStepItem
-                                                        step={supStep}
-                                                        index={supIndex}
-                                                        stepDef={supStepDef}
-                                                        color={supColor}
-                                                        {workflowSteps}
-                                                        displayNumber={supporterDisplayNumber}
-                                                        isExpanded={expandedStepId === supStep.id}
-                                                        isCapturing={captureTargetStepId === supStep.id}
-                                                        isAddingAttachment={addingAttachmentToStepId === supStep.id}
-                                                        isBeingDragged={dragState.draggedIndex === supIndex}
-                                                        showDropIndicatorTop={false}
-                                                        showDropIndicatorBottom={false}
-                                                        isLastStep={supIndex === workflowData.steps.length - 1}
-                                                        bind:attachmentTextInput
-                                                        isSelected={selectedStepIds.has(supStep.id)}
-                                                        showSelectionCheckbox={selectionModeActive}
-                                                        supportIndicator={true}
-                                                        phaseColor={supporter.phase?.color}
-                                                        phaseName={supporter.phase?.name}
-                                                        on:toggleExpand={() => toggleStepExpand(supStep.id)}
-                                                        on:startCapture={() => startCaptureForStep(supStep.id)}
-                                                        on:toggleAttachment={() => toggleAttachmentSection(supStep.id)}
-                                                        on:moveUp={() => moveStepUp(supIndex)}
-                                                        on:moveDown={() => moveStepDown(supIndex)}
-                                                        on:remove={() => handleRemoveStep(supStep.id)}
-                                                        on:removeCapture={(e) => removeCapture(supStep.id, e.detail.captureId)}
-                                                        on:openAttachmentModal={(e) => openAttachmentModal(supStep.id, e.detail.attachment)}
-                                                        on:addTextAttachment={() => addTextAttachment(supStep.id)}
-                                                        on:paste={(e) => handlePaste(e.detail, supStep.id)}
-                                                        on:checkboxClick={(e) => handleCheckboxClick(supStep.id, e.detail)}
-                                                        on:cardClick={(e) => handleCardCtrlClick(supStep.id, e.detail)}
-                                                        on:removeSupport={() => handleRemoveSupport(supStep.id)}
-                                                    />
+                                        <!-- Support creation guide -->
+                                        {#if showSupportGuide}
+                                            <div class="absolute -right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                                                <div class="support-guide-indicator">
+                                                    <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-right">
+                                                        <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" />
+                                                        </svg>
+                                                    </div>
+                                                    <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded shadow">
+                                                        위상 지원
+                                                    </span>
                                                 </div>
                                             </div>
-                                        {/each}
+                                        {/if}
+
+                                        <WorkflowStepItem
+                                            step={asWorkflowStepInstance(unifiedStep)}
+                                            index={idx}
+                                            {stepDef}
+                                            {color}
+                                            {workflowSteps}
+                                            displayNumber={idx + 1}
+                                            isExpanded={expandedStepId === unifiedStep.id}
+                                            isCapturing={captureTargetStepId === unifiedStep.id}
+                                            isAddingAttachment={addingAttachmentToStepId === unifiedStep.id}
+                                            isBeingDragged={isBeingDragged}
+                                            showDropIndicatorTop={false}
+                                            showDropIndicatorBottom={false}
+                                            isLastStep={idx === sortedUnifiedSteps.length - 1}
+                                            bind:attachmentTextInput
+                                            isSelected={selectedStepIds.has(unifiedStep.id)}
+                                            showSelectionCheckbox={selectionModeActive}
+                                            on:toggleExpand={() => toggleStepExpand(unifiedStep.id)}
+                                            on:startCapture={() => startCaptureForStep(unifiedStep.id)}
+                                            on:toggleAttachment={() => toggleAttachmentSection(unifiedStep.id)}
+                                            on:moveUp={() => handleUnifiedMoveUp(idx)}
+                                            on:moveDown={() => handleUnifiedMoveDown(idx)}
+                                            on:remove={() => handleRemoveUnifiedStep(unifiedStep.id, idx)}
+                                            on:removeCapture={(e) => removeUnifiedCapture(unifiedStep.id, e.detail.captureId)}
+                                            on:openAttachmentModal={(e) => openUnifiedAttachmentModal(unifiedStep.id, e.detail.attachment)}
+                                            on:addTextAttachment={() => addUnifiedTextAttachment(unifiedStep.id)}
+                                            on:paste={(e) => handleUnifiedPaste(e.detail, unifiedStep.id)}
+                                            on:checkboxClick={(e) => handleCheckboxClick(unifiedStep.id, e.detail)}
+                                            on:cardClick={(e) => handleCardCtrlClick(unifiedStep.id, e.detail)}
+                                        />
                                     </div>
                                 {/if}
-                            </div>
+                            {/if}
                         {/each}
                     </div>
 
-                    {#if workflowData.steps.length === 0}
+                    <!-- Empty State -->
+                    {#if sortedUnifiedSteps.length === 0}
                         <div class="flex flex-col items-center justify-center text-gray-300 py-8">
-                            <span class="text-xs opacity-50">스텝을 추가하세요</span>
+                            <span class="text-xs opacity-50">
+                                {coreStepsSettings.definitions.length > 0
+                                    ? 'Core Step을 추가하세요'
+                                    : '스텝을 추가하세요'}
+                            </span>
+                        </div>
+                    {/if}
+
+                    <!-- Hidden Regular Steps Message (when Core Steps not complete) -->
+                    {#if !allCoreStepsAdded && regularStepCount > 0}
+                        <div class="text-center py-4 text-gray-400 text-xs border-t border-gray-200 mt-2">
+                            <span class="bg-gray-100 px-2 py-1 rounded">
+                                {regularStepCount}개의 일반 스텝이 숨겨져 있습니다
+                            </span>
+                            <br/>
+                            <span class="text-[10px] opacity-70">모든 Core Step을 추가하면 표시됩니다</span>
                         </div>
                     {/if}
 
@@ -1474,7 +1832,7 @@
                         caption={modalCaption}
                         on:save={(e) => {
                             modalCaption = e.detail.caption;
-                            if (editingAttachment.type === "text") {
+                            if (editingAttachment && editingAttachment.type === "text") {
                                 editingAttachment.data = e.detail.text;
                             }
                             saveAttachmentChanges();
