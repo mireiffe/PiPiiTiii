@@ -633,7 +633,7 @@
             )}
 
             <div
-                class="px-3 pb-3 border-t border-purple-100 pt-2 space-y-2"
+                class="px-3 pb-3 border-t border-purple-100 pt-2 grid grid-cols-2 gap-2"
                 on:click|stopPropagation
             >
                 <!-- All Presets in order -->
@@ -644,7 +644,7 @@
                     {@const isEditingThis = editingPresetId === preset.id}
 
                     <div
-                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100"
+                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType === 'text' ? 'col-span-2' : ''}"
                         data-preset-id={preset.id}
                     >
                         <div class="flex items-center justify-between mb-2">
@@ -907,7 +907,7 @@
                 {/each}
 
                 <!-- Delete Button -->
-                <div class="pt-1 border-t border-purple-50 flex justify-end">
+                <div class="col-span-2 pt-1 border-t border-purple-50 flex justify-end">
                     <button
                         class="text-[10px] text-red-300 hover:text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
                         on:click={() => dispatch("remove")}
