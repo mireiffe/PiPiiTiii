@@ -408,8 +408,12 @@ class Database:
                 elif not isinstance(existing_data, dict) or 'workflows' not in existing_data:
                     existing_data = {"workflows": {}}
 
-            # Update specific workflow
-            existing_data["workflows"][workflow_id] = workflow_data
+            # Update or delete specific workflow
+            if workflow_data is None:
+                # Delete the workflow if data is None
+                existing_data["workflows"].pop(workflow_id, None)
+            else:
+                existing_data["workflows"][workflow_id] = workflow_data
             workflow_data = existing_data
 
         cursor.execute(
