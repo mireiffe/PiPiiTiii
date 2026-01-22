@@ -314,11 +314,9 @@
                                 </span>
                             </div>
                             <div class="text-[10px] text-gray-400 pl-0.5 break-words leading-snug line-clamp-2">
-                              {[
-                                step.values["system"],
-                                step.values["access_target"],
-                                step.values["related_db_table"],
-                              ]
+                              {workflowSteps.columns
+                                .filter(col => col.id !== "step_category" && col.id !== "purpose")
+                                .map(col => step.values[col.id])
                                 .filter(Boolean)
                                 .join(" / ") || "-"}
                             </div>
