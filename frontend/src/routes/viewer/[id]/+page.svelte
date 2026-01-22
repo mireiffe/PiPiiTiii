@@ -385,10 +385,29 @@
         }
     }
 
-    async function handleDeleteWorkflow() {
-        // Reset workflow data to empty state
+    async function handleDeleteWorkflow(
+        event: CustomEvent<{ workflowId: string }>,
+    ) {
+        const { workflowId } = event.detail;
+
+        // Reset workflow data to empty state for the specific workflow
         const emptyWorkflow = createEmptyWorkflowData();
-        await saveWorkflow(emptyWorkflow);
+
+        // Update allWorkflowsData with empty workflow
+        allWorkflowsData[workflowId] = emptyWorkflow;
+        allWorkflowsData = { ...allWorkflowsData };
+
+        // Save empty workflow to backend
+        try {
+            await updateProjectWorkflow(projectId, emptyWorkflow, workflowId);
+        } catch (e) {
+            console.error("Failed to delete workflow data", e);
+        }
+
+        // If deleting the active workflow, update current view
+        if (workflowId === activeWorkflowId) {
+            workflowData = emptyWorkflow;
+        }
 
         // Turn off capture mode if it's active
         if (captureMode) {
