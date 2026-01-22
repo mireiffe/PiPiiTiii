@@ -190,8 +190,33 @@ export async function updateProjectPromptVersion(id: string): Promise<Response> 
 
 // ========== Workflow Validation ==========
 
+export interface WorkflowIssue {
+    type: string;
+    workflow_id: string;
+    step_id: string;
+}
+
+export interface InvalidProject {
+    project_id: string;
+    issues: WorkflowIssue[];
+}
+
 export async function validateWorkflows(): Promise<Response> {
     return apiFetch('/api/workflow/validate');
+}
+
+/**
+ * Remove invalid steps from a project's workflows
+ */
+export async function removeInvalidWorkflowSteps(
+    projectId: string,
+    issues: { workflow_id: string; step_id: string }[],
+): Promise<Response> {
+    return apiFetch('/api/workflow/remove-invalid-steps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, issues }),
+    });
 }
 
 /**
