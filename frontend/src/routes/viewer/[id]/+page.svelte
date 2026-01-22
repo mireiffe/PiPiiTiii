@@ -400,6 +400,41 @@
         captureOverlays = [];
     }
 
+    async function handleDeleteUndefinedWorkflow(
+        event: CustomEvent<{ workflowId: string }>,
+    ) {
+        const { workflowId } = event.detail;
+
+        // Remove workflow data from allWorkflowsData
+        delete allWorkflowsData[workflowId];
+        allWorkflowsData = { ...allWorkflowsData };
+
+        // Save empty workflow to backend to remove it
+        try {
+            await updateProjectWorkflow(projectId, null, workflowId);
+        } catch (e) {
+            console.error("Failed to delete undefined workflow", e);
+        }
+
+        // Switch to first available workflow or set to null
+        const workflows = settings?.workflow_settings?.workflows || [];
+        if (workflows.length > 0) {
+            activeWorkflowId = workflows[0].id;
+            workflowData =
+                allWorkflowsData[activeWorkflowId] || createEmptyWorkflowData();
+        } else {
+            activeWorkflowId = null;
+            workflowData = createEmptyWorkflowData();
+        }
+
+        // Clear capture mode if active
+        if (captureMode) {
+            captureMode = false;
+            captureTargetStepId = null;
+        }
+        captureOverlays = [];
+    }
+
     async function handleDeleteStepDefinition(
         event: CustomEvent<{ stepId: string }>,
     ) {
@@ -1107,6 +1142,7 @@
         on:workflowTabChange={handleWorkflowTabChange}
         on:toggleCaptureMode={handleToggleCaptureMode}
         on:deleteWorkflow={handleDeleteWorkflow}
+        on:deleteUndefinedWorkflow={handleDeleteUndefinedWorkflow}
         on:deleteStepDefinition={handleDeleteStepDefinition}
         on:createStepDefinition={handleCreateStepDefinition}
         on:generateAllSummaries={generateAllSummaries}
