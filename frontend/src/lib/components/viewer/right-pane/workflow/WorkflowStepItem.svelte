@@ -67,18 +67,18 @@
 </script>
 
 <div
-    class="step-item relative z-10 transition-all duration-200 {supportIndicator ? 'pl-14' : 'pl-7'}"
+    class="step-item relative z-10 transition-all duration-200 {supportIndicator ? 'pl-14' : 'pl-8'}"
     style={isBeingDragged ? "opacity: 0.5;" : ""}
 >
     {#if showDropIndicatorTop}
         <div
-            class="absolute top-0 left-7 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
+            class="absolute top-0 left-8 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
         ></div>
     {/if}
 
     {#if showDropIndicatorBottom && isLastStep}
         <div
-            class="absolute bottom-0 left-7 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform translate-y-1/2 shadow-sm"
+            class="absolute bottom-0 left-8 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform translate-y-1/2 shadow-sm"
         ></div>
     {/if}
 
