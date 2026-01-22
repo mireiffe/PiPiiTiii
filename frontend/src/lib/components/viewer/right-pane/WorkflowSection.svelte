@@ -1330,8 +1330,13 @@
 
     // Workflow Actions
     function handleDeleteWorkflow() {
-        if (confirm("워크플로우 전체를 삭제하시겠습니까?")) {
-            dispatch("deleteWorkflow");
+        if (!activeWorkflowId) return;
+
+        const currentWorkflow = workflows.find(w => w.id === activeWorkflowId);
+        const workflowName = currentWorkflow?.name || activeWorkflowId;
+
+        if (confirm(`"${workflowName}" 워크플로우의 데이터를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.`)) {
+            dispatch("deleteWorkflow", { workflowId: activeWorkflowId });
         }
     }
 
@@ -1961,7 +1966,7 @@
                     <button
                         class="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                         on:click|stopPropagation={handleDeleteWorkflow}
-                        title="전체 초기화"
+                        title="현재 워크플로우 데이터 삭제"
                     >
                         <svg
                             class="w-3.5 h-3.5"
