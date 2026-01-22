@@ -124,29 +124,44 @@
         }
     }
 
-    function movePresetUp(stepId: string, presetIndex: number) {
-        if (presetIndex === 0) return;
+    function movePresetUp(stepId: string, presetId: string) {
         const step = coreSteps.definitions.find((d) => d.id === stepId);
-        if (step) {
-            const temp = step.presets[presetIndex - 1];
-            step.presets[presetIndex - 1] = step.presets[presetIndex];
-            step.presets[presetIndex] = temp;
-            step.presets = step.presets.map((p, i) => ({ ...p, order: i }));
-            coreSteps.definitions = [...coreSteps.definitions];
-            dispatch("update", { coreSteps });
-        }
+        if (!step) return;
+
+        const preset = step.presets.find((p) => p.id === presetId);
+        if (!preset || preset.order === 0) return;
+
+        // Find the preset with order = preset.order - 1
+        const prevPreset = step.presets.find((p) => p.order === preset.order - 1);
+        if (!prevPreset) return;
+
+        // Swap orders
+        const tempOrder = preset.order;
+        preset.order = prevPreset.order;
+        prevPreset.order = tempOrder;
+
+        coreSteps.definitions = [...coreSteps.definitions];
+        dispatch("update", { coreSteps });
     }
 
-    function movePresetDown(stepId: string, presetIndex: number) {
+    function movePresetDown(stepId: string, presetId: string) {
         const step = coreSteps.definitions.find((d) => d.id === stepId);
-        if (step && presetIndex < step.presets.length - 1) {
-            const temp = step.presets[presetIndex + 1];
-            step.presets[presetIndex + 1] = step.presets[presetIndex];
-            step.presets[presetIndex] = temp;
-            step.presets = step.presets.map((p, i) => ({ ...p, order: i }));
-            coreSteps.definitions = [...coreSteps.definitions];
-            dispatch("update", { coreSteps });
-        }
+        if (!step) return;
+
+        const preset = step.presets.find((p) => p.id === presetId);
+        if (!preset || preset.order === step.presets.length - 1) return;
+
+        // Find the preset with order = preset.order + 1
+        const nextPreset = step.presets.find((p) => p.order === preset.order + 1);
+        if (!nextPreset) return;
+
+        // Swap orders
+        const tempOrder = preset.order;
+        preset.order = nextPreset.order;
+        nextPreset.order = tempOrder;
+
+        coreSteps.definitions = [...coreSteps.definitions];
+        dispatch("update", { coreSteps });
     }
 
     function handlePresetNameChange(
@@ -375,7 +390,7 @@
                                             정의된 Preset이 없습니다.
                                         </div>
                                     {:else}
-                                        {#each step.presets as preset, pIndex (preset.id)}
+                                        {#each step.presets.slice().sort((a, b) => a.order - b.order) as preset, pIndex (preset.id)}
                                             <div
                                                 class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
                                             >
@@ -387,9 +402,9 @@
                                                         on:click={() =>
                                                             movePresetUp(
                                                                 step.id,
-                                                                pIndex,
+                                                                preset.id,
                                                             )}
-                                                        disabled={pIndex === 0}
+                                                        disabled={preset.order === 0}
                                                     >
                                                         ▲
                                                     </button>
@@ -398,9 +413,9 @@
                                                         on:click={() =>
                                                             movePresetDown(
                                                                 step.id,
-                                                                pIndex,
+                                                                preset.id,
                                                             )}
-                                                        disabled={pIndex ===
+                                                        disabled={preset.order ===
                                                             step.presets
                                                                 .length -
                                                                 1}
@@ -411,7 +426,7 @@
 
                                                 <span
                                                     class="text-xs text-gray-400 w-6"
-                                                    >{pIndex + 1}.</span
+                                                    >{preset.order + 1}.</span
                                                 >
 
                                                 <input
