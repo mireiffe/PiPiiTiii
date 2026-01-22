@@ -921,6 +921,55 @@ def validate_all_workflows():
         )
 
 
+class RemoveInvalidStepsRequest(BaseModel):
+    project_id: str
+    issues: list  # List of {workflow_id, step_id} to remove
+
+
+@app.post("/api/workflow/remove-invalid-steps")
+def remove_invalid_workflow_steps(request: RemoveInvalidStepsRequest):
+    """
+    Remove invalid steps from a project's workflows.
+    Each issue specifies which workflow_id and step_id to remove.
+    """
+    try:
+        project_id = request.project_id
+        issues = request.issues
+
+        # Get current workflows for the project
+        all_workflows = db.get_project_workflow(project_id, workflow_id=None)
+        if not all_workflows:
+            return {"status": "success", "removed_count": 0}
+
+        removed_count = 0
+
+        for issue in issues:
+            wf_id = issue.get("workflow_id")
+            step_id = issue.get("step_id")
+
+            if not wf_id or not step_id:
+                continue
+
+            workflow_data = all_workflows.get(wf_id)
+            if not workflow_data:
+                continue
+
+            # Remove the invalid step
+            steps = workflow_data.get("steps", [])
+            original_count = len(steps)
+            workflow_data["steps"] = [s for s in steps if s.get("stepId") != step_id]
+            removed_count += original_count - len(workflow_data["steps"])
+
+            # Update the workflow
+            db.update_project_workflow(project_id, workflow_data, wf_id)
+
+        return {"status": "success", "removed_count": removed_count}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to remove invalid steps: {str(e)}"
+        )
+
+
 @app.get("/api/projects/workflow-confirmation-status")
 def get_workflow_confirmation_status():
     """

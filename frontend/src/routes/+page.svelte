@@ -17,6 +17,7 @@
     batchGenerateSummary,
     validateWorkflows,
     fetchWorkflowConfirmationStatus,
+    removeInvalidWorkflowSteps,
   } from "$lib/api/project";
   import { ENABLE_DOWNLOAD } from "$lib/api/client";
 
@@ -93,8 +94,19 @@
   let currentPromptVersion = "";
 
   // Workflow validation status (projects with invalid actions/params)
-  /** @type {Set<string>} */
-  let workflowWarningProjects = new Set();
+  /**
+   * @typedef {{ type: string, workflow_id: string, step_id: string }} WorkflowIssue
+   */
+  /** @type {Map<string, WorkflowIssue[]>} */
+  let workflowWarningProjects = new Map();
+
+  // Workflow error modal state
+  let showWorkflowErrorModal = false;
+  /** @type {string | null} */
+  let errorModalProjectId = null;
+  /** @type {WorkflowIssue[]} */
+  let errorModalIssues = [];
+  let removingInvalidSteps = false;
 
   // Workflow confirmation status (projects with started but unconfirmed workflows)
   /** @type {Set<string>} */
@@ -357,12 +369,58 @@
       const res = await validateWorkflows();
       if (res.ok) {
         const data = await res.json();
-        workflowWarningProjects = new Set(
-          data.invalid_projects.map((p) => p.project_id),
-        );
+        /** @type {Map<string, WorkflowIssue[]>} */
+        const newMap = new Map();
+        for (const p of data.invalid_projects) {
+          newMap.set(p.project_id, p.issues);
+        }
+        workflowWarningProjects = newMap;
       }
     } catch (e) {
       console.error("Failed to load workflow validation", e);
+    }
+  }
+
+  /**
+   * @param {string} projectId
+   * @param {WorkflowIssue[]} issues
+   */
+  function openWorkflowErrorModal(projectId, issues) {
+    errorModalProjectId = projectId;
+    errorModalIssues = issues;
+    showWorkflowErrorModal = true;
+  }
+
+  function closeWorkflowErrorModal() {
+    showWorkflowErrorModal = false;
+    errorModalProjectId = null;
+    errorModalIssues = [];
+  }
+
+  async function handleRemoveInvalidSteps() {
+    if (!errorModalProjectId || errorModalIssues.length === 0) return;
+
+    removingInvalidSteps = true;
+    try {
+      const res = await removeInvalidWorkflowSteps(
+        errorModalProjectId,
+        errorModalIssues.map((i) => ({
+          workflow_id: i.workflow_id,
+          step_id: i.step_id,
+        })),
+      );
+      if (res.ok) {
+        // Remove from the warning map
+        workflowWarningProjects.delete(errorModalProjectId);
+        workflowWarningProjects = new Map(workflowWarningProjects);
+        closeWorkflowErrorModal();
+      } else {
+        console.error("Failed to remove invalid steps");
+      }
+    } catch (e) {
+      console.error("Failed to remove invalid steps", e);
+    } finally {
+      removingInvalidSteps = false;
     }
   }
 
@@ -1004,9 +1062,14 @@
                       {/if}
                       <!-- Workflow Warning -->
                       {#if hasWorkflowWarning}
-                        <div
-                          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-200"
-                          title="워크플로우에 삭제된 액션 또는 파라미터가 사용되고 있습니다"
+                        {@const workflowIssues =
+                          workflowWarningProjects.get(project.id) || []}
+                        <button
+                          type="button"
+                          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 border border-red-200 hover:bg-red-100 transition-colors cursor-pointer"
+                          title="클릭하여 오류 상세 보기 및 수정"
+                          on:click|stopPropagation|preventDefault={() =>
+                            openWorkflowErrorModal(project.id, workflowIssues)}
                         >
                           <svg
                             class="w-3 h-3 text-red-500"
@@ -1022,7 +1085,7 @@
                           <span class="text-[10px] font-medium text-red-600"
                             >워크플로우 오류</span
                           >
-                        </div>
+                        </button>
                       {/if}
                       <!-- Workflow Confirmation Needed -->
                       {#if needsWorkflowConfirmation}
@@ -1281,3 +1344,153 @@
     </div>
   </div>
 </div>
+
+<!-- Workflow Error Modal -->
+{#if showWorkflowErrorModal && errorModalProjectId}
+  {@const projectName =
+    projects.find((p) => p.id === errorModalProjectId)?.name ||
+    errorModalProjectId}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    on:click={closeWorkflowErrorModal}
+    on:keydown={(e) => e.key === "Escape" && closeWorkflowErrorModal()}
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+  >
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 overflow-hidden"
+      on:click|stopPropagation
+      role="document"
+    >
+      <!-- Header -->
+      <div class="bg-red-50 border-b border-red-200 px-6 py-4">
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-red-100 rounded-full">
+            <svg
+              class="w-6 h-6 text-red-600"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900">워크플로우 오류</h3>
+            <p class="text-sm text-gray-600">{projectName}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="px-6 py-4">
+        <p class="text-sm text-gray-600 mb-4">
+          이 프로젝트의 워크플로우에 삭제된 스텝이 사용되고 있습니다. 아래
+          목록에서 문제가 되는 항목을 확인하고 제거할 수 있습니다.
+        </p>
+
+        <div class="space-y-2 max-h-60 overflow-y-auto">
+          {#each errorModalIssues as issue, i}
+            <div
+              class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+            >
+              <div
+                class="flex-shrink-0 w-6 h-6 bg-red-100 rounded-full flex items-center justify-center"
+              >
+                <span class="text-xs font-medium text-red-600">{i + 1}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900 truncate">
+                  워크플로우: {issue.workflow_id}
+                </p>
+                <p class="text-xs text-gray-500 truncate">
+                  스텝 ID: {issue.step_id}
+                </p>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div
+        class="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-between gap-3"
+      >
+        <a
+          href={`/viewer/${errorModalProjectId}?allowEdit=true`}
+          class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+        >
+          <svg
+            class="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+          Viewer에서 편집
+        </a>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            on:click={closeWorkflowErrorModal}
+          >
+            닫기
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:bg-red-400 transition-colors"
+            disabled={removingInvalidSteps}
+            on:click={handleRemoveInvalidSteps}
+          >
+            {#if removingInvalidSteps}
+              <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              처리 중...
+            {:else}
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+              잘못된 스텝 모두 제거
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
