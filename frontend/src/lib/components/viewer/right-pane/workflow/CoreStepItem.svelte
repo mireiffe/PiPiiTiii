@@ -217,6 +217,31 @@
         }
     }
 
+    // Auto-resize textarea action - resizes on mount and input
+    function autoResizeTextarea(textarea: HTMLTextAreaElement) {
+        const resize = () => {
+            textarea.style.height = "auto";
+            textarea.style.height = textarea.scrollHeight + "px";
+        };
+
+        // Initial resize
+        resize();
+
+        // Resize on input
+        textarea.addEventListener("input", resize);
+
+        return {
+            destroy() {
+                textarea.removeEventListener("input", resize);
+            }
+        };
+    }
+
+    function handleTextareaInput(event: Event, presetId: string) {
+        const textarea = event.currentTarget as HTMLTextAreaElement;
+        updateTextValue(presetId, textarea.value);
+    }
+
     function startCapture(presetId: string) {
         dispatch("startCapture", { presetId });
     }
@@ -664,16 +689,13 @@
                             <textarea
                                 value={presetValue?.textValue || ""}
                                 on:input={(e) =>
-                                    updateTextValue(
-                                        preset.id,
-                                        e.currentTarget.value,
-                                    )}
+                                    handleTextareaInput(e, preset.id)}
                                 on:blur={stopEditing}
                                 on:keydown={(e) =>
                                     handleTextKeydown(e, preset.id)}
                                 placeholder="{preset.name} 입력... (Ctrl+S로 저장)"
-                                class="w-full border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white"
-                                rows="3"
+                                class="w-full min-h-[60px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
+                                use:autoResizeTextarea
                                 autofocus
                             ></textarea>
                         {:else}
