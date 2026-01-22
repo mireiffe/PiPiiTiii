@@ -628,26 +628,16 @@
 
         <!-- Expanded Content - Editable -->
         {#if isExpanded}
-            {@const sortedPresets = definition.presets.sort(
+            {@const sortedPresets = [...definition.presets].sort(
                 (a, b) => a.order - b.order,
             )}
-            {@const textPresets = sortedPresets.filter((p) => {
-                const pv = getPresetValue(p.id);
-                const type = pv?.type || p.allowedTypes[0] || "text";
-                return type === "text";
-            })}
-            {@const mediaPresets = sortedPresets.filter((p) => {
-                const pv = getPresetValue(p.id);
-                const type = pv?.type || p.allowedTypes[0] || "text";
-                return type === "capture" || type === "image_clipboard";
-            })}
 
             <div
-                class="px-3 pb-3 border-t border-purple-100 pt-2 space-y-3"
+                class="px-3 pb-3 border-t border-purple-100 pt-2 space-y-2"
                 on:click|stopPropagation
             >
-                <!-- Text Presets (Full Width) -->
-                {#each textPresets as preset (preset.id)}
+                <!-- All Presets in order -->
+                {#each sortedPresets as preset (preset.id)}
                     {@const presetValue = getPresetValue(preset.id)}
                     {@const currentType =
                         presetValue?.type || preset.allowedTypes[0] || "text"}
@@ -684,150 +674,151 @@
                             {/if}
                         </div>
 
-                        <!-- Text Input (click to edit, Ctrl+S to save) -->
-                        {#if isEditingThis}
-                            <textarea
-                                value={presetValue?.textValue || ""}
-                                on:input={(e) =>
-                                    handleTextareaInput(e, preset.id)}
-                                on:blur={stopEditing}
-                                on:keydown={(e) =>
-                                    handleTextKeydown(e, preset.id)}
-                                placeholder="{preset.name} 입력... (Ctrl+S로 저장)"
-                                class="w-full min-h-[60px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
-                                use:autoResizeTextarea
-                                autofocus
-                            ></textarea>
-                        {:else}
-                            <!-- svelte-ignore a11y-click-events-have-key-events -->
-                            <!-- svelte-ignore a11y-no-static-element-interactions -->
-                            <div
-                                class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
-                                on:click={() => startEditing(preset.id)}
-                                title="클릭하여 편집"
-                            >
-                                {#if presetValue?.textValue && presetValue.textValue.trim()}
-                                    <p
-                                        class="text-gray-700 whitespace-pre-wrap break-words"
-                                    >
-                                        {presetValue.textValue}
-                                    </p>
-                                {:else}
-                                    <p class="text-gray-400 italic">
-                                        클릭하여 입력...
-                                    </p>
-                                {/if}
-                            </div>
-                        {/if}
-                    </div>
-                {/each}
-
-                <!-- Media Presets (Capture & Image - 2 Column Grid) -->
-                {#if mediaPresets.length > 0}
-                    <div class="grid grid-cols-2 gap-2">
-                        {#each mediaPresets as preset, idx (preset.id)}
-                            {@const presetValue = getPresetValue(preset.id)}
-                            {@const currentType =
-                                presetValue?.type ||
-                                preset.allowedTypes[0] ||
-                                "text"}
-                            {@const isLastOdd =
-                                mediaPresets.length % 2 === 1 &&
-                                idx === mediaPresets.length - 1}
-
-                            <div
-                                class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {isLastOdd
-                                    ? 'col-span-2'
-                                    : ''}"
-                                data-preset-id={preset.id}
-                            >
+                        <!-- Text Input -->
+                        {#if currentType === "text"}
+                            {#if isEditingThis}
+                                <textarea
+                                    value={presetValue?.textValue || ""}
+                                    on:input={(e) =>
+                                        handleTextareaInput(e, preset.id)}
+                                    on:blur={stopEditing}
+                                    on:keydown={(e) =>
+                                        handleTextKeydown(e, preset.id)}
+                                    placeholder="{preset.name} 입력... (Ctrl+S로 저장)"
+                                    class="w-full min-h-[60px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
+                                    use:autoResizeTextarea
+                                    autofocus
+                                ></textarea>
+                            {:else}
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
-                                    class="flex items-center justify-between mb-2"
+                                    class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
+                                    on:click={() => startEditing(preset.id)}
+                                    title="클릭하여 편집"
                                 >
-                                    <span
-                                        class="text-xs font-medium text-purple-700"
-                                        >{preset.name}</span
-                                    >
-
-                                    <!-- Type selector if multiple types allowed -->
-                                    {#if preset.allowedTypes.length > 1}
-                                        <div class="flex gap-1">
-                                            {#each preset.allowedTypes as type}
-                                                <button
-                                                    class="px-1.5 py-0.5 text-[10px] rounded transition
-                                                        {currentType === type
-                                                        ? 'bg-purple-200 text-purple-700 border border-purple-400'
-                                                        : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'}"
-                                                    on:click={() =>
-                                                        selectInputType(
-                                                            preset.id,
-                                                            type,
-                                                        )}
-                                                >
-                                                    {getInputTypeDisplayName(
-                                                        type,
-                                                    )}
-                                                </button>
-                                            {/each}
-                                        </div>
+                                    {#if presetValue?.textValue && presetValue.textValue.trim()}
+                                        <p
+                                            class="text-gray-700 whitespace-pre-wrap break-words"
+                                        >
+                                            {presetValue.textValue}
+                                        </p>
+                                    {:else}
+                                        <p class="text-gray-400 italic">
+                                            클릭하여 입력...
+                                        </p>
                                     {/if}
                                 </div>
+                            {/if}
 
-                                <!-- Capture Input -->
-                                {#if currentType === "capture"}
-                                    {#if presetValue?.captureValue}
-                                        <div
-                                            class="flex flex-col gap-1 p-2 bg-green-50 border border-green-200 rounded"
+                        <!-- Capture Input -->
+                        {:else if currentType === "capture"}
+                            {#if presetValue?.captureValue}
+                                <div
+                                    class="flex flex-col gap-1 p-2 bg-green-50 border border-green-200 rounded"
+                                >
+                                    <div
+                                        class="flex items-center gap-1"
+                                    >
+                                        <svg
+                                            class="w-3 h-3 text-green-600 shrink-0"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
                                         >
-                                            <div
-                                                class="flex items-center gap-1"
-                                            >
-                                                <svg
-                                                    class="w-3 h-3 text-green-600 shrink-0"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M5 13l4 4L19 7"
-                                                    />
-                                                </svg>
-                                                <span
-                                                    class="text-[10px] text-green-700"
-                                                >
-                                                    슬라이드 {presetValue
-                                                        .captureValue
-                                                        .slideIndex + 1}
-                                                </span>
-                                            </div>
-                                            <div class="flex gap-1">
-                                                <button
-                                                    class="text-[10px] text-gray-500 hover:text-green-600 px-1.5 py-0.5 border border-gray-200 rounded hover:border-green-300 transition flex-1"
-                                                    on:click={() =>
-                                                        startCapture(preset.id)}
-                                                >
-                                                    다시 캡처
-                                                </button>
-                                                <button
-                                                    class="text-[10px] text-red-500 hover:text-red-700 px-1.5 py-0.5"
-                                                    on:click={() =>
-                                                        clearCapture(preset.id)}
-                                                >
-                                                    삭제
-                                                </button>
-                                            </div>
-                                        </div>
-                                    {:else}
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M5 13l4 4L19 7"
+                                            />
+                                        </svg>
+                                        <span
+                                            class="text-[10px] text-green-700"
+                                        >
+                                            슬라이드 {presetValue
+                                                .captureValue
+                                                .slideIndex + 1}
+                                        </span>
+                                    </div>
+                                    <div class="flex gap-1">
                                         <button
-                                            class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1 text-xs"
+                                            class="text-[10px] text-gray-500 hover:text-green-600 px-1.5 py-0.5 border border-gray-200 rounded hover:border-green-300 transition flex-1"
                                             on:click={() =>
                                                 startCapture(preset.id)}
                                         >
+                                            다시 캡처
+                                        </button>
+                                        <button
+                                            class="text-[10px] text-red-500 hover:text-red-700 px-1.5 py-0.5"
+                                            on:click={() =>
+                                                clearCapture(preset.id)}
+                                        >
+                                            삭제
+                                        </button>
+                                    </div>
+                                </div>
+                            {:else}
+                                <button
+                                    class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1 text-xs"
+                                    on:click={() =>
+                                        startCapture(preset.id)}
+                                >
+                                    <svg
+                                        class="w-3 h-3"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                        />
+                                    </svg>
+                                    캡처
+                                </button>
+                            {/if}
+
+                        <!-- Image Clipboard Input -->
+                        {:else if currentType === "image_clipboard"}
+                            {#if presetValue?.imageId}
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                <div
+                                    class="relative group cursor-pointer"
+                                    on:click={() =>
+                                        handleImageClick(preset.id)}
+                                    title="클릭하여 캡션 편집"
+                                >
+                                    <img
+                                        src={getAttachmentImageUrl(
+                                            presetValue.imageId,
+                                        )}
+                                        alt="첨부된 이미지"
+                                        class="w-full max-h-32 object-contain rounded border border-gray-200 bg-gray-50 hover:border-purple-300 transition"
+                                    />
+                                    {#if presetValue.imageCaption}
+                                        <div
+                                            class="mt-1 px-1.5 py-0.5 bg-gray-50 rounded border border-gray-200 text-[10px] text-gray-600 truncate"
+                                        >
+                                            {presetValue.imageCaption}
+                                        </div>
+                                    {/if}
+                                    <div
+                                        class="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <button
+                                            class="w-5 h-5 bg-purple-500 text-white rounded-full flex items-center justify-center hover:bg-purple-600 transition text-xs shadow"
+                                            on:click|stopPropagation={() =>
+                                                handleImageClick(
+                                                    preset.id,
+                                                )}
+                                            title="캡션 편집"
+                                        >
                                             <svg
-                                                class="w-3 h-3"
+                                                class="w-2.5 h-2.5"
                                                 fill="none"
                                                 stroke="currentColor"
                                                 viewBox="0 0 24 24"
@@ -836,139 +827,84 @@
                                                     stroke-linecap="round"
                                                     stroke-linejoin="round"
                                                     stroke-width="2"
-                                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                                                 />
                                             </svg>
-                                            캡처
                                         </button>
-                                    {/if}
-
-                                    <!-- Image Clipboard Input -->
-                                {:else if currentType === "image_clipboard"}
-                                    {#if presetValue?.imageId}
-                                        <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                        <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                        <div
-                                            class="relative group cursor-pointer"
-                                            on:click={() =>
-                                                handleImageClick(preset.id)}
-                                            title="클릭하여 캡션 편집"
+                                        <button
+                                            class="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition text-xs shadow"
+                                            on:click|stopPropagation={() =>
+                                                clearImage(preset.id)}
+                                            title="이미지 삭제"
                                         >
-                                            <img
-                                                src={getAttachmentImageUrl(
-                                                    presetValue.imageId,
-                                                )}
-                                                alt="첨부된 이미지"
-                                                class="w-full max-h-24 object-contain rounded border border-gray-200 bg-gray-50 hover:border-purple-300 transition"
-                                            />
-                                            {#if presetValue.imageCaption}
-                                                <div
-                                                    class="mt-1 px-1.5 py-0.5 bg-gray-50 rounded border border-gray-200 text-[10px] text-gray-600 truncate"
-                                                >
-                                                    {presetValue.imageCaption}
-                                                </div>
-                                            {/if}
-                                            <div
-                                                class="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <button
-                                                    class="w-5 h-5 bg-purple-500 text-white rounded-full flex items-center justify-center hover:bg-purple-600 transition text-xs shadow"
-                                                    on:click|stopPropagation={() =>
-                                                        handleImageClick(
-                                                            preset.id,
-                                                        )}
-                                                    title="캡션 편집"
-                                                >
-                                                    <svg
-                                                        class="w-2.5 h-2.5"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        viewBox="0 0 24 24"
-                                                    >
-                                                        <path
-                                                            stroke-linecap="round"
-                                                            stroke-linejoin="round"
-                                                            stroke-width="2"
-                                                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                                        />
-                                                    </svg>
-                                                </button>
-                                                <button
-                                                    class="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition text-xs shadow"
-                                                    on:click|stopPropagation={() =>
-                                                        clearImage(preset.id)}
-                                                    title="이미지 삭제"
-                                                >
-                                                    ×
-                                                </button>
-                                            </div>
-                                        </div>
+                                            ×
+                                        </button>
+                                    </div>
+                                </div>
+                            {:else}
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                <div
+                                    class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 flex flex-col items-center justify-center gap-1 hover:border-purple-400 hover:bg-purple-50/50 transition-all cursor-pointer"
+                                    on:paste={(e) =>
+                                        handleImagePaste(e, preset.id)}
+                                    on:click={() => {
+                                        // Focus this element to receive paste events
+                                        const el =
+                                            document.querySelector(
+                                                `[data-preset-id="${preset.id}"]`,
+                                            );
+                                        if (el)
+                                            (el as HTMLElement).focus();
+                                    }}
+                                    tabindex="0"
+                                    role="button"
+                                >
+                                    {#if isUploading}
+                                        <svg
+                                            class="animate-spin w-4 h-4 text-purple-500"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <circle
+                                                class="opacity-25"
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                stroke="currentColor"
+                                                stroke-width="4"
+                                                fill="none"
+                                            ></circle>
+                                            <path
+                                                class="opacity-75"
+                                                fill="currentColor"
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                            ></path>
+                                        </svg>
+                                        <span class="text-[10px]"
+                                            >업로드 중...</span
+                                        >
                                     {:else}
-                                        <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                        <div
-                                            class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 flex flex-col items-center justify-center gap-1 hover:border-purple-400 hover:bg-purple-50/50 transition-all cursor-pointer"
-                                            on:paste={(e) =>
-                                                handleImagePaste(e, preset.id)}
-                                            on:click={() => {
-                                                // Focus this element to receive paste events
-                                                const el =
-                                                    document.querySelector(
-                                                        `[data-preset-id="${preset.id}"]`,
-                                                    );
-                                                if (el)
-                                                    (el as HTMLElement).focus();
-                                            }}
-                                            tabindex="0"
-                                            role="button"
+                                        <svg
+                                            class="w-4 h-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
                                         >
-                                            {#if isUploading}
-                                                <svg
-                                                    class="animate-spin w-4 h-4 text-purple-500"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <circle
-                                                        class="opacity-25"
-                                                        cx="12"
-                                                        cy="12"
-                                                        r="10"
-                                                        stroke="currentColor"
-                                                        stroke-width="4"
-                                                        fill="none"
-                                                    ></circle>
-                                                    <path
-                                                        class="opacity-75"
-                                                        fill="currentColor"
-                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                    ></path>
-                                                </svg>
-                                                <span class="text-[10px]"
-                                                    >업로드 중...</span
-                                                >
-                                            {:else}
-                                                <svg
-                                                    class="w-4 h-4"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                                    />
-                                                </svg>
-                                                <span class="text-[10px]"
-                                                    >Ctrl+V 붙여넣기</span
-                                                >
-                                            {/if}
-                                        </div>
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                            />
+                                        </svg>
+                                        <span class="text-[10px]"
+                                            >Ctrl+V 붙여넣기</span
+                                        >
                                     {/if}
-                                {/if}
-                            </div>
-                        {/each}
+                                </div>
+                            {/if}
+                        {/if}
                     </div>
-                {/if}
+                {/each}
 
                 <!-- Delete Button -->
                 <div class="pt-1 border-t border-purple-50 flex justify-end">
