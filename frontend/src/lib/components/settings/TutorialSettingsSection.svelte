@@ -25,6 +25,7 @@
                     id: p.id,
                     name: p.name || p.id,
                     title: p.title,
+                    db_no: p.db_no,
                 }));
             }
         } catch (e) {
@@ -71,7 +72,7 @@
                     <option value="">선택 안함</option>
                     {#each projects as project}
                         <option value={project.id}>
-                            {project.title || project.name}
+                            {project.db_no} | {project.name || project.id}
                         </option>
                     {/each}
                 </select>
