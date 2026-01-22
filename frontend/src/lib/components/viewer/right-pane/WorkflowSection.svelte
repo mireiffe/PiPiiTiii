@@ -1415,34 +1415,50 @@
         if (!capturingForCoreStepPresetId || !capturingCoreStepInstanceId)
             return;
 
-        // Find and update the instance directly
-        const instanceIdx = (workflowData.coreStepInstances ?? []).findIndex(
-            (inst) => inst.id === capturingCoreStepInstanceId,
+        // Find and update the unified step (primary data source)
+        const steps = workflowData.unifiedSteps ?? [];
+        const stepIdx = steps.findIndex(
+            (s) => s.id === capturingCoreStepInstanceId && s.type === "core",
         );
-        if (instanceIdx >= 0) {
-            const instance = workflowData.coreStepInstances![instanceIdx];
-            const presetIdx = instance.presetValues.findIndex(
+
+        if (stepIdx >= 0) {
+            const step = steps[stepIdx];
+            const presetValues = step.presetValues ?? [];
+            const presetIdx = presetValues.findIndex(
                 (pv) => pv.presetId === capturingForCoreStepPresetId,
             );
 
+            let updatedPresetValues;
             if (presetIdx >= 0) {
-                instance.presetValues[presetIdx].captureValue = capture;
+                updatedPresetValues = presetValues.map((pv, i) =>
+                    i === presetIdx
+                        ? { ...pv, captureValue: capture }
+                        : pv
+                );
             } else {
-                instance.presetValues = [
-                    ...instance.presetValues,
+                updatedPresetValues = [
+                    ...presetValues,
                     {
                         presetId: capturingForCoreStepPresetId,
-                        type: "capture",
+                        type: "capture" as const,
                         captureValue: capture,
                     },
                 ];
             }
 
-            workflowData = {
+            const updatedSteps = steps.map((s, i) =>
+                i === stepIdx
+                    ? { ...s, presetValues: updatedPresetValues }
+                    : s
+            );
+
+            const syncedData = syncUnifiedToLegacy({
                 ...workflowData,
-                coreStepInstances: [...workflowData.coreStepInstances!],
+                unifiedSteps: updatedSteps,
                 updatedAt: new Date().toISOString(),
-            };
+            });
+
+            workflowData = syncedData;
             dispatch("workflowChange", workflowData);
         }
 
