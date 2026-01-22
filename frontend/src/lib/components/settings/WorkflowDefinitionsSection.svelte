@@ -27,6 +27,10 @@
     let addingColumn: string | null = null; // workflow id that is adding column
     let newColumnName = "";
 
+    // Drag and drop state
+    let draggedWorkflowIndex: number | null = null;
+    let dragOverWorkflowIndex: number | null = null;
+
     // Core Steps UI state
     let addingCoreStep: string | null = null; // workflow id that is adding core step
     let newCoreStepName = "";
@@ -103,6 +107,51 @@
         workflows[index] = temp;
         workflows = workflows.map((w, i) => ({ ...w, order: i }));
         emitUpdate();
+    }
+
+    // Drag and drop handlers for workflow reordering
+    function handleDragStart(e: DragEvent, index: number) {
+        draggedWorkflowIndex = index;
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", index.toString());
+        }
+    }
+
+    function handleDragOver(e: DragEvent, index: number) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = "move";
+        }
+        dragOverWorkflowIndex = index;
+    }
+
+    function handleDragLeave() {
+        dragOverWorkflowIndex = null;
+    }
+
+    function handleDrop(e: DragEvent, targetIndex: number) {
+        e.preventDefault();
+        if (draggedWorkflowIndex === null || draggedWorkflowIndex === targetIndex) {
+            draggedWorkflowIndex = null;
+            dragOverWorkflowIndex = null;
+            return;
+        }
+
+        const draggedWorkflow = workflows[draggedWorkflowIndex];
+        const newWorkflows = [...workflows];
+        newWorkflows.splice(draggedWorkflowIndex, 1);
+        newWorkflows.splice(targetIndex, 0, draggedWorkflow);
+        workflows = newWorkflows.map((w, i) => ({ ...w, order: i }));
+
+        draggedWorkflowIndex = null;
+        dragOverWorkflowIndex = null;
+        emitUpdate();
+    }
+
+    function handleDragEnd() {
+        draggedWorkflowIndex = null;
+        dragOverWorkflowIndex = null;
     }
 
     function handleWorkflowNameChange(workflowId: string, name: string) {
@@ -588,32 +637,34 @@
         {:else}
             {#each workflows as workflow, index (workflow.id)}
                 <div
-                    class="border border-gray-200 rounded-lg bg-gray-50 overflow-hidden"
+                    class="border rounded-lg bg-gray-50 overflow-hidden transition-all duration-200
+                        {draggedWorkflowIndex === index ? 'opacity-50 border-gray-400' : 'border-gray-200'}
+                        {dragOverWorkflowIndex === index && draggedWorkflowIndex !== index ? 'border-blue-500 border-2 bg-blue-50/30' : ''}"
+                    draggable="true"
+                    on:dragstart={(e) => handleDragStart(e, index)}
+                    on:dragover={(e) => handleDragOver(e, index)}
+                    on:dragleave={handleDragLeave}
+                    on:drop={(e) => handleDrop(e, index)}
+                    on:dragend={handleDragEnd}
                 >
                     <!-- Workflow Header -->
                     <div
                         class="flex items-center gap-3 p-4 bg-white border-b border-gray-100"
                     >
-                        <div class="flex flex-col gap-1">
-                            <button
-                                class="text-gray-500 hover:text-gray-700 disabled:opacity-30 text-xs"
-                                on:click={() => moveWorkflowUp(index)}
-                                disabled={index === 0}
-                                title="위로 이동"
-                            >
-                                ▲
-                            </button>
-                            <button
-                                class="text-gray-500 hover:text-gray-700 disabled:opacity-30 text-xs"
-                                on:click={() => moveWorkflowDown(index)}
-                                disabled={index === workflows.length - 1}
-                                title="아래로 이동"
-                            >
-                                ▼
-                            </button>
+                        <!-- Drag Handle -->
+                        <div
+                            class="flex flex-col items-center justify-center w-6 h-8 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none"
+                            title="드래그하여 순서 변경"
+                        >
+                            <span class="text-lg leading-none tracking-widest">⋮⋮</span>
                         </div>
 
                         <div class="flex-1 flex items-center gap-3">
+                            {#if index === 0}
+                                <span class="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-medium border border-amber-300">
+                                    대표 워크플로우
+                                </span>
+                            {/if}
                             <input
                                 type="text"
                                 value={workflow.name}
