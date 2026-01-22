@@ -859,7 +859,7 @@ def update_project_workflow(project_id: str, request: WorkflowUpdateRequest):
 def validate_all_workflows():
     """
     Validate all project workflows against current settings.
-    Returns list of projects with invalid workflow steps.
+    Returns list of projects with invalid workflow steps or undefined workflows.
     Supports multi-workflow format: each workflow can use global or its own step definitions.
     """
     try:
@@ -886,9 +886,20 @@ def validate_all_workflows():
                 if not workflow_data:
                     continue
 
-                # Determine valid step IDs for this workflow
+                # Check if workflow is defined in settings
                 workflow_def = workflow_defs.get(workflow_id)
-                if workflow_def and not workflow_def.get("useGlobalSteps", True):
+                if not workflow_def:
+                    # Workflow is not defined in settings (was deleted)
+                    project_issues.append(
+                        {
+                            "type": "undefined_workflow",
+                            "workflow_id": workflow_id,
+                        }
+                    )
+                    continue
+
+                # Determine valid step IDs for this workflow
+                if not workflow_def.get("useGlobalSteps", True):
                     # Use workflow's own steps
                     wf_steps = workflow_def.get("steps", {})
                     valid_step_ids = {row["id"] for row in wf_steps.get("rows", [])}
