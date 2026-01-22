@@ -2283,7 +2283,7 @@
                     >
                         <div class="relative">
                             <div
-                                class="absolute left-[23px] top-0 bottom-0 w-px bg-gray-200 z-0"
+                                class="absolute left-[18px] top-0 bottom-0 w-px bg-gray-200 z-0"
                             ></div>
 
                             {#each sortedUnifiedSteps as unifiedStep, idx (unifiedStep.id)}
@@ -2314,7 +2314,7 @@
                                         >
                                             {#if showDropIndicator}
                                                 <div
-                                                    class="absolute top-0 left-10 right-0 h-0.5 bg-purple-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
+                                                    class="absolute top-0 left-6 right-0 h-0.5 bg-purple-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
                                                 ></div>
                                             {/if}
                                             <CoreStepItem
@@ -2374,25 +2374,25 @@
                                     {:else}
                                         <!-- Orphan Core Step - definition이 삭제됨 -->
                                         <div
-                                            class="relative mb-2 pl-4"
+                                            class="relative mb-2 pl-6"
                                             style={isBeingDragged
                                                 ? "opacity: 0.5;"
                                                 : ""}
                                         >
                                             {#if showDropIndicator}
                                                 <div
-                                                    class="absolute top-0 left-10 right-0 h-0.5 bg-red-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
+                                                    class="absolute top-0 left-8 right-0 h-0.5 bg-red-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
                                                 ></div>
                                             {/if}
                                             <!-- Number Badge -->
                                             <div
-                                                class="absolute left-0 top-3 w-8 h-8 rounded-full bg-red-400 flex items-center justify-center text-white text-xs font-bold shadow-md z-20 border-2 border-red-200"
+                                                class="absolute left-0 top-2.5 w-5 h-5 rounded-full bg-red-400 flex items-center justify-center text-white text-[9px] font-bold shadow-sm z-20"
                                             >
                                                 ?
                                             </div>
                                             <!-- Card -->
                                             <div
-                                                class="ml-6 bg-white rounded-lg border border-red-200 shadow-sm"
+                                                class="bg-white rounded-lg border border-red-200 shadow-sm"
                                             >
                                                 <div
                                                     class="p-3 flex items-center justify-between gap-2"
@@ -2464,7 +2464,7 @@
                                         >
                                             {#if showDropIndicator}
                                                 <div
-                                                    class="absolute top-0 left-10 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
+                                                    class="absolute top-0 left-8 right-0 h-0.5 bg-blue-500 rounded-full z-50 pointer-events-none transform -translate-y-1/2 shadow-sm"
                                                 ></div>
                                             {/if}
 

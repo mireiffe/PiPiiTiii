@@ -396,20 +396,20 @@
 </script>
 
 <div
-    class="relative pl-4"
+    class="relative pl-6"
     class:z-50={showLinkedStepsTooltip}
     class:z-10={!showLinkedStepsTooltip}
 >
     <!-- Number Badge -->
     <div
-        class="absolute left-0 top-3 w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-xs font-bold shadow-md z-20 border-2 border-purple-300"
+        class="absolute left-0 top-2.5 w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-white text-[9px] font-bold shadow-sm z-20"
     >
         C{displayNumber}
     </div>
 
     <!-- Card -->
     <div
-        class="ml-6 bg-white rounded-lg border border-purple-200 shadow-sm hover:shadow-md transition-shadow"
+        class="bg-white rounded-lg border border-purple-200 shadow-sm hover:shadow-md transition-shadow"
     >
         <!-- Header -->
         <div
