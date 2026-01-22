@@ -72,7 +72,7 @@
                     <option value="">선택 안함</option>
                     {#each projects as project}
                         <option value={project.id}>
-                            {project.db_no} | {project.name || project.id}
+                            DB No. {project.db_no} | {project.name || project.id}
                         </option>
                     {/each}
                 </select>
@@ -84,7 +84,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-sm text-gray-600">
-                            선택된 PPT: <span class="font-medium text-gray-900">{selectedProject.title || selectedProject.name}</span>
+                            선택된 PPT: <span class="font-medium text-gray-900">DB No. {selectedProject.db_no} | {selectedProject.name || selectedProject.title}</span>
                         </p>
                         <p class="text-xs text-gray-400 mt-1">
                             Tutorial 모드에서 모든 작업은 실제로 저장되지 않습니다.
