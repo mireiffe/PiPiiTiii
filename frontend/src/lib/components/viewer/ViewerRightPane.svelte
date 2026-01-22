@@ -157,6 +157,7 @@
             {captureTargetStepId}
             {workflows}
             {activeWorkflowId}
+            {allWorkflowsData}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
             on:workflowChange={handleWorkflowChange}
@@ -166,6 +167,7 @@
             on:createStepDefinition
             on:updateStepDefinition
             on:selectWorkflowTab={(e) => selectWorkflowTab(e.detail.workflowId)}
+            on:deleteUndefinedWorkflow
         />
 
         <!-- Summary Section -->
