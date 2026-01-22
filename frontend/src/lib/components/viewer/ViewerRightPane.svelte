@@ -26,6 +26,9 @@
     export let project;
     export let projectId = "";
 
+    // Tutorial mode indicator
+    export let isTutorialMode = false;
+
     // Workflow step-based data - now supports multiple workflows
     export let workflowData = { steps: [] };
     export let allWorkflowsData = {};  // { workflowId: ProjectWorkflowData }

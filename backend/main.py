@@ -329,6 +329,7 @@ class Settings(BaseModel):
     step_containers: Optional[List[StepContainer]] = None
     phase_types: Optional[List[PhaseType]] = None
     workflow_settings: Optional[WorkflowSettingsModel] = None
+    tutorial_project_id: Optional[str] = None  # Project ID for tutorial mode
 
 
 class WorkflowData(BaseModel):

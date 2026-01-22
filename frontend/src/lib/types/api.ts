@@ -89,6 +89,7 @@ export interface Settings {
     workflow_steps: WorkflowSteps;
     workflow_settings?: WorkflowSettings;
     use_thumbnails?: boolean;
+    tutorial_project_id?: string;  // Project ID for tutorial mode
 }
 
 // ========== Summary Types ==========

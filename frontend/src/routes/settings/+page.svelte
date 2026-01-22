@@ -8,9 +8,10 @@
     import WorkflowStepsSection from "$lib/components/settings/WorkflowStepsSection.svelte";
     import PhaseSettingsSection from "$lib/components/settings/PhaseSettingsSection.svelte";
     import WorkflowDefinitionsSection from "$lib/components/settings/WorkflowDefinitionsSection.svelte";
+    import TutorialSettingsSection from "$lib/components/settings/TutorialSettingsSection.svelte";
 
     // Navigation sections
-    type SectionId = "llm" | "summary" | "phenomenon" | "workflows" | "workflow" | "phases";
+    type SectionId = "llm" | "summary" | "phenomenon" | "workflows" | "workflow" | "phases" | "tutorial";
 
     interface NavSection {
         id: SectionId;
@@ -25,6 +26,7 @@
         { id: "phenomenon", label: "발생현상 속성", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" },
         { id: "workflow", label: "글로벌 스텝", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
         { id: "phases", label: "위상 (Phase)", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
+        { id: "tutorial", label: "Tutorial", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
     ];
 
     let activeSection: SectionId = "workflows";
@@ -57,6 +59,7 @@
         workflow_steps: WorkflowSteps;
         phase_types: PhaseType[];
         workflow_settings?: WorkflowSettings;
+        tutorial_project_id?: string;
     }
 
     const DEFAULT_COLUMNS = [
@@ -87,6 +90,7 @@
             phaseTypes: [],
             globalStepsLabel: "발생현상",
         },
+        tutorial_project_id: undefined,
     };
 
     function scrollToSection(sectionId: SectionId) {
@@ -132,6 +136,7 @@
                         phaseTypes: [],
                         globalStepsLabel: "발생현상",
                     },
+                    tutorial_project_id: data.tutorial_project_id || undefined,
                 };
 
                 if (!settings.workflow_steps.columns || settings.workflow_steps.columns.length === 0) {
@@ -260,6 +265,11 @@
         expandedWorkflowRowId = expandedWorkflowRowId === e.detail.rowId ? null : e.detail.rowId;
     }
 
+    // Tutorial settings handler
+    function handleTutorialUpdate(e: CustomEvent<{ tutorialProjectId: string | undefined }>) {
+        settings.tutorial_project_id = e.detail.tutorialProjectId;
+    }
+
     </script>
 
 <div class="h-screen flex flex-col bg-gray-100">
@@ -368,6 +378,14 @@
                         <PhaseSettingsSection
                             phases={settings.phase_types}
                             on:update={handlePhaseTypesUpdate}
+                        />
+                    </div>
+
+                    <!-- Tutorial 설정 -->
+                    <div id="section-tutorial">
+                        <TutorialSettingsSection
+                            tutorialProjectId={settings.tutorial_project_id}
+                            on:update={handleTutorialUpdate}
                         />
                     </div>
                 </div>
