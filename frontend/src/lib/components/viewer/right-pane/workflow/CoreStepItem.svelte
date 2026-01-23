@@ -24,6 +24,8 @@
     export let displayNumber: number;
     export let isExpanded = false;
     export let projectId: string = "";
+    export let slideWidth: number = 960; // Original slide width
+    export let slideHeight: number = 540; // Original slide height
     // Key step linking props (optional)
     export let keyStepLinks: KeyStepLinkingData[] = [];
     export let allSteps: UnifiedStepItem[] = [];
@@ -233,7 +235,7 @@
         return {
             destroy() {
                 textarea.removeEventListener("input", resize);
-            }
+            },
         };
     }
 
@@ -644,7 +646,10 @@
                     {@const isEditingThis = editingPresetId === preset.id}
 
                     <div
-                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType === 'text' ? 'col-span-2' : ''}"
+                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType ===
+                        'text'
+                            ? 'col-span-2'
+                            : ''}"
                         data-preset-id={preset.id}
                     >
                         <div class="flex items-center justify-between mb-2">
@@ -711,34 +716,55 @@
                                 </div>
                             {/if}
 
-                        <!-- Capture Input -->
+                            <!-- Capture Input -->
                         {:else if currentType === "capture"}
                             {#if presetValue?.captureValue}
+                                {@const capture = presetValue.captureValue}
+                                {@const thumbUrl = `/api/results/${projectId}/thumbnails/slide_${String(capture.slideIndex + 1).padStart(3, "0")}_thumb.png`}
+                                {@const maxWidth = 140}
+                                {@const maxHeight = 100}
+                                {@const scaleByWidth = maxWidth / capture.width}
+                                {@const scaleByHeight =
+                                    maxHeight / capture.height}
+                                {@const scale = Math.min(
+                                    scaleByWidth,
+                                    scaleByHeight,
+                                )}
+                                {@const previewWidth = capture.width * scale}
+                                {@const previewHeight = capture.height * scale}
+                                {@const bgWidth = slideWidth * scale}
+                                {@const bgHeight = slideHeight * scale}
+                                {@const bgPosX = -capture.x * scale}
+                                {@const bgPosY = -capture.y * scale}
                                 <div
-                                    class="flex flex-col gap-1 p-2 bg-green-50 border border-green-200 rounded"
+                                    class="flex flex-col gap-1.5 p-2 bg-green-50 border border-green-200 rounded group"
                                 >
-                                    <div
-                                        class="flex items-center gap-1"
-                                    >
-                                        <svg
-                                            class="w-3 h-3 text-green-600 shrink-0"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M5 13l4 4L19 7"
-                                            />
-                                        </svg>
+                                    <!-- Capture preview thumbnail -->
+                                    <div class="relative flex justify-center">
+                                        <div
+                                            class="rounded border border-green-300 overflow-hidden shadow-sm"
+                                            style="
+                                                width: {previewWidth}px;
+                                                height: {previewHeight}px;
+                                                background-image: url({thumbUrl});
+                                                background-size: {bgWidth}px {bgHeight}px;
+                                                background-position: {bgPosX}px {bgPosY}px;
+                                                background-repeat: no-repeat;
+                                                background-color: #f0fdf4;
+                                            "
+                                            title="슬라이드 {capture.slideIndex +
+                                                1} ({Math.round(
+                                                capture.x,
+                                            )}, {Math.round(
+                                                capture.y,
+                                            )}) {Math.round(
+                                                capture.width,
+                                            )}x{Math.round(capture.height)}"
+                                        ></div>
                                         <span
-                                            class="text-[10px] text-green-700"
+                                            class="absolute bottom-1 left-1 text-[9px] bg-green-600 text-white px-1 py-0.5 rounded shadow"
                                         >
-                                            슬라이드 {presetValue
-                                                .captureValue
-                                                .slideIndex + 1}
+                                            S{capture.slideIndex + 1}
                                         </span>
                                     </div>
                                     <div class="flex gap-1">
@@ -761,8 +787,7 @@
                             {:else}
                                 <button
                                     class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1 text-xs"
-                                    on:click={() =>
-                                        startCapture(preset.id)}
+                                    on:click={() => startCapture(preset.id)}
                                 >
                                     <svg
                                         class="w-3 h-3"
@@ -781,15 +806,14 @@
                                 </button>
                             {/if}
 
-                        <!-- Image Clipboard Input -->
+                            <!-- Image Clipboard Input -->
                         {:else if currentType === "image_clipboard"}
                             {#if presetValue?.imageId}
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
                                     class="relative group cursor-pointer"
-                                    on:click={() =>
-                                        handleImageClick(preset.id)}
+                                    on:click={() => handleImageClick(preset.id)}
                                     title="클릭하여 캡션 편집"
                                 >
                                     <img
@@ -812,9 +836,7 @@
                                         <button
                                             class="w-5 h-5 bg-purple-500 text-white rounded-full flex items-center justify-center hover:bg-purple-600 transition text-xs shadow"
                                             on:click|stopPropagation={() =>
-                                                handleImageClick(
-                                                    preset.id,
-                                                )}
+                                                handleImageClick(preset.id)}
                                             title="캡션 편집"
                                         >
                                             <svg
@@ -849,12 +871,10 @@
                                         handleImagePaste(e, preset.id)}
                                     on:click={() => {
                                         // Focus this element to receive paste events
-                                        const el =
-                                            document.querySelector(
-                                                `[data-preset-id="${preset.id}"]`,
-                                            );
-                                        if (el)
-                                            (el as HTMLElement).focus();
+                                        const el = document.querySelector(
+                                            `[data-preset-id="${preset.id}"]`,
+                                        );
+                                        if (el) (el as HTMLElement).focus();
                                     }}
                                     tabindex="0"
                                     role="button"
@@ -907,7 +927,9 @@
                 {/each}
 
                 <!-- Delete Button -->
-                <div class="col-span-2 pt-1 border-t border-purple-50 flex justify-end">
+                <div
+                    class="col-span-2 pt-1 border-t border-purple-50 flex justify-end"
+                >
                     <button
                         class="text-[10px] text-red-300 hover:text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
                         on:click={() => dispatch("remove")}
