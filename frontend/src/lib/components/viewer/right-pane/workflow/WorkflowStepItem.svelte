@@ -7,7 +7,7 @@
         WorkflowStepInstance,
         StepAttachment,
     } from "$lib/types/workflow";
-    import { getAttachmentImageUrl } from "$lib/api/project";
+    import StepContentDisplay from "./StepContentDisplay.svelte";
 
     export let step: WorkflowStepInstance;
     export let index: number;
@@ -42,6 +42,8 @@
         remove: void;
         removeCapture: { captureId: string };
         openAttachmentModal: { attachment: StepAttachment };
+        updateAttachment: { attachmentId: string; data: string };
+        removeAttachment: { attachmentId: string };
         addTextAttachment: void;
         paste: ClipboardEvent;
         checkboxClick: MouseEvent;
@@ -375,158 +377,24 @@
                 {/if}
 
                 <!-- Captures & Attachments -->
-                {#if step.captures.length > 0 || step.attachments.length > 0}
-                    <div
-                        class="pt-1 border-t border-gray-50 flex flex-col gap-1.5"
-                    >
-                        {#if step.captures.length > 0}
-                            <div class="grid grid-cols-2 gap-1.5">
-                                {#each step.captures as capture (capture.id)}
-                                    {@const thumbUrl = `/api/results/${projectId}/thumbnails/slide_${String(capture.slideIndex + 1).padStart(3, "0")}_thumb.png`}
-                                    {@const maxWidth = 88}
-                                    {@const maxHeight = 80}
-                                    {@const scaleByWidth =
-                                        maxWidth / capture.width}
-                                    {@const scaleByHeight =
-                                        maxHeight / capture.height}
-                                    {@const scale = Math.min(
-                                        scaleByWidth,
-                                        scaleByHeight,
-                                    )}
-                                    {@const previewWidth =
-                                        capture.width * scale}
-                                    {@const previewHeight =
-                                        capture.height * scale}
-                                    {@const bgWidth = slideWidth * scale}
-                                    {@const bgHeight = slideHeight * scale}
-                                    {@const bgPosX = -capture.x * scale}
-                                    {@const bgPosY = -capture.y * scale}
-                                    <div
-                                        class="group relative flex flex-col items-center"
-                                    >
-                                        <!-- Capture preview thumbnail -->
-                                        <div
-                                            class="rounded border border-blue-200 overflow-hidden shadow-sm"
-                                            style="
-                                                width: {previewWidth}px;
-                                                height: {previewHeight}px;
-                                                background-image: url({thumbUrl});
-                                                background-size: {bgWidth}px {bgHeight}px;
-                                                background-position: {bgPosX}px {bgPosY}px;
-                                                background-repeat: no-repeat;
-                                                background-color: #f8fafc;
-                                            "
-                                            title="슬라이드 {capture.slideIndex +
-                                                1} ({Math.round(
-                                                capture.x,
-                                            )}, {Math.round(
-                                                capture.y,
-                                            )}) {Math.round(
-                                                capture.width,
-                                            )}x{Math.round(capture.height)}"
-                                        ></div>
-                                        <!-- Slide number badge -->
-                                        <span
-                                            class="text-[8px] text-blue-500 mt-0.5"
-                                            >S{capture.slideIndex + 1}</span
-                                        >
-                                        <!-- Remove button -->
-                                        <button
-                                            class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                                            on:click={() =>
-                                                dispatch("removeCapture", {
-                                                    captureId: capture.id,
-                                                })}
-                                        >
-                                            <svg
-                                                class="w-2 h-2 text-white"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="3"
-                                            >
-                                                <path
-                                                    d="M18 6L6 18M6 6l12 12"
-                                                />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                {/each}
-                            </div>
-                        {/if}
-
-                        {#if step.attachments.length > 0}
-                            {@const imageAttachments = step.attachments.filter(
-                                (a) => a.type === "image" && a.imageId,
-                            )}
-                            {@const textAttachments = step.attachments.filter(
-                                (a) => a.type !== "image" || !a.imageId,
-                            )}
-
-                            <!-- Image attachments: 2 columns -->
-                            {#if imageAttachments.length > 0}
-                                <div class="grid grid-cols-2 gap-1.5">
-                                    {#each imageAttachments as attachment (attachment.id)}
-                                        <button
-                                            class="relative group bg-gray-50 rounded border border-gray-100 overflow-hidden flex items-center text-left hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
-                                            on:click={() =>
-                                                dispatch(
-                                                    "openAttachmentModal",
-                                                    { attachment },
-                                                )}
-                                        >
-                                            <img
-                                                src={getAttachmentImageUrl(
-                                                    attachment.imageId,
-                                                )}
-                                                alt="att"
-                                                class="w-full h-12 object-cover"
-                                            />
-                                            <div
-                                                class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center"
-                                            >
-                                                <span
-                                                    class="opacity-0 group-hover:opacity-100 text-white text-[10px] font-medium bg-black/50 px-1.5 py-0.5 rounded transition-opacity"
-                                                >
-                                                    클릭하여 보기
-                                                </span>
-                                            </div>
-                                            {#if attachment.caption}
-                                                <div
-                                                    class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 py-0.5 truncate"
-                                                >
-                                                    {attachment.caption}
-                                                </div>
-                                            {/if}
-                                        </button>
-                                    {/each}
-                                </div>
-                            {/if}
-
-                            <!-- Text attachments: 1 column -->
-                            {#if textAttachments.length > 0}
-                                <div class="flex flex-col gap-1.5">
-                                    {#each textAttachments as attachment (attachment.id)}
-                                        <button
-                                            class="relative group bg-gray-50 rounded border border-gray-100 overflow-hidden flex items-center text-left hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer w-full"
-                                            on:click={() =>
-                                                dispatch(
-                                                    "openAttachmentModal",
-                                                    { attachment },
-                                                )}
-                                        >
-                                            <div
-                                                class="p-1.5 text-[10px] text-gray-600 leading-snug break-words w-full line-clamp-2"
-                                            >
-                                                {attachment.data}
-                                            </div>
-                                        </button>
-                                    {/each}
-                                </div>
-                            {/if}
-                        {/if}
-                    </div>
-                {/if}
+                <StepContentDisplay
+                    captures={step.captures}
+                    attachments={step.attachments}
+                    {projectId}
+                    {slideWidth}
+                    {slideHeight}
+                    showRecaptureButton={false}
+                    on:removeCapture={(e) =>
+                        dispatch("removeCapture", e.detail)}
+                    on:openAttachment={(e) =>
+                        dispatch("openAttachmentModal", {
+                            attachment: e.detail.attachment,
+                        })}
+                    on:updateAttachment={(e) =>
+                        dispatch("updateAttachment", e.detail)}
+                    on:removeAttachment={(e) =>
+                        dispatch("removeAttachment", e.detail)}
+                />
 
                 <!-- Delete Button -->
                 <div class="pt-1 border-t border-gray-50 flex justify-end">

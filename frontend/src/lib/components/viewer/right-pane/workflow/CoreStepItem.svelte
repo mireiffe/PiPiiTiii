@@ -10,14 +10,9 @@
         UnifiedStepItem,
         WorkflowStepRow,
     } from "$lib/types/workflow";
-    import {
-        getInputTypeDisplayName,
-        generateAttachmentId,
-    } from "$lib/types/workflow";
-    import {
-        getAttachmentImageUrl,
-        uploadAttachmentImage,
-    } from "$lib/api/project";
+    import { getInputTypeDisplayName } from "$lib/types/workflow";
+    import CaptureCard from "./CaptureCard.svelte";
+    import ImageAttachmentCard from "./ImageAttachmentCard.svelte";
 
     export let instance: CoreStepInstance;
     export let definition: CoreStepDefinition;
@@ -719,71 +714,15 @@
                             <!-- Capture Input -->
                         {:else if currentType === "capture"}
                             {#if presetValue?.captureValue}
-                                {@const capture = presetValue.captureValue}
-                                {@const thumbUrl = `/api/results/${projectId}/thumbnails/slide_${String(capture.slideIndex + 1).padStart(3, "0")}_thumb.png`}
-                                {@const maxWidth = 140}
-                                {@const maxHeight = 100}
-                                {@const scaleByWidth = maxWidth / capture.width}
-                                {@const scaleByHeight =
-                                    maxHeight / capture.height}
-                                {@const scale = Math.min(
-                                    scaleByWidth,
-                                    scaleByHeight,
-                                )}
-                                {@const previewWidth = capture.width * scale}
-                                {@const previewHeight = capture.height * scale}
-                                {@const bgWidth = slideWidth * scale}
-                                {@const bgHeight = slideHeight * scale}
-                                {@const bgPosX = -capture.x * scale}
-                                {@const bgPosY = -capture.y * scale}
-                                <div
-                                    class="flex flex-col gap-1.5 p-2 bg-green-50 border border-green-200 rounded group"
-                                >
-                                    <!-- Capture preview thumbnail -->
-                                    <div class="relative flex justify-center">
-                                        <div
-                                            class="rounded border border-green-300 overflow-hidden shadow-sm"
-                                            style="
-                                                width: {previewWidth}px;
-                                                height: {previewHeight}px;
-                                                background-image: url({thumbUrl});
-                                                background-size: {bgWidth}px {bgHeight}px;
-                                                background-position: {bgPosX}px {bgPosY}px;
-                                                background-repeat: no-repeat;
-                                                background-color: #f0fdf4;
-                                            "
-                                            title="슬라이드 {capture.slideIndex +
-                                                1} ({Math.round(
-                                                capture.x,
-                                            )}, {Math.round(
-                                                capture.y,
-                                            )}) {Math.round(
-                                                capture.width,
-                                            )}x{Math.round(capture.height)}"
-                                        ></div>
-                                        <span
-                                            class="absolute bottom-1 left-1 text-[9px] bg-green-600 text-white px-1 py-0.5 rounded shadow"
-                                        >
-                                            S{capture.slideIndex + 1}
-                                        </span>
-                                    </div>
-                                    <div class="flex gap-1">
-                                        <button
-                                            class="text-[10px] text-gray-500 hover:text-green-600 px-1.5 py-0.5 border border-gray-200 rounded hover:border-green-300 transition flex-1"
-                                            on:click={() =>
-                                                startCapture(preset.id)}
-                                        >
-                                            다시 캡처
-                                        </button>
-                                        <button
-                                            class="text-[10px] text-red-500 hover:text-red-700 px-1.5 py-0.5"
-                                            on:click={() =>
-                                                clearCapture(preset.id)}
-                                        >
-                                            삭제
-                                        </button>
-                                    </div>
-                                </div>
+                                <CaptureCard
+                                    capture={presetValue.captureValue}
+                                    {projectId}
+                                    {slideWidth}
+                                    {slideHeight}
+                                    showRecaptureButton={true}
+                                    on:recapture={() => startCapture(preset.id)}
+                                    on:remove={() => clearCapture(preset.id)}
+                                />
                             {:else}
                                 <button
                                     class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1 text-xs"
@@ -809,60 +748,12 @@
                             <!-- Image Clipboard Input -->
                         {:else if currentType === "image_clipboard"}
                             {#if presetValue?.imageId}
-                                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                <div
-                                    class="relative group cursor-pointer"
+                                <ImageAttachmentCard
+                                    imageId={presetValue.imageId}
+                                    caption={presetValue.imageCaption}
                                     on:click={() => handleImageClick(preset.id)}
-                                    title="클릭하여 캡션 편집"
-                                >
-                                    <img
-                                        src={getAttachmentImageUrl(
-                                            presetValue.imageId,
-                                        )}
-                                        alt="첨부된 이미지"
-                                        class="w-full max-h-32 object-contain rounded border border-gray-200 bg-gray-50 hover:border-purple-300 transition"
-                                    />
-                                    {#if presetValue.imageCaption}
-                                        <div
-                                            class="mt-1 px-1.5 py-0.5 bg-gray-50 rounded border border-gray-200 text-[10px] text-gray-600 truncate"
-                                        >
-                                            {presetValue.imageCaption}
-                                        </div>
-                                    {/if}
-                                    <div
-                                        class="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <button
-                                            class="w-5 h-5 bg-purple-500 text-white rounded-full flex items-center justify-center hover:bg-purple-600 transition text-xs shadow"
-                                            on:click|stopPropagation={() =>
-                                                handleImageClick(preset.id)}
-                                            title="캡션 편집"
-                                        >
-                                            <svg
-                                                class="w-2.5 h-2.5"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                                />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            class="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition text-xs shadow"
-                                            on:click|stopPropagation={() =>
-                                                clearImage(preset.id)}
-                                            title="이미지 삭제"
-                                        >
-                                            ×
-                                        </button>
-                                    </div>
-                                </div>
+                                    on:remove={() => clearImage(preset.id)}
+                                />
                             {:else}
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div

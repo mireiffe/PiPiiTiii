@@ -1208,10 +1208,11 @@
     }
 
     async function removeAttachment(stepId: string, attachmentId: string) {
-        const stepIndex = workflowData.steps.findIndex((s) => s.id === stepId);
-        if (stepIndex === -1) return;
+        const steps = workflowData.unifiedSteps ?? [];
+        const step = steps.find((s) => s.id === stepId);
+        if (!step) return;
 
-        const attachment = workflowData.steps[stepIndex].attachments.find(
+        const attachment = (step.attachments ?? []).find(
             (a) => a.id === attachmentId,
         );
         if (attachment?.type === "image" && attachment.imageId) {
@@ -1222,10 +1223,56 @@
             }
         }
 
-        workflowData.steps[stepIndex].attachments = workflowData.steps[
-            stepIndex
-        ].attachments.filter((a) => a.id !== attachmentId);
-        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+        const updatedSteps = steps.map((s) => {
+            if (s.id === stepId) {
+                return {
+                    ...s,
+                    attachments: (s.attachments ?? []).filter(
+                        (a) => a.id !== attachmentId,
+                    ),
+                };
+            }
+            return s;
+        });
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
+        dispatch("workflowChange", workflowData);
+    }
+
+    function updateUnifiedAttachment(
+        stepId: string,
+        attachmentId: string,
+        data: string,
+    ) {
+        const steps = workflowData.unifiedSteps ?? [];
+        const updatedSteps = steps.map((s) => {
+            if (s.id === stepId) {
+                return {
+                    ...s,
+                    attachments: (s.attachments ?? []).map((a) => {
+                        if (a.id === attachmentId) {
+                            return { ...a, data };
+                        }
+                        return a;
+                    }),
+                };
+            }
+            return s;
+        });
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
         dispatch("workflowChange", workflowData);
     }
 
@@ -1247,22 +1294,36 @@
     function saveAttachmentChanges() {
         if (!editingAttachment || !editingAttachmentStepId) return;
 
-        const stepIndex = workflowData.steps.findIndex(
-            (s) => s.id === editingAttachmentStepId,
-        );
-        if (stepIndex === -1) return;
+        const steps = workflowData.unifiedSteps ?? [];
+        const updatedSteps = steps.map((s) => {
+            if (s.id === editingAttachmentStepId) {
+                return {
+                    ...s,
+                    attachments: (s.attachments ?? []).map((a) => {
+                        if (a.id === editingAttachment!.id) {
+                            return {
+                                ...a,
+                                caption: modalCaption.trim() || undefined,
+                                data:
+                                    editingAttachment!.type === "text"
+                                        ? editingAttachment!.data
+                                        : a.data,
+                            };
+                        }
+                        return a;
+                    }),
+                };
+            }
+            return s;
+        });
 
-        const attachmentIndex = workflowData.steps[
-            stepIndex
-        ].attachments.findIndex((a) => a.id === editingAttachment!.id);
-        if (attachmentIndex === -1) return;
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
 
-        workflowData.steps[stepIndex].attachments[attachmentIndex] = {
-            ...workflowData.steps[stepIndex].attachments[attachmentIndex],
-            caption: modalCaption.trim() || undefined,
-        };
-
-        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+        workflowData = syncedData;
         dispatch("workflowChange", workflowData);
         closeAttachmentModal();
     }
@@ -1293,9 +1354,8 @@
     async function confirmAddImage() {
         if (!pendingImageStepId || !pendingImageData || !projectId) return;
 
-        const stepIndex = workflowData.steps.findIndex(
-            (s) => s.id === pendingImageStepId,
-        );
+        const steps = workflowData.unifiedSteps ?? [];
+        const stepIndex = steps.findIndex((s) => s.id === pendingImageStepId);
         if (stepIndex === -1) return;
 
         isUploadingImage = true;
@@ -1314,14 +1374,24 @@
                 imageId,
                 pendingImageCaption.trim() || undefined,
             );
-            workflowData.steps[stepIndex].attachments = [
-                ...workflowData.steps[stepIndex].attachments,
-                attachment,
-            ];
-            workflowData = {
+
+            const updatedSteps = steps.map((s) => {
+                if (s.id === pendingImageStepId) {
+                    return {
+                        ...s,
+                        attachments: [...(s.attachments ?? []), attachment],
+                    };
+                }
+                return s;
+            });
+
+            const syncedData = syncUnifiedToLegacy({
                 ...workflowData,
+                unifiedSteps: updatedSteps,
                 updatedAt: new Date().toISOString(),
-            };
+            });
+
+            workflowData = syncedData;
             dispatch("workflowChange", workflowData);
             closeImageAddModal();
         } catch (error) {
@@ -2620,6 +2690,17 @@
                                                     openUnifiedAttachmentModal(
                                                         unifiedStep.id,
                                                         e.detail.attachment,
+                                                    )}
+                                                on:updateAttachment={(e) =>
+                                                    updateUnifiedAttachment(
+                                                        unifiedStep.id,
+                                                        e.detail.attachmentId,
+                                                        e.detail.data,
+                                                    )}
+                                                on:removeAttachment={(e) =>
+                                                    removeAttachment(
+                                                        unifiedStep.id,
+                                                        e.detail.attachmentId,
                                                     )}
                                                 on:addTextAttachment={() =>
                                                     addUnifiedTextAttachment(
