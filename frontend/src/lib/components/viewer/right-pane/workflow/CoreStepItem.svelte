@@ -10,20 +10,17 @@
         UnifiedStepItem,
         WorkflowStepRow,
     } from "$lib/types/workflow";
-    import {
-        getInputTypeDisplayName,
-        generateAttachmentId,
-    } from "$lib/types/workflow";
-    import {
-        getAttachmentImageUrl,
-        uploadAttachmentImage,
-    } from "$lib/api/project";
+    import { getInputTypeDisplayName } from "$lib/types/workflow";
+    import CaptureCard from "./CaptureCard.svelte";
+    import ImageAttachmentCard from "./ImageAttachmentCard.svelte";
 
     export let instance: CoreStepInstance;
     export let definition: CoreStepDefinition;
     export let displayNumber: number;
     export let isExpanded = false;
     export let projectId: string = "";
+    export let slideWidth: number = 960; // Original slide width
+    export let slideHeight: number = 540; // Original slide height
     // Key step linking props (optional)
     export let keyStepLinks: KeyStepLinkingData[] = [];
     export let allSteps: UnifiedStepItem[] = [];
@@ -233,7 +230,7 @@
         return {
             destroy() {
                 textarea.removeEventListener("input", resize);
-            }
+            },
         };
     }
 
@@ -644,7 +641,10 @@
                     {@const isEditingThis = editingPresetId === preset.id}
 
                     <div
-                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType === 'text' ? 'col-span-2' : ''}"
+                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType ===
+                        'text'
+                            ? 'col-span-2'
+                            : ''}"
                         data-preset-id={preset.id}
                     >
                         <div class="flex items-center justify-between mb-2">
@@ -711,58 +711,22 @@
                                 </div>
                             {/if}
 
-                        <!-- Capture Input -->
+                            <!-- Capture Input -->
                         {:else if currentType === "capture"}
                             {#if presetValue?.captureValue}
-                                <div
-                                    class="flex flex-col gap-1 p-2 bg-green-50 border border-green-200 rounded"
-                                >
-                                    <div
-                                        class="flex items-center gap-1"
-                                    >
-                                        <svg
-                                            class="w-3 h-3 text-green-600 shrink-0"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M5 13l4 4L19 7"
-                                            />
-                                        </svg>
-                                        <span
-                                            class="text-[10px] text-green-700"
-                                        >
-                                            슬라이드 {presetValue
-                                                .captureValue
-                                                .slideIndex + 1}
-                                        </span>
-                                    </div>
-                                    <div class="flex gap-1">
-                                        <button
-                                            class="text-[10px] text-gray-500 hover:text-green-600 px-1.5 py-0.5 border border-gray-200 rounded hover:border-green-300 transition flex-1"
-                                            on:click={() =>
-                                                startCapture(preset.id)}
-                                        >
-                                            다시 캡처
-                                        </button>
-                                        <button
-                                            class="text-[10px] text-red-500 hover:text-red-700 px-1.5 py-0.5"
-                                            on:click={() =>
-                                                clearCapture(preset.id)}
-                                        >
-                                            삭제
-                                        </button>
-                                    </div>
-                                </div>
+                                <CaptureCard
+                                    capture={presetValue.captureValue}
+                                    {projectId}
+                                    {slideWidth}
+                                    {slideHeight}
+                                    showRecaptureButton={true}
+                                    on:recapture={() => startCapture(preset.id)}
+                                    on:remove={() => clearCapture(preset.id)}
+                                />
                             {:else}
                                 <button
                                     class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1 text-xs"
-                                    on:click={() =>
-                                        startCapture(preset.id)}
+                                    on:click={() => startCapture(preset.id)}
                                 >
                                     <svg
                                         class="w-3 h-3"
@@ -781,66 +745,15 @@
                                 </button>
                             {/if}
 
-                        <!-- Image Clipboard Input -->
+                            <!-- Image Clipboard Input -->
                         {:else if currentType === "image_clipboard"}
                             {#if presetValue?.imageId}
-                                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                <div
-                                    class="relative group cursor-pointer"
-                                    on:click={() =>
-                                        handleImageClick(preset.id)}
-                                    title="클릭하여 캡션 편집"
-                                >
-                                    <img
-                                        src={getAttachmentImageUrl(
-                                            presetValue.imageId,
-                                        )}
-                                        alt="첨부된 이미지"
-                                        class="w-full max-h-32 object-contain rounded border border-gray-200 bg-gray-50 hover:border-purple-300 transition"
-                                    />
-                                    {#if presetValue.imageCaption}
-                                        <div
-                                            class="mt-1 px-1.5 py-0.5 bg-gray-50 rounded border border-gray-200 text-[10px] text-gray-600 truncate"
-                                        >
-                                            {presetValue.imageCaption}
-                                        </div>
-                                    {/if}
-                                    <div
-                                        class="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <button
-                                            class="w-5 h-5 bg-purple-500 text-white rounded-full flex items-center justify-center hover:bg-purple-600 transition text-xs shadow"
-                                            on:click|stopPropagation={() =>
-                                                handleImageClick(
-                                                    preset.id,
-                                                )}
-                                            title="캡션 편집"
-                                        >
-                                            <svg
-                                                class="w-2.5 h-2.5"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                                                />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            class="w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition text-xs shadow"
-                                            on:click|stopPropagation={() =>
-                                                clearImage(preset.id)}
-                                            title="이미지 삭제"
-                                        >
-                                            ×
-                                        </button>
-                                    </div>
-                                </div>
+                                <ImageAttachmentCard
+                                    imageId={presetValue.imageId}
+                                    caption={presetValue.imageCaption}
+                                    on:click={() => handleImageClick(preset.id)}
+                                    on:remove={() => clearImage(preset.id)}
+                                />
                             {:else}
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
@@ -849,12 +762,10 @@
                                         handleImagePaste(e, preset.id)}
                                     on:click={() => {
                                         // Focus this element to receive paste events
-                                        const el =
-                                            document.querySelector(
-                                                `[data-preset-id="${preset.id}"]`,
-                                            );
-                                        if (el)
-                                            (el as HTMLElement).focus();
+                                        const el = document.querySelector(
+                                            `[data-preset-id="${preset.id}"]`,
+                                        );
+                                        if (el) (el as HTMLElement).focus();
                                     }}
                                     tabindex="0"
                                     role="button"
@@ -907,7 +818,9 @@
                 {/each}
 
                 <!-- Delete Button -->
-                <div class="col-span-2 pt-1 border-t border-purple-50 flex justify-end">
+                <div
+                    class="col-span-2 pt-1 border-t border-purple-50 flex justify-end"
+                >
                     <button
                         class="text-[10px] text-red-300 hover:text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
                         on:click={() => dispatch("remove")}

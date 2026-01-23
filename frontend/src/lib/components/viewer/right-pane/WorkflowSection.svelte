@@ -73,16 +73,20 @@
     export let workflows: { id: string; name: string }[] = []; // Available workflows
     export let activeWorkflowId: string | null = null; // Currently selected workflow
     export let allWorkflowsData: Record<string, any> = {}; // All workflows data for this project
+    export let slideWidth: number = 960; // Original slide width for capture preview
+    export let slideHeight: number = 540; // Original slide height for capture preview
 
     const dispatch = createEventDispatcher();
 
     // Find undefined workflows (exist in allWorkflowsData but not in workflows definitions)
     $: undefinedWorkflowIds = Object.keys(allWorkflowsData).filter(
-        (wfId) => !workflows.some((w) => w.id === wfId)
+        (wfId) => !workflows.some((w) => w.id === wfId),
     );
 
     // Check if current active workflow is undefined
-    $: isUndefinedWorkflow = activeWorkflowId !== null && undefinedWorkflowIds.includes(activeWorkflowId);
+    $: isUndefinedWorkflow =
+        activeWorkflowId !== null &&
+        undefinedWorkflowIds.includes(activeWorkflowId);
 
     let viewMode: "list" | "graph" = "list";
     let showAddStepPopup = false;
@@ -1204,10 +1208,11 @@
     }
 
     async function removeAttachment(stepId: string, attachmentId: string) {
-        const stepIndex = workflowData.steps.findIndex((s) => s.id === stepId);
-        if (stepIndex === -1) return;
+        const steps = workflowData.unifiedSteps ?? [];
+        const step = steps.find((s) => s.id === stepId);
+        if (!step) return;
 
-        const attachment = workflowData.steps[stepIndex].attachments.find(
+        const attachment = (step.attachments ?? []).find(
             (a) => a.id === attachmentId,
         );
         if (attachment?.type === "image" && attachment.imageId) {
@@ -1218,10 +1223,56 @@
             }
         }
 
-        workflowData.steps[stepIndex].attachments = workflowData.steps[
-            stepIndex
-        ].attachments.filter((a) => a.id !== attachmentId);
-        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+        const updatedSteps = steps.map((s) => {
+            if (s.id === stepId) {
+                return {
+                    ...s,
+                    attachments: (s.attachments ?? []).filter(
+                        (a) => a.id !== attachmentId,
+                    ),
+                };
+            }
+            return s;
+        });
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
+        dispatch("workflowChange", workflowData);
+    }
+
+    function updateUnifiedAttachment(
+        stepId: string,
+        attachmentId: string,
+        data: string,
+    ) {
+        const steps = workflowData.unifiedSteps ?? [];
+        const updatedSteps = steps.map((s) => {
+            if (s.id === stepId) {
+                return {
+                    ...s,
+                    attachments: (s.attachments ?? []).map((a) => {
+                        if (a.id === attachmentId) {
+                            return { ...a, data };
+                        }
+                        return a;
+                    }),
+                };
+            }
+            return s;
+        });
+
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
+
+        workflowData = syncedData;
         dispatch("workflowChange", workflowData);
     }
 
@@ -1243,22 +1294,36 @@
     function saveAttachmentChanges() {
         if (!editingAttachment || !editingAttachmentStepId) return;
 
-        const stepIndex = workflowData.steps.findIndex(
-            (s) => s.id === editingAttachmentStepId,
-        );
-        if (stepIndex === -1) return;
+        const steps = workflowData.unifiedSteps ?? [];
+        const updatedSteps = steps.map((s) => {
+            if (s.id === editingAttachmentStepId) {
+                return {
+                    ...s,
+                    attachments: (s.attachments ?? []).map((a) => {
+                        if (a.id === editingAttachment!.id) {
+                            return {
+                                ...a,
+                                caption: modalCaption.trim() || undefined,
+                                data:
+                                    editingAttachment!.type === "text"
+                                        ? editingAttachment!.data
+                                        : a.data,
+                            };
+                        }
+                        return a;
+                    }),
+                };
+            }
+            return s;
+        });
 
-        const attachmentIndex = workflowData.steps[
-            stepIndex
-        ].attachments.findIndex((a) => a.id === editingAttachment!.id);
-        if (attachmentIndex === -1) return;
+        const syncedData = syncUnifiedToLegacy({
+            ...workflowData,
+            unifiedSteps: updatedSteps,
+            updatedAt: new Date().toISOString(),
+        });
 
-        workflowData.steps[stepIndex].attachments[attachmentIndex] = {
-            ...workflowData.steps[stepIndex].attachments[attachmentIndex],
-            caption: modalCaption.trim() || undefined,
-        };
-
-        workflowData = { ...workflowData, updatedAt: new Date().toISOString() };
+        workflowData = syncedData;
         dispatch("workflowChange", workflowData);
         closeAttachmentModal();
     }
@@ -1289,9 +1354,8 @@
     async function confirmAddImage() {
         if (!pendingImageStepId || !pendingImageData || !projectId) return;
 
-        const stepIndex = workflowData.steps.findIndex(
-            (s) => s.id === pendingImageStepId,
-        );
+        const steps = workflowData.unifiedSteps ?? [];
+        const stepIndex = steps.findIndex((s) => s.id === pendingImageStepId);
         if (stepIndex === -1) return;
 
         isUploadingImage = true;
@@ -1310,14 +1374,24 @@
                 imageId,
                 pendingImageCaption.trim() || undefined,
             );
-            workflowData.steps[stepIndex].attachments = [
-                ...workflowData.steps[stepIndex].attachments,
-                attachment,
-            ];
-            workflowData = {
+
+            const updatedSteps = steps.map((s) => {
+                if (s.id === pendingImageStepId) {
+                    return {
+                        ...s,
+                        attachments: [...(s.attachments ?? []), attachment],
+                    };
+                }
+                return s;
+            });
+
+            const syncedData = syncUnifiedToLegacy({
                 ...workflowData,
+                unifiedSteps: updatedSteps,
                 updatedAt: new Date().toISOString(),
-            };
+            });
+
+            workflowData = syncedData;
             dispatch("workflowChange", workflowData);
             closeImageAddModal();
         } catch (error) {
@@ -1332,10 +1406,16 @@
     function handleDeleteWorkflow() {
         if (!activeWorkflowId) return;
 
-        const currentWorkflow = workflows.find(w => w.id === activeWorkflowId);
+        const currentWorkflow = workflows.find(
+            (w) => w.id === activeWorkflowId,
+        );
         const workflowName = currentWorkflow?.name || activeWorkflowId;
 
-        if (confirm(`"${workflowName}" 워크플로우의 데이터를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.`)) {
+        if (
+            confirm(
+                `"${workflowName}" 워크플로우의 데이터를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.`,
+            )
+        ) {
             dispatch("deleteWorkflow", { workflowId: activeWorkflowId });
         }
     }
@@ -1436,9 +1516,7 @@
             let updatedPresetValues;
             if (presetIdx >= 0) {
                 updatedPresetValues = presetValues.map((pv, i) =>
-                    i === presetIdx
-                        ? { ...pv, captureValue: capture }
-                        : pv
+                    i === presetIdx ? { ...pv, captureValue: capture } : pv,
                 );
             } else {
                 updatedPresetValues = [
@@ -1452,9 +1530,7 @@
             }
 
             const updatedSteps = steps.map((s, i) =>
-                i === stepIdx
-                    ? { ...s, presetValues: updatedPresetValues }
-                    : s
+                i === stepIdx ? { ...s, presetValues: updatedPresetValues } : s,
             );
 
             const syncedData = syncUnifiedToLegacy({
@@ -2025,8 +2101,16 @@
                                     })}
                                 title="정의되지 않은 워크플로우 - 클릭하여 삭제"
                             >
-                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                <svg
+                                    class="w-3 h-3"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                >
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                                        clip-rule="evenodd"
+                                    />
                                 </svg>
                                 정의되지 않음
                             </button>
@@ -2043,35 +2127,76 @@
 
                 <!-- Undefined Workflow Delete UI -->
                 {#if isUndefinedWorkflow}
-                    <div class="flex-1 flex flex-col items-center justify-center p-8 bg-red-50/50">
+                    <div
+                        class="flex-1 flex flex-col items-center justify-center p-8 bg-red-50/50"
+                    >
                         <div class="text-center max-w-sm">
-                            <div class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                                <svg class="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            <div
+                                class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center"
+                            >
+                                <svg
+                                    class="w-8 h-8 text-red-500"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                >
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                                        clip-rule="evenodd"
+                                    />
                                 </svg>
                             </div>
-                            <h3 class="text-lg font-semibold text-gray-900 mb-2">정의되지 않은 워크플로우</h3>
+                            <h3
+                                class="text-lg font-semibold text-gray-900 mb-2"
+                            >
+                                정의되지 않은 워크플로우
+                            </h3>
                             <p class="text-sm text-gray-600 mb-6">
-                                이 워크플로우는 설정에서 삭제되었지만 프로젝트에 데이터가 남아 있습니다.
-                                <br/>더 이상 필요하지 않다면 삭제할 수 있습니다.
+                                이 워크플로우는 설정에서 삭제되었지만 프로젝트에
+                                데이터가 남아 있습니다.
+                                <br />더 이상 필요하지 않다면 삭제할 수
+                                있습니다.
                             </p>
                             <div class="flex flex-col gap-2">
                                 <button
                                     type="button"
                                     class="w-full px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
                                     on:click={() => {
-                                        if (confirm("이 워크플로우 데이터를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.")) {
-                                            dispatch("deleteUndefinedWorkflow", { workflowId: activeWorkflowId });
+                                        if (
+                                            confirm(
+                                                "이 워크플로우 데이터를 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.",
+                                            )
+                                        ) {
+                                            dispatch(
+                                                "deleteUndefinedWorkflow",
+                                                {
+                                                    workflowId:
+                                                        activeWorkflowId,
+                                                },
+                                            );
                                         }
                                     }}
                                 >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    <svg
+                                        class="w-4 h-4"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                        />
                                     </svg>
                                     워크플로우 데이터 삭제
                                 </button>
                                 <p class="text-xs text-gray-500 mt-2">
-                                    워크플로우 ID: <code class="bg-gray-200 px-1 rounded">{activeWorkflowId}</code>
+                                    워크플로우 ID: <code
+                                        class="bg-gray-200 px-1 rounded"
+                                        >{activeWorkflowId}</code
+                                    >
                                 </p>
                             </div>
                         </div>
@@ -2331,6 +2456,8 @@
                                                 isExpanded={expandedCoreStepId ===
                                                     unifiedStep.id}
                                                 {projectId}
+                                                {slideWidth}
+                                                {slideHeight}
                                                 keyStepLinks={workflowData.keyStepLinks ??
                                                     []}
                                                 allSteps={sortedUnifiedSteps}
@@ -2409,14 +2536,16 @@
                                                             <span
                                                                 class="text-sm font-medium text-gray-500 truncate"
                                                             >
-                                                                Core Step (정의 없음)
+                                                                Core Step (정의
+                                                                없음)
                                                             </span>
                                                         </div>
                                                         <p
                                                             class="text-xs text-red-500 mt-1"
                                                         >
                                                             설정에서 삭제된 Core
-                                                            Step입니다. 삭제해주세요.
+                                                            Step입니다.
+                                                            삭제해주세요.
                                                         </p>
                                                     </div>
                                                     <button
@@ -2510,6 +2639,9 @@
                                                 {stepDef}
                                                 {color}
                                                 {workflowSteps}
+                                                {projectId}
+                                                {slideWidth}
+                                                {slideHeight}
                                                 displayNumber={idx + 1}
                                                 isExpanded={expandedStepId ===
                                                     unifiedStep.id}
@@ -2558,6 +2690,17 @@
                                                     openUnifiedAttachmentModal(
                                                         unifiedStep.id,
                                                         e.detail.attachment,
+                                                    )}
+                                                on:updateAttachment={(e) =>
+                                                    updateUnifiedAttachment(
+                                                        unifiedStep.id,
+                                                        e.detail.attachmentId,
+                                                        e.detail.data,
+                                                    )}
+                                                on:removeAttachment={(e) =>
+                                                    removeAttachment(
+                                                        unifiedStep.id,
+                                                        e.detail.attachmentId,
                                                     )}
                                                 on:addTextAttachment={() =>
                                                     addUnifiedTextAttachment(

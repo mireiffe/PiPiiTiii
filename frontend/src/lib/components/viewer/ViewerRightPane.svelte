@@ -25,6 +25,8 @@
     export let editingDescription = "";
     export let project;
     export let projectId = "";
+    export let slideWidth = 960;  // Original slide width for capture preview
+    export let slideHeight = 540;  // Original slide height for capture preview
 
     // Tutorial mode indicator
     export let isTutorialMode = false;
@@ -150,6 +152,8 @@
         <WorkflowSection
             isExpanded={expandedSection === "workflow"}
             {projectId}
+            {slideWidth}
+            {slideHeight}
             workflowData={currentWorkflowData}
             workflowSteps={currentWorkflowSteps}
             globalPhases={settings?.phase_types || []}
