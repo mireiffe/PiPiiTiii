@@ -73,6 +73,8 @@
     export let workflows: { id: string; name: string }[] = []; // Available workflows
     export let activeWorkflowId: string | null = null; // Currently selected workflow
     export let allWorkflowsData: Record<string, any> = {}; // All workflows data for this project
+    export let slideWidth: number = 960;  // Original slide width for capture preview
+    export let slideHeight: number = 540;  // Original slide height for capture preview
 
     const dispatch = createEventDispatcher();
 
@@ -2510,6 +2512,9 @@
                                                 {stepDef}
                                                 {color}
                                                 {workflowSteps}
+                                                {projectId}
+                                                {slideWidth}
+                                                {slideHeight}
                                                 displayNumber={idx + 1}
                                                 isExpanded={expandedStepId ===
                                                     unifiedStep.id}

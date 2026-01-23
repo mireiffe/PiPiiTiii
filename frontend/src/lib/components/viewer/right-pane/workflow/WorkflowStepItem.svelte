@@ -29,6 +29,9 @@
     export let phaseColor: string | undefined = undefined;  // Phase color for supporter
     export let phaseName: string | undefined = undefined;  // Phase name for supporter
     export let displayNumber: string | number | undefined = undefined;  // Custom display number for badge
+    export let projectId: string = "";  // Project ID for capture preview thumbnails
+    export let slideWidth: number = 960;  // Original slide width
+    export let slideHeight: number = 540;  // Original slide height
 
     const dispatch = createEventDispatcher<{
         toggleExpand: void;
@@ -275,15 +278,40 @@
                 {#if step.captures.length > 0 || step.attachments.length > 0}
                     <div class="pt-1 border-t border-gray-50 flex flex-col gap-1.5">
                         {#if step.captures.length > 0}
-                            <div class="flex flex-wrap gap-1">
+                            <div class="flex flex-wrap gap-1.5">
                                 {#each step.captures as capture (capture.id)}
-                                    <div class="group inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 bg-blue-50/50 border border-blue-100 rounded text-[10px] text-blue-700">
-                                        <span class="opacity-80">슬라이드 {capture.slideIndex + 1}</span>
+                                    {@const thumbUrl = `/api/results/${projectId}/thumbnails/slide_${String(capture.slideIndex).padStart(3, '0')}_thumb.png`}
+                                    {@const previewWidth = 56}
+                                    {@const previewHeight = 36}
+                                    {@const scaleX = previewWidth / capture.width}
+                                    {@const scaleY = previewHeight / capture.height}
+                                    {@const scale = Math.min(scaleX, scaleY)}
+                                    {@const bgWidth = slideWidth * scale}
+                                    {@const bgHeight = slideHeight * scale}
+                                    {@const bgPosX = -capture.x * scale}
+                                    {@const bgPosY = -capture.y * scale}
+                                    <div class="group relative flex flex-col items-center">
+                                        <!-- Capture preview thumbnail -->
+                                        <div
+                                            class="rounded border border-blue-200 overflow-hidden shadow-sm"
+                                            style="
+                                                width: {previewWidth}px;
+                                                height: {previewHeight}px;
+                                                background-image: url({thumbUrl});
+                                                background-size: {bgWidth}px {bgHeight}px;
+                                                background-position: {bgPosX}px {bgPosY}px;
+                                                background-repeat: no-repeat;
+                                            "
+                                            title="슬라이드 {capture.slideIndex + 1} ({Math.round(capture.x)}, {Math.round(capture.y)}) {Math.round(capture.width)}x{Math.round(capture.height)}"
+                                        ></div>
+                                        <!-- Slide number badge -->
+                                        <span class="text-[8px] text-blue-500 mt-0.5">S{capture.slideIndex + 1}</span>
+                                        <!-- Remove button -->
                                         <button
-                                            class="p-px hover:bg-blue-200 rounded-full text-blue-400 hover:text-blue-600"
+                                            class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
                                             on:click={() => dispatch("removeCapture", { captureId: capture.id })}
                                         >
-                                            <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                            <svg class="w-2 h-2 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                                                 <path d="M18 6L6 18M6 6l12 12" />
                                             </svg>
                                         </button>

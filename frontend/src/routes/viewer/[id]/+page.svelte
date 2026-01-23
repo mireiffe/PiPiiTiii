@@ -1157,6 +1157,8 @@
         bind:editingDescription
         {project}
         {projectId}
+        slideWidth={project?.slide_width || 960}
+        slideHeight={project?.slide_height || 540}
         on:workflowChange={handleWorkflowChange}
         on:workflowTabChange={handleWorkflowTabChange}
         on:toggleCaptureMode={handleToggleCaptureMode}
