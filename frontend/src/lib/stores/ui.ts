@@ -41,6 +41,7 @@ export interface PopupState {
     showAddStepPopup: boolean;
     showCoreStepSelector: boolean;
     showPhaseListPopup: boolean;
+    showKeyStepLinkingWizard: boolean;
 }
 
 export interface UIState {
@@ -84,6 +85,7 @@ const initialPopup: PopupState = {
     showAddStepPopup: false,
     showCoreStepSelector: false,
     showPhaseListPopup: false,
+    showKeyStepLinkingWizard: false,
 };
 
 const initialState: UIState = {
@@ -308,6 +310,16 @@ function createUIStore() {
             update(s => ({
                 ...s,
                 popup: initialPopup,
+            }));
+        },
+
+        toggleKeyStepLinkingWizard(show?: boolean) {
+            update(s => ({
+                ...s,
+                popup: {
+                    ...s.popup,
+                    showKeyStepLinkingWizard: show !== undefined ? show : !s.popup.showKeyStepLinkingWizard,
+                },
             }));
         },
 

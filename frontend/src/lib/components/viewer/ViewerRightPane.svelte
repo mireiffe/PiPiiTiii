@@ -52,25 +52,8 @@
     // Get current workflow definition
     $: currentWorkflow = workflows.find(w => w.id === activeWorkflowId);
 
-    // Get workflow steps for current workflow (either its own or global)
-    $: currentWorkflowSteps = (() => {
-        let result;
-        if (currentWorkflow?.useGlobalSteps) {
-            result = settings?.workflow_steps || { columns: [], rows: [] };
-        } else {
-            result = currentWorkflow?.steps || { columns: [], rows: [] };
-        }
-        console.log('[ViewerRightPane] currentWorkflowSteps:', {
-            activeWorkflowId,
-            useGlobalSteps: currentWorkflow?.useGlobalSteps,
-            includeGlobalSteps: currentWorkflow?.includeGlobalSteps,
-            resultRows: result.rows?.map(r => ({ id: r.id, values: r.values })),
-            globalStepsRows: settings?.workflow_steps?.rows?.map(r => ({ id: r.id, values: r.values })),
-            workflowOwnSteps: currentWorkflow?.steps?.rows?.map(r => ({ id: r.id, values: r.values })),
-            additionalSteps: currentWorkflow?.additionalSteps?.rows?.map(r => ({ id: r.id, values: r.values }))
-        });
-        return result;
-    })();
+    // Get workflow steps for current workflow
+    $: currentWorkflowSteps = currentWorkflow?.steps || { columns: [], rows: [] };
 
     // Get current workflow data
     $: currentWorkflowData = allWorkflowsData[activeWorkflowId] || workflowData;

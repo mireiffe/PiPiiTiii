@@ -305,19 +305,14 @@ class WorkflowDefinition(BaseModel):
     id: str
     name: str
     order: int
-    useGlobalSteps: bool = True
     steps: Optional[WorkflowSteps] = None
     coreSteps: Optional[CoreStepsSettings] = None  # Core steps for this workflow
     createdAt: str = ""
-    # Legacy fields (for backwards compatibility)
-    includeGlobalSteps: Optional[bool] = None
-    additionalSteps: Optional[WorkflowSteps] = None
 
 
 class WorkflowSettingsModel(BaseModel):
     workflows: List[WorkflowDefinition] = []
     phaseTypes: List[PhaseType] = []
-    globalStepsLabel: str = "발생현상"
 
 
 class Settings(BaseModel):
@@ -325,7 +320,6 @@ class Settings(BaseModel):
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
     phenomenon_attributes: Optional[List[str]] = None
-    workflow_steps: Optional[WorkflowSteps] = None
     step_containers: Optional[List[StepContainer]] = None
     phase_types: Optional[List[PhaseType]] = None
     workflow_settings: Optional[WorkflowSettingsModel] = None
@@ -861,14 +855,12 @@ def validate_all_workflows():
     """
     Validate all project workflows against current settings.
     Returns list of projects with invalid workflow steps or undefined workflows.
-    Supports multi-workflow format: each workflow can use global or its own step definitions.
+    Each workflow uses its own step definitions.
     """
     try:
         settings = load_settings()
-        global_steps = settings.get("workflow_steps", {})
-        global_step_ids = {row["id"] for row in global_steps.get("rows", [])}
 
-        # Get workflow definitions to check which steps each workflow uses
+        # Get workflow definitions
         workflow_settings = settings.get("workflow_settings", {})
         workflow_defs = {wf["id"]: wf for wf in workflow_settings.get("workflows", [])}
 
@@ -899,14 +891,9 @@ def validate_all_workflows():
                     )
                     continue
 
-                # Determine valid step IDs for this workflow
-                if not workflow_def.get("useGlobalSteps", True):
-                    # Use workflow's own steps
-                    wf_steps = workflow_def.get("steps", {})
-                    valid_step_ids = {row["id"] for row in wf_steps.get("rows", [])}
-                else:
-                    # Use global steps
-                    valid_step_ids = global_step_ids
+                # Get valid step IDs from workflow's own steps
+                wf_steps = workflow_def.get("steps", {})
+                valid_step_ids = {row["id"] for row in wf_steps.get("rows", [])}
 
                 # Validate workflow steps
                 steps = workflow_data.get("steps", [])

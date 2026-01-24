@@ -18,7 +18,6 @@
 
     export let workflows: WorkflowDefinition[] = [];
     export let phaseTypes: PhaseType[] = [];
-    export let globalStepsLabel: string = "발생현상";
     export let expandedWorkflowId: string | null = null;
     export let expandedRowId: string | null = null;
 
@@ -48,14 +47,13 @@
         update: {
             workflows: WorkflowDefinition[];
             phaseTypes: PhaseType[];
-            globalStepsLabel: string;
         };
         toggleWorkflowExpand: { workflowId: string };
         toggleRowExpand: { rowId: string };
     }>();
 
     function emitUpdate() {
-        dispatch("update", { workflows, phaseTypes, globalStepsLabel });
+        dispatch("update", { workflows, phaseTypes });
     }
 
     // Workflow Management
@@ -68,7 +66,6 @@
             id: `wf_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
             name: newWorkflowName.trim(),
             order: workflows.length,
-            useGlobalSteps: false,
             steps: { columns: [...DEFAULT_WORKFLOW_COLUMNS], rows: [] },
             createdAt: new Date().toISOString(),
         };
@@ -158,21 +155,6 @@
         const workflow = workflows.find((w) => w.id === workflowId);
         if (workflow) {
             workflow.name = name;
-            workflows = [...workflows];
-            emitUpdate();
-        }
-    }
-
-    function toggleUseGlobalSteps(workflowId: string) {
-        const workflow = workflows.find((w) => w.id === workflowId);
-        if (workflow) {
-            workflow.useGlobalSteps = !workflow.useGlobalSteps;
-            if (!workflow.useGlobalSteps && !workflow.steps) {
-                workflow.steps = {
-                    columns: [...DEFAULT_WORKFLOW_COLUMNS],
-                    rows: [],
-                };
-            }
             workflows = [...workflows];
             emitUpdate();
         }
@@ -678,15 +660,6 @@
                             <span class="text-xs text-gray-400">
                                 {workflow.steps?.rows?.length || 0} 스텝
                             </span>
-                            <span
-                                class="text-xs px-2 py-0.5 rounded {workflow.useGlobalSteps
-                                    ? 'bg-blue-100 text-blue-600'
-                                    : 'bg-purple-100 text-purple-600'}"
-                            >
-                                {workflow.useGlobalSteps
-                                    ? "글로벌 스텝 사용"
-                                    : "독립 스텝"}
-                            </span>
                         </div>
 
                         <button
@@ -713,27 +686,6 @@
                     <!-- Expanded Workflow Section -->
                     {#if expandedWorkflowId === workflow.id}
                         <div class="p-4 space-y-4">
-                            <!-- Use Global Steps Toggle -->
-                            <div
-                                class="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200"
-                            >
-                                <label
-                                    class="flex items-center gap-2 cursor-pointer"
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={workflow.useGlobalSteps}
-                                        on:change={() =>
-                                            toggleUseGlobalSteps(workflow.id)}
-                                        class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                                    />
-                                    <span class="text-sm text-gray-700"
-                                        >글로벌 스텝 사용 (발생현상과 동일한
-                                        스텝 정의 사용)</span
-                                    >
-                                </label>
-                            </div>
-
                             <!-- Core Steps Section -->
                             <div
                                 class="border border-purple-200 rounded-lg bg-purple-50/30 p-4"
@@ -1173,7 +1125,7 @@
                                 </div>
                             </div>
 
-                            {#if !workflow.useGlobalSteps && workflow.steps}
+                            {#if workflow.steps}
                                 <!-- Column Headers -->
                                 <div
                                     class="border border-gray-200 rounded-lg overflow-hidden"
