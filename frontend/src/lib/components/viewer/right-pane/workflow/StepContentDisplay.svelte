@@ -32,7 +32,7 @@
     <div class="flex flex-col gap-2">
         <!-- Captures -->
         {#if captures.length > 0}
-            <div class="grid {captures.length >= 2 && captures.length % 2 === 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
+            <div class="grid {captures.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
                 {#each captures as capture (capture.id)}
                     <CaptureCard
                         {capture}
@@ -53,7 +53,7 @@
 
         <!-- Image Attachments -->
         {#if imageAttachments.length > 0}
-            <div class="grid {imageAttachments.length >= 2 && imageAttachments.length % 2 === 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
+            <div class="grid {imageAttachments.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
                 {#each imageAttachments as attachment (attachment.id)}
                     <ImageAttachmentCard
                         imageId={attachment.imageId || ""}

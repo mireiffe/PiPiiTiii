@@ -759,7 +759,7 @@
                 (a, b) => a.order - b.order,
             )}
             {@const nonTextCount = sortedPresets.filter(p => (instance.presetValues.find(v => v.presetId === p.id)?.type || p.allowedTypes[0] || 'text') !== 'text').length}
-            {@const useTwoCols = nonTextCount >= 2 && nonTextCount % 2 === 0}
+            {@const useTwoCols = nonTextCount >= 2}
 
             <div
                 class="px-3 pb-3 border-t border-purple-100 pt-2 space-y-2"
