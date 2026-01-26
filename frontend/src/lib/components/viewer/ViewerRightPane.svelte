@@ -62,8 +62,19 @@
     // Get current workflow data
     $: currentWorkflowData = allWorkflowsData[activeWorkflowId] || workflowData;
 
-    // Get core steps for current workflow
-    $: currentCoreStepsSettings = currentWorkflow?.coreSteps || { definitions: [] };
+    // Get core steps for current workflow (strip legacy 'metadata' from allowedTypes)
+    $: currentCoreStepsSettings = (() => {
+        const raw = currentWorkflow?.coreSteps || { definitions: [] };
+        return {
+            definitions: raw.definitions.map(d => ({
+                ...d,
+                presets: d.presets.map(p => ({
+                    ...p,
+                    allowedTypes: p.allowedTypes.filter(t => t !== 'metadata' as any),
+                })),
+            })),
+        };
+    })();
 
     // Phenomenon attribute data
     $: phenomenonAttributes = settings?.phenomenon_attributes || [];
