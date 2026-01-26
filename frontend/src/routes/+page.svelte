@@ -100,6 +100,10 @@
   /** @type {Set<string>} */
   let workflowPendingConfirmation = new Set();
 
+  // Workflow not started projects (no unified steps in any workflow)
+  /** @type {Set<string>} */
+  let workflowNotStartedProjects = new Set();
+
   // Workflow confirmed projects
   /** @type {Set<string>} */
   let workflowConfirmedProjects = new Set();
@@ -243,7 +247,7 @@
       if (activeWorkflowFilters.size > 0) {
         const matchesAny =
           (activeWorkflowFilters.has("needs_definition") &&
-            workflowWarningProjects.has(p.id)) ||
+            workflowNotStartedProjects.has(p.id)) ||
           (activeWorkflowFilters.has("needs_confirmation") &&
             workflowPendingConfirmation.has(p.id)) ||
           (activeWorkflowFilters.has("confirmed") &&
@@ -392,6 +396,7 @@
       const res = await fetchWorkflowConfirmationStatus();
       if (res.ok) {
         const data = await res.json();
+        workflowNotStartedProjects = new Set(data.not_started_project_ids || []);
         workflowPendingConfirmation = new Set(data.pending_project_ids);
         workflowConfirmedProjects = new Set(data.confirmed_project_ids || []);
       }
