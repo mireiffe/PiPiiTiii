@@ -284,6 +284,9 @@
 
     // LLM auto-generation state
     let generatingPresetIds: Set<string> = new Set();
+    let generatingAll = false;
+
+    $: hasAnyAutoGen = definition.presets.some((p) => p.llmAutoGen?.enabled);
 
     async function generateTextForPreset(presetId: string) {
         if (generatingPresetIds.has(presetId)) return;
@@ -329,6 +332,21 @@
         } finally {
             generatingPresetIds.delete(presetId);
             generatingPresetIds = generatingPresetIds;
+        }
+    }
+
+    async function generateAllTexts() {
+        if (generatingAll) return;
+        generatingAll = true;
+
+        const autoGenPresets = definition.presets.filter((p) => p.llmAutoGen?.enabled);
+
+        try {
+            await Promise.all(
+                autoGenPresets.map((preset) => generateTextForPreset(preset.id)),
+            );
+        } finally {
+            generatingAll = false;
         }
     }
 
@@ -742,10 +760,49 @@
             )}
 
             <div
-                class="px-3 pb-3 border-t border-purple-100 pt-2 grid grid-cols-2 gap-2"
+                class="px-3 pb-3 border-t border-purple-100 pt-2 space-y-2"
                 on:click|stopPropagation
             >
+                <!-- Generate All button -->
+                {#if hasAnyAutoGen}
+                    <div class="flex justify-end">
+                        <button
+                            class="flex items-center gap-1 px-2 py-1 text-[10px] rounded
+                                text-gray-400 border border-gray-200 hover:text-indigo-500 hover:border-indigo-200 hover:bg-indigo-50
+                                transition-colors duration-150
+                                disabled:opacity-40 disabled:cursor-not-allowed"
+                            on:click={generateAllTexts}
+                            disabled={generatingAll || generatingPresetIds.size > 0}
+                            title="모든 자동 생성 Preset 텍스트 생성"
+                        >
+                            {#if generatingAll}
+                                <svg class="animate-spin w-3 h-3" viewBox="0 0 24 24">
+                                    <circle
+                                        class="opacity-25"
+                                        cx="12" cy="12" r="10"
+                                        stroke="currentColor" stroke-width="4" fill="none"
+                                    ></circle>
+                                    <path
+                                        class="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    ></path>
+                                </svg>
+                            {:else}
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                        stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                                    />
+                                </svg>
+                            {/if}
+                            <span>전체 자동 생성</span>
+                        </button>
+                    </div>
+                {/if}
+
                 <!-- All Presets in order -->
+                <div class="grid grid-cols-2 gap-2">
                 {#each sortedPresets as preset (preset.id)}
                     {@const presetValue = getPresetValue(preset.id)}
                     {@const currentType =
@@ -767,10 +824,10 @@
                                 <!-- LLM Auto-gen button -->
                                 {#if preset.llmAutoGen?.enabled}
                                     <button
-                                        class="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded
-                                            bg-white border border-indigo-100 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200
-                                            shadow-sm hover:shadow transition-all duration-200
-                                            disabled:opacity-50 disabled:cursor-not-allowed"
+                                        class="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded
+                                            text-gray-400 hover:text-indigo-500 hover:bg-indigo-50
+                                            transition-colors duration-150
+                                            disabled:opacity-40 disabled:cursor-not-allowed"
                                         on:click|stopPropagation={() =>
                                             generateTextForPreset(preset.id)}
                                         disabled={generatingPresetIds.has(preset.id)}
@@ -1085,6 +1142,7 @@
                     >
                         삭제
                     </button>
+                </div>
                 </div>
             </div>
         {/if}
