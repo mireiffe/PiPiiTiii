@@ -41,6 +41,8 @@
     let isUploading = false;
     // Track which preset is in edit mode (for text input)
     let editingPresetId: string | null = null;
+    // Track which preset is in caption edit mode
+    let editingCaptionPresetId: string | null = null;
     // Tooltip hover state
     let showLinkedStepsTooltip = false;
 
@@ -212,6 +214,38 @@
             event.preventDefault();
             stopEditing();
         }
+    }
+
+    // Caption editing (for capture and image_clipboard presets)
+    function startEditingCaption(presetId: string) {
+        editingCaptionPresetId = presetId;
+    }
+
+    function stopEditingCaption() {
+        editingCaptionPresetId = null;
+    }
+
+    function handleCaptionKeydown(event: KeyboardEvent) {
+        if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+            event.preventDefault();
+            stopEditingCaption();
+        }
+    }
+
+    function updateCaption(presetId: string, value: string) {
+        const idx = instance.presetValues.findIndex(
+            (pv) => pv.presetId === presetId,
+        );
+        if (idx >= 0) {
+            instance.presetValues[idx].imageCaption = value || undefined;
+        }
+        instance = { ...instance };
+        dispatch("update", { instance });
+    }
+
+    function handleCaptionInput(event: Event, presetId: string) {
+        const textarea = event.currentTarget as HTMLTextAreaElement;
+        updateCaption(presetId, textarea.value);
     }
 
     // Auto-resize textarea action - resizes on mount and input
@@ -723,6 +757,33 @@
                                     on:recapture={() => startCapture(preset.id)}
                                     on:remove={() => clearCapture(preset.id)}
                                 />
+                                <!-- Caption for capture -->
+                                {#if editingCaptionPresetId === preset.id}
+                                    <textarea
+                                        value={presetValue?.imageCaption || ""}
+                                        on:input={(e) => handleCaptionInput(e, preset.id)}
+                                        on:blur={stopEditingCaption}
+                                        on:keydown={handleCaptionKeydown}
+                                        placeholder="캡션 입력... (Ctrl+S로 저장)"
+                                        class="w-full mt-1.5 min-h-[36px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
+                                        use:autoResizeTextarea
+                                        autofocus
+                                    ></textarea>
+                                {:else}
+                                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                    <div
+                                        class="w-full mt-1.5 min-h-[24px] border border-gray-200 rounded px-2 py-1 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
+                                        on:click={() => startEditingCaption(preset.id)}
+                                        title="클릭하여 캡션 편집"
+                                    >
+                                        {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
+                                            <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
+                                        {:else}
+                                            <p class="text-gray-400 italic">캡션 입력...</p>
+                                        {/if}
+                                    </div>
+                                {/if}
                             {:else}
                                 <button
                                     class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1 text-xs"
@@ -750,10 +811,36 @@
                             {#if presetValue?.imageId}
                                 <ImageAttachmentCard
                                     imageId={presetValue.imageId}
-                                    caption={presetValue.imageCaption}
                                     on:click={() => handleImageClick(preset.id)}
                                     on:remove={() => clearImage(preset.id)}
                                 />
+                                <!-- Caption for image (inline text editing) -->
+                                {#if editingCaptionPresetId === preset.id}
+                                    <textarea
+                                        value={presetValue?.imageCaption || ""}
+                                        on:input={(e) => handleCaptionInput(e, preset.id)}
+                                        on:blur={stopEditingCaption}
+                                        on:keydown={handleCaptionKeydown}
+                                        placeholder="캡션 입력... (Ctrl+S로 저장)"
+                                        class="w-full mt-1.5 min-h-[36px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
+                                        use:autoResizeTextarea
+                                        autofocus
+                                    ></textarea>
+                                {:else}
+                                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                    <div
+                                        class="w-full mt-1.5 min-h-[24px] border border-gray-200 rounded px-2 py-1 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
+                                        on:click={() => startEditingCaption(preset.id)}
+                                        title="클릭하여 캡션 편집"
+                                    >
+                                        {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
+                                            <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
+                                        {:else}
+                                            <p class="text-gray-400 italic">캡션 입력...</p>
+                                        {/if}
+                                    </div>
+                                {/if}
                             {:else}
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div

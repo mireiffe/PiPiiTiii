@@ -395,12 +395,21 @@
         captureOverlays = [];
     }
 
+    // Helper: get the current active workflow definition from settings
+    function getActiveWorkflowDef() {
+        const workflows = settings?.workflow_settings?.workflows || [];
+        return workflows.find((w: any) => w.id === activeWorkflowId);
+    }
+
     async function handleDeleteStepDefinition(
         event: CustomEvent<{ stepId: string }>,
     ) {
         const { stepId } = event.detail;
-        settings.workflow_steps.rows = settings.workflow_steps.rows.filter(
-            (r) => r.id !== stepId,
+        const workflow = getActiveWorkflowDef();
+        if (!workflow?.steps) return;
+
+        workflow.steps.rows = workflow.steps.rows.filter(
+            (r: any) => r.id !== stepId,
         );
         settings = { ...settings };
 
@@ -412,26 +421,48 @@
         event: CustomEvent<{ values: Record<string, string> }>,
     ) {
         const { values } = event.detail;
+        const workflow = getActiveWorkflowDef();
+        if (!workflow?.steps) return;
+
         const newId = `row_${Date.now()}`;
         const newRow = {
             id: newId,
             values: { ...values },
         };
 
-        settings.workflow_steps.columns.forEach((col) => {
+        workflow.steps.columns.forEach((col: any) => {
             if (!(col.id in newRow.values)) {
                 newRow.values[col.id] = "";
             }
         });
 
-        settings.workflow_steps.rows = [
-            ...settings.workflow_steps.rows,
+        workflow.steps.rows = [
+            ...workflow.steps.rows,
             newRow,
         ];
         settings = { ...settings };
 
         // In tutorial mode, no backend save
         console.log("[Tutorial Mode] Step definition created in memory only");
+    }
+
+    async function handleUpdateStepDefinition(
+        event: CustomEvent<{ stepId: string; values: Record<string, string> }>,
+    ) {
+        const { stepId, values } = event.detail;
+        const workflow = getActiveWorkflowDef();
+        if (!workflow?.steps) return;
+
+        workflow.steps.rows = workflow.steps.rows.map((r: any) => {
+            if (r.id === stepId) {
+                return { ...r, values: { ...values } };
+            }
+            return r;
+        });
+        settings = { ...settings };
+
+        // In tutorial mode, no backend save
+        console.log("[Tutorial Mode] Step definition updated in memory only");
     }
 
     // TUTORIAL MODE: Save only to memory
@@ -947,6 +978,7 @@
             on:deleteUndefinedWorkflow={handleDeleteUndefinedWorkflow}
             on:deleteStepDefinition={handleDeleteStepDefinition}
             on:createStepDefinition={handleCreateStepDefinition}
+            on:updateStepDefinition={handleUpdateStepDefinition}
             on:generateAllSummaries={generateAllSummaries}
             on:toggleSlideSelection={(e) =>
                 toggleSlideSelection(e.detail.slideIndex)}
