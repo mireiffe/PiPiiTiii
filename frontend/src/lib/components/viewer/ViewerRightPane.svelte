@@ -33,6 +33,7 @@
 
     // Phenomenon attribute data for metadata presets
     export let availableAttributes = [];
+    export let projectAttributeValues = {};
 
     // Workflow step-based data - now supports multiple workflows
     export let workflowData = { steps: [] };
@@ -156,6 +157,7 @@
             {allWorkflowsData}
             {phenomenonAttributes}
             {availableAttributes}
+            {projectAttributeValues}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
             on:workflowChange={handleWorkflowChange}

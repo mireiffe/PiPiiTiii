@@ -28,6 +28,7 @@
     export let workflowSteps: { rows: WorkflowStepRow[] } | null = null;
     export let phenomenonAttributes: string[] = [];
     export let availableAttributes: { key: string; display_name: string; attr_type: { variant: string } }[] = [];
+    export let projectAttributeValues: Record<string, string> = {};
 
     const dispatch = createEventDispatcher<{
         toggleExpand: void;
@@ -110,6 +111,13 @@
         return definition.presets.find((p) => p.id === presetId);
     }
 
+    // Get the default metadata value for a preset (project's attribute value)
+    function getDefaultMetadataValue(preset: CoreStepPreset): string | undefined {
+        if (!preset.defaultMetadataKey) return undefined;
+        const val = projectAttributeValues[preset.defaultMetadataKey];
+        return val != null ? String(val) : undefined;
+    }
+
     function getPresetValue(presetId: string): CoreStepPresetValue | undefined {
         return instance.presetValues.find((pv) => pv.presetId === presetId);
     }
@@ -156,14 +164,10 @@
             (pv) => pv.presetId === presetId,
         );
         if (idx >= 0) {
-            // For metadata type, pre-fill with default metadata display name if available
             let textVal = instance.presetValues[idx].textValue || "";
             if (type === "metadata" && !textVal) {
                 const presetDef = getPresetDefinition(presetId);
-                if (presetDef?.defaultMetadataKey) {
-                    const attr = availableAttributes.find(a => a.key === presetDef.defaultMetadataKey);
-                    if (attr) textVal = attr.display_name;
-                }
+                if (presetDef) textVal = getDefaultMetadataValue(presetDef) || "";
             }
             instance.presetValues[idx] = {
                 ...instance.presetValues[idx],
@@ -185,10 +189,7 @@
             let textVal = "";
             if (type === "metadata") {
                 const presetDef = getPresetDefinition(presetId);
-                if (presetDef?.defaultMetadataKey) {
-                    const attr = availableAttributes.find(a => a.key === presetDef.defaultMetadataKey);
-                    if (attr) textVal = attr.display_name;
-                }
+                if (presetDef) textVal = getDefaultMetadataValue(presetDef) || "";
             }
             instance.presetValues = [
                 ...instance.presetValues,
@@ -423,8 +424,8 @@
                 const initType = preset.allowedTypes[0] || "text";
                 let initText: string | undefined = undefined;
                 if (initType === "metadata" && preset.defaultMetadataKey) {
-                    const attr = availableAttributes.find(a => a.key === preset.defaultMetadataKey);
-                    if (attr) initText = attr.display_name;
+                    const val = projectAttributeValues[preset.defaultMetadataKey];
+                    if (val != null) initText = String(val);
                 }
                 instance.presetValues = [
                     ...instance.presetValues,
@@ -809,12 +810,12 @@
                                 </div>
                             {/if}
                             {#if preset.defaultMetadataKey}
-                                {@const defaultAttr = availableAttributes.find(a => a.key === preset.defaultMetadataKey)}
-                                {#if defaultAttr && presetValue?.textValue !== defaultAttr.display_name}
+                                {@const defaultMetadataVal = projectAttributeValues[preset.defaultMetadataKey]}
+                                {#if defaultMetadataVal != null && presetValue?.textValue !== String(defaultMetadataVal)}
                                     <button
                                         class="mt-1 text-[10px] text-gray-400 hover:text-purple-600 transition-colors"
-                                        on:click={() => updateTextValue(preset.id, defaultAttr.display_name)}
-                                        title="기본값: {defaultAttr.display_name}"
+                                        on:click={() => updateTextValue(preset.id, String(defaultMetadataVal))}
+                                        title="기본값: {defaultMetadataVal}"
                                     >
                                         기본값으로 돌리기
                                     </button>

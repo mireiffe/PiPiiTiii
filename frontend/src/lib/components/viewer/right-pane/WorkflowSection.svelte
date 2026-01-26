@@ -74,6 +74,7 @@
     export let slideHeight: number = 540; // Original slide height for capture preview
     export let phenomenonAttributes: string[] = [];
     export let availableAttributes: { key: string; display_name: string; attr_type: { variant: string } }[] = [];
+    export let projectAttributeValues: Record<string, string> = {};
 
     const dispatch = createEventDispatcher();
 
@@ -1414,6 +1415,7 @@
                         keyStepLinks={workflowData.keyStepLinks ?? []}
                         {phenomenonAttributes}
                         {availableAttributes}
+                        {projectAttributeValues}
                         {expandedStepId}
                         {expandedCoreStepId}
                         {captureTargetStepId}

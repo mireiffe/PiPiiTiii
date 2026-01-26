@@ -19,6 +19,7 @@
     export let projectId: string;
     export let phenomenonAttributes: string[] = [];
     export let availableAttributes: AttributeDefinition[] = [];
+    export let projectAttributeValues: Record<string, string> = {};
 
     const dispatch = createEventDispatcher<{
         confirm: { presetValues: CoreStepPresetValue[] };
@@ -51,8 +52,8 @@
                     // For metadata type, pre-fill with default metadata display name
                     let initialText = '';
                     if (initialType === 'metadata' && preset.defaultMetadataKey) {
-                        const attr = availableAttributes.find(a => a.key === preset.defaultMetadataKey);
-                        if (attr) initialText = attr.display_name;
+                        const val = projectAttributeValues[preset.defaultMetadataKey];
+                        if (val != null) initialText = String(val);
                     }
                     presetInputs[preset.id] = {
                         type: initialType,
@@ -272,17 +273,17 @@
                                 rows="3"
                             ></textarea>
                             {#if preset.defaultMetadataKey}
-                                {@const defaultAttr = availableAttributes.find(a => a.key === preset.defaultMetadataKey)}
-                                {#if defaultAttr && input.textValue !== defaultAttr.display_name}
+                                {@const defaultMetadataVal = projectAttributeValues[preset.defaultMetadataKey]}
+                                {#if defaultMetadataVal != null && input.textValue !== String(defaultMetadataVal)}
                                     <button
                                         class="mt-1 text-xs text-gray-400 hover:text-purple-600 transition-colors"
                                         on:click={() => {
-                                            if (presetInputs[preset.id] && defaultAttr) {
-                                                presetInputs[preset.id].textValue = defaultAttr.display_name;
+                                            if (presetInputs[preset.id] && defaultMetadataVal != null) {
+                                                presetInputs[preset.id].textValue = String(defaultMetadataVal);
                                                 presetInputs = { ...presetInputs };
                                             }
                                         }}
-                                        title="기본값: {defaultAttr.display_name}"
+                                        title="기본값: {defaultMetadataVal}"
                                     >
                                         기본값으로 돌리기
                                     </button>

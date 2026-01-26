@@ -270,6 +270,10 @@ export async function fetchAllAttributes(): Promise<Response> {
     return apiFetch('/api/attributes');
 }
 
+export async function fetchProjectAttributes(projectId: string): Promise<Response> {
+    return apiFetch(`/api/project/${projectId}/attributes`);
+}
+
 // ========== Attachments API ==========
 
 /**
