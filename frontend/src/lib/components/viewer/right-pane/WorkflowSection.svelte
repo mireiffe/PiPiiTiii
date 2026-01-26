@@ -23,6 +23,7 @@
         createStepCapture,
         createAttachment,
         generateAttachmentId,
+        generateCoreStepCaptureId,
         getLayoutRows,
         addSupportRelation,
         cleanupOrphanedSupports,
@@ -783,25 +784,38 @@
             workflowData.coreStepInstances.forEach((instance, instanceIdx) => {
                 const csDef = getCoreStepDefinition(instance.coreStepId);
                 if (!csDef) return;
+                const displayNum = unifiedDisplayMap.get(instance.id) ?? instanceIdx + 1;
 
                 instance.presetValues.forEach((pv) => {
-                    if (pv.type === "capture" && pv.captureValue) {
+                    if (pv.type === "capture") {
                         const presetDef = csDef.presets.find(
                             (p) => p.id === pv.presetId,
                         );
                         const presetName = presetDef?.name || "";
-                        overlays.push({
-                            ...pv.captureValue,
+
+                        // Support both legacy captureValue and new captureValues
+                        const captures = pv.captureValues ?? (pv.captureValue ? [{
                             id: `${instance.id}_${pv.presetId}`,
-                            stepId: instance.id,
-                            workflowName,
-                            stepNumber: `C${instanceIdx + 1}-${presetName}`,
-                            captureIndexInStep: 0,
-                            color: coreStepColor,
-                            colorIndex: colorIndex + instanceIdx,
-                            isCoreStep: true,
-                            coreStepName: csDef.name,
-                            presetName,
+                            ...pv.captureValue,
+                        }] : []);
+
+                        captures.forEach((cap, capIdx) => {
+                            const captureLabel = captures.length > 1 && capIdx > 0
+                                ? `${presetName} ${capIdx + 1}`
+                                : presetName;
+                            overlays.push({
+                                ...cap,
+                                id: cap.id,
+                                stepId: instance.id,
+                                workflowName,
+                                stepNumber: `C${displayNum}-${captureLabel}`,
+                                captureIndexInStep: capIdx,
+                                color: coreStepColor,
+                                colorIndex: colorIndex + instanceIdx,
+                                isCoreStep: true,
+                                coreStepName: csDef.name,
+                                presetName: captureLabel,
+                            });
                         });
                     }
                 });
@@ -1063,9 +1077,10 @@
         expandedCoreStepId = newStep.id;
     }
 
-    function handleCoreStepStartCapture(instanceId: string, presetId: string) {
+    function handleCoreStepStartCapture(instanceId: string, presetId: string, captureId?: string) {
         capturingForCoreStepPresetId = presetId;
         capturingCoreStepInstanceId = instanceId;
+        capturingForCoreStepCaptureId = captureId ?? null;
         dispatch("toggleCaptureMode", {
             stepId: `coreStep:${instanceId}:${presetId}`,
         });
@@ -1073,6 +1088,8 @@
 
     // Track which core step instance is being captured for
     let capturingCoreStepInstanceId: string | null = null;
+    // Track which capture is being replaced (null = add new)
+    let capturingForCoreStepCaptureId: string | null = null;
 
     // Called from parent when capture is completed for core step preset
     export function addCoreStepCapture(capture: {
@@ -1100,8 +1117,30 @@
 
             let updatedPresetValues;
             if (presetIdx >= 0) {
+                const pv = presetValues[presetIdx];
+                const existingCaptures = pv.captureValues ?? [];
+
+                let newCaptureValues;
+                if (capturingForCoreStepCaptureId) {
+                    // Replace existing capture (keep its caption)
+                    newCaptureValues = existingCaptures.map(cv =>
+                        cv.id === capturingForCoreStepCaptureId
+                            ? { ...cv, ...capture }
+                            : cv
+                    );
+                } else {
+                    // Append new capture
+                    newCaptureValues = [
+                        ...existingCaptures,
+                        {
+                            id: generateCoreStepCaptureId(),
+                            ...capture,
+                        },
+                    ];
+                }
+
                 updatedPresetValues = presetValues.map((pv, i) =>
-                    i === presetIdx ? { ...pv, captureValue: capture } : pv,
+                    i === presetIdx ? { ...pv, captureValues: newCaptureValues, captureValue: undefined } : pv,
                 );
             } else {
                 updatedPresetValues = [
@@ -1109,7 +1148,10 @@
                     {
                         presetId: capturingForCoreStepPresetId,
                         type: "capture" as const,
-                        captureValue: capture,
+                        captureValues: [{
+                            id: generateCoreStepCaptureId(),
+                            ...capture,
+                        }],
                     },
                 ];
             }
@@ -1130,6 +1172,7 @@
 
         capturingForCoreStepPresetId = null;
         capturingCoreStepInstanceId = null;
+        capturingForCoreStepCaptureId = null;
         dispatch("toggleCaptureMode", { stepId: null });
     }
 
@@ -1426,7 +1469,7 @@
                         on:unifiedMoveUp={(e) => handleUnifiedMoveUp(e.detail.idx)}
                         on:unifiedMoveDown={(e) => handleUnifiedMoveDown(e.detail.idx)}
                         on:unifiedCoreStepUpdate={(e) => handleUnifiedCoreStepUpdate(e.detail.event, e.detail.unifiedStepId)}
-                        on:coreStepStartCapture={(e) => handleCoreStepStartCapture(e.detail.instanceId, e.detail.presetId)}
+                        on:coreStepStartCapture={(e) => handleCoreStepStartCapture(e.detail.instanceId, e.detail.presetId, e.detail.captureId)}
                         on:coreStepImagePaste={(e) => handleCoreStepImagePaste(e.detail.event, e.detail.instanceId)}
                         on:coreStepImageClick={(e) => handleCoreStepImageClick(e.detail.event, e.detail.instanceId)}
                         on:toggleStepExpand={(e) => toggleStepExpand(e.detail.stepId)}

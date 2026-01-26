@@ -33,15 +33,27 @@ export interface CoreStepDefinition {
     createdAt: string;
 }
 
+// Single capture value within a Core Step preset (supports multiple captures per preset)
+export interface CoreStepCaptureValue {
+    id: string;
+    slideIndex: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    label?: string;
+    caption?: string;
+}
+
 // Core Step Preset Value (the actual input for a preset)
 export interface CoreStepPresetValue {
     presetId: string;
     type: CoreStepInputType;
     // Value depends on type:
-    // - capture: StepCapture object
+    // - capture: captureValues array (multiple captures per preset)
     // - text: string
     // - image_clipboard: imageId reference
-    captureValue?: {
+    captureValue?: {  // Legacy single capture (migrated to captureValues on load)
         slideIndex: number;
         x: number;
         y: number;
@@ -49,9 +61,10 @@ export interface CoreStepPresetValue {
         height: number;
         label?: string;
     };
+    captureValues?: CoreStepCaptureValue[];  // Multiple captures per preset
     textValue?: string;
     imageId?: string;  // Reference to image in attachments.db
-    imageCaption?: string;  // Caption for any type (capture, text, image)
+    imageCaption?: string;  // Caption for text and image_clipboard types
 }
 
 // Core Step Instance (added to a project's workflow)
@@ -81,6 +94,11 @@ export function generateCoreStepPresetId(): string {
 // Generate unique ID for core step instances
 export function generateCoreStepInstanceId(): string {
     return `csi_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Generate unique ID for core step capture values
+export function generateCoreStepCaptureId(): string {
+    return `cscap_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
 // Create a new core step definition

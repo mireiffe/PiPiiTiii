@@ -5,12 +5,13 @@
         CoreStepDefinition,
         CoreStepPreset,
         CoreStepPresetValue,
+        CoreStepCaptureValue,
         CoreStepInputType,
         KeyStepLinkingData,
         UnifiedStepItem,
         WorkflowStepRow,
     } from "$lib/types/workflow";
-    import { getInputTypeDisplayName } from "$lib/types/workflow";
+    import { getInputTypeDisplayName, generateCoreStepCaptureId } from "$lib/types/workflow";
     import { generateTextStream } from "$lib/api/project";
     import CaptureCard from "./CaptureCard.svelte";
     import ImageAttachmentCard from "./ImageAttachmentCard.svelte";
@@ -38,7 +39,7 @@
         moveUp: void;
         moveDown: void;
         update: { instance: CoreStepInstance };
-        startCapture: { presetId: string };
+        startCapture: { presetId: string; captureId?: string };
         imagePaste: { presetId: string; imageData: string };
         imageClick: { presetId: string; imageId: string; caption?: string };
     }>();
@@ -49,6 +50,8 @@
 
     // Track which preset is in caption edit mode
     let editingCaptionPresetId: string | null = null;
+    // Track which capture's caption is being edited (for multi-capture presets)
+    let editingCaptionCaptureId: string | null = null;
     // Tooltip hover state
     let showLinkedStepsTooltip = false;
 
@@ -129,9 +132,8 @@
             if (pv.type === "text")
                 return pv.imageCaption && pv.imageCaption.trim().length > 0;
             if (pv.type === "capture")
-                return (
-                    pv.captureValue !== null && pv.captureValue !== undefined
-                );
+                return (pv.captureValues && pv.captureValues.length > 0) ||
+                    (pv.captureValue !== null && pv.captureValue !== undefined);
             if (pv.type === "image_clipboard")
                 return pv.imageId !== null && pv.imageId !== undefined;
             return false;
@@ -151,7 +153,10 @@
                             : pv.imageCaption;
                     return `${preset?.name}: ${truncated}`;
                 }
-                if (pv.type === "capture") return `${preset?.name}: 캡처`;
+                if (pv.type === "capture") {
+                    const count = pv.captureValues?.length ?? (pv.captureValue ? 1 : 0);
+                    return `${preset?.name}: 캡처${count > 1 ? ` (${count})` : ''}`;
+                }
                 if (pv.type === "image_clipboard")
                     return `${preset?.name}: 이미지`;
                 return preset?.name;
@@ -170,6 +175,10 @@
                 captureValue:
                     type === "capture"
                         ? instance.presetValues[idx].captureValue
+                        : undefined,
+                captureValues:
+                    type === "capture"
+                        ? instance.presetValues[idx].captureValues
                         : undefined,
                 imageId:
                     type === "image_clipboard"
@@ -355,8 +364,8 @@
         updateTextValue(presetId, textarea.value);
     }
 
-    function startCapture(presetId: string) {
-        dispatch("startCapture", { presetId });
+    function startCapture(presetId: string, captureId?: string) {
+        dispatch("startCapture", { presetId, captureId });
     }
 
     function clearCapture(presetId: string) {
@@ -365,9 +374,57 @@
         );
         if (idx >= 0) {
             instance.presetValues[idx].captureValue = undefined;
+            instance.presetValues[idx].captureValues = undefined;
             instance = { ...instance };
             dispatch("update", { instance });
         }
+    }
+
+    function removeSingleCapture(presetId: string, captureId: string) {
+        const idx = instance.presetValues.findIndex(
+            (pv) => pv.presetId === presetId,
+        );
+        if (idx >= 0) {
+            const captures = instance.presetValues[idx].captureValues ?? [];
+            instance.presetValues[idx].captureValues = captures.filter(c => c.id !== captureId);
+            instance = { ...instance };
+            dispatch("update", { instance });
+        }
+    }
+
+    // Per-capture caption editing
+    function startEditingCaptureCaption(captureId: string) {
+        editingCaptionCaptureId = captureId;
+    }
+
+    function stopEditingCaptureCaption() {
+        editingCaptionCaptureId = null;
+    }
+
+    function handleCaptureCaptionKeydown(event: KeyboardEvent) {
+        if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+            event.preventDefault();
+            stopEditingCaptureCaption();
+        }
+    }
+
+    function updateCaptureCaption(presetId: string, captureId: string, value: string) {
+        const pvIdx = instance.presetValues.findIndex(
+            (pv) => pv.presetId === presetId,
+        );
+        if (pvIdx >= 0) {
+            const captures = instance.presetValues[pvIdx].captureValues ?? [];
+            instance.presetValues[pvIdx].captureValues = captures.map(c =>
+                c.id === captureId ? { ...c, caption: value || undefined } : c
+            );
+            instance = { ...instance };
+            dispatch("update", { instance });
+        }
+    }
+
+    function handleCaptureCaptionInput(event: Event, presetId: string, captureId: string) {
+        const textarea = event.currentTarget as HTMLTextAreaElement;
+        updateCaptureCaption(presetId, captureId, textarea.value);
     }
 
     async function handleImagePaste(event: ClipboardEvent, presetId: string) {
@@ -499,6 +556,23 @@
                         type: "text",
                         imageCaption: pv.imageCaption || pv.textValue || undefined,
                         textValue: undefined,
+                    };
+                }
+                // Migrate legacy single captureValue → captureValues array
+                if (pv.type === "capture" && pv.captureValue && (!pv.captureValues || pv.captureValues.length === 0)) {
+                    instance.presetValues[existingIdx] = {
+                        ...pv,
+                        captureValues: [{
+                            id: generateCoreStepCaptureId(),
+                            slideIndex: pv.captureValue.slideIndex,
+                            x: pv.captureValue.x,
+                            y: pv.captureValue.y,
+                            width: pv.captureValue.width,
+                            height: pv.captureValue.height,
+                            label: pv.captureValue.label,
+                            caption: pv.imageCaption,
+                        }],
+                        captureValue: undefined,
                     };
                 }
             }
@@ -817,9 +891,20 @@
                         data-preset-id={preset.id}
                     >
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-medium text-purple-700"
-                                >{preset.name}</span
-                            >
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs font-medium text-purple-700"
+                                    >{preset.name}</span
+                                >
+                                {#if currentType === 'capture' && (presetValue?.captureValues?.length ?? 0) > 0}
+                                    <button
+                                        class="text-[10px] text-purple-400 hover:text-purple-600 hover:bg-purple-100 px-1 py-0.5 rounded transition-colors"
+                                        on:click={() => startCapture(preset.id)}
+                                        title="다른 캡처 추가"
+                                    >
+                                        + 다른 캡처 추가
+                                    </button>
+                                {/if}
+                            </div>
 
                             <div class="flex items-center gap-1.5">
                                 <!-- LLM Auto-gen button -->
@@ -932,18 +1017,57 @@
                                 {/if}
                             {/if}
 
-                            <!-- Capture Input -->
+                            <!-- Capture Input (supports multiple captures per preset) -->
                         {:else if currentType === "capture"}
-                            {#if presetValue?.captureValue}
-                                <CaptureCard
-                                    capture={presetValue.captureValue}
-                                    {projectId}
-                                    {slideWidth}
-                                    {slideHeight}
-                                    showRecaptureButton={true}
-                                    on:recapture={() => startCapture(preset.id)}
-                                    on:remove={() => clearCapture(preset.id)}
-                                />
+                            {@const captures = presetValue?.captureValues ?? []}
+                            {#if captures.length > 0}
+                                <div class="grid {captures.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
+                                    {#each captures as cap, capIdx (cap.id)}
+                                        <div class="{capIdx === captures.length - 1 && captures.length >= 2 && captures.length % 2 !== 0 ? 'col-span-2' : ''}">
+                                            {#if captures.length > 1}
+                                                <div class="text-[10px] text-purple-500 mb-0.5 font-medium">
+                                                    {preset.name}{capIdx > 0 ? ` ${capIdx + 1}` : ''}
+                                                </div>
+                                            {/if}
+                                            <CaptureCard
+                                                capture={cap}
+                                                {projectId}
+                                                {slideWidth}
+                                                {slideHeight}
+                                                showRecaptureButton={true}
+                                                on:recapture={() => startCapture(preset.id, cap.id)}
+                                                on:remove={() => removeSingleCapture(preset.id, cap.id)}
+                                            />
+                                            <!-- Per-capture caption -->
+                                            {#if editingCaptionCaptureId === cap.id}
+                                                <textarea
+                                                    value={cap.caption || ""}
+                                                    on:input={(e) => handleCaptureCaptionInput(e, preset.id, cap.id)}
+                                                    on:blur={stopEditingCaptureCaption}
+                                                    on:keydown={handleCaptureCaptionKeydown}
+                                                    placeholder="캡션 입력... (Ctrl+S로 저장)"
+                                                    class="w-full mt-1 min-h-[36px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
+                                                    use:autoResizeTextarea
+                                                    autofocus
+                                                ></textarea>
+                                            {:else}
+                                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                                <div
+                                                    class="w-full mt-1 min-h-[24px] border rounded px-2 py-1 text-xs bg-white transition-all border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30"
+                                                    on:click={() => startEditingCaptureCaption(cap.id)}
+                                                    title="클릭하여 캡션 편집"
+                                                >
+                                                    {#if cap.caption && cap.caption.trim()}
+                                                        <p class="text-gray-700 whitespace-pre-wrap break-words">{cap.caption}</p>
+                                                    {:else}
+                                                        <p class="text-gray-400 italic">캡션 입력...</p>
+                                                    {/if}
+                                                </div>
+                                            {/if}
+                                        </div>
+                                    {/each}
+                                </div>
                             {:else}
                                 <button
                                     class="w-full py-3 border border-dashed border-gray-300 rounded text-gray-500 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50/50 transition-all flex items-center justify-center gap-1 text-xs"
@@ -964,54 +1088,6 @@
                                     </svg>
                                     캡처
                                 </button>
-                            {/if}
-                            <!-- Caption for capture (always visible) -->
-                            {#if editingCaptionPresetId === preset.id}
-                                <textarea
-                                    value={presetValue?.imageCaption || ""}
-                                    on:input={(e) => handleCaptionInput(e, preset.id)}
-                                    on:blur={stopEditingCaption}
-                                    on:keydown={handleCaptionKeydown}
-                                    placeholder="캡션 입력... (Ctrl+S로 저장)"
-                                    class="w-full mt-1.5 min-h-[36px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
-                                    use:autoResizeTextarea
-                                    autofocus
-                                ></textarea>
-                            {:else}
-                                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                <div
-                                    class="w-full mt-1.5 min-h-[24px] border rounded px-2 py-1 text-xs bg-white transition-all
-                                        {generatingPresetIds.has(preset.id)
-                                        ? 'border-indigo-300 bg-indigo-50/30'
-                                        : 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30'}"
-                                    on:click={() => {
-                                        if (!generatingPresetIds.has(preset.id)) {
-                                            startEditingCaption(preset.id);
-                                        }
-                                    }}
-                                    title={generatingPresetIds.has(preset.id) ? "생성 중..." : "클릭하여 캡션 편집"}
-                                >
-                                    {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
-                                        <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
-                                    {:else if generatingPresetIds.has(preset.id)}
-                                        <p class="text-indigo-400 italic">생성 중...</p>
-                                    {:else}
-                                        <p class="text-gray-400 italic">캡션 입력...</p>
-                                    {/if}
-                                </div>
-                            {/if}
-                            {#if preset.defaultMetadataKey}
-                                {@const defaultCaptionVal = projectAttributeValues[preset.defaultMetadataKey]}
-                                {#if defaultCaptionVal != null && presetValue?.imageCaption !== String(defaultCaptionVal)}
-                                    <button
-                                        class="mt-1 text-[10px] text-gray-400 hover:text-purple-600 transition-colors"
-                                        on:click={() => updateCaption(preset.id, String(defaultCaptionVal))}
-                                        title="캡션 기본값: {defaultCaptionVal}"
-                                    >
-                                        캡션 기본값으로 돌리기
-                                    </button>
-                                {/if}
                             {/if}
 
                             <!-- Image Clipboard Input -->
