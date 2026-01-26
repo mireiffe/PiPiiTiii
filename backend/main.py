@@ -283,9 +283,9 @@ class PhaseType(BaseModel):
 class CoreStepPreset(BaseModel):
     id: str
     name: str
-    allowedTypes: List[str] = []  # 'capture', 'text', 'image_clipboard', 'metadata'
+    allowedTypes: List[str] = []  # 'capture', 'text', 'image_clipboard'
     order: int
-    defaultMetadataKey: Optional[str] = None  # Default phenomenon attribute key for 'metadata' type
+    defaultMetadataKey: Optional[str] = None  # Phenomenon attribute key for caption default value
 
 
 class CoreStepDefinition(BaseModel):
