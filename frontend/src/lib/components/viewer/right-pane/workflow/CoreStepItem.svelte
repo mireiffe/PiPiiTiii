@@ -46,8 +46,6 @@
     // Track which metadata presets are in text-edit mode
     let metadataTextEditMode: Record<string, boolean> = {};
 
-    // Get selected phenomenon attribute definitions
-    $: selectedAttrDefs = availableAttributes.filter(a => phenomenonAttributes.includes(a.key));
     // Track which preset is in caption edit mode
     let editingCaptionPresetId: string | null = null;
     // Tooltip hover state
@@ -830,7 +828,7 @@
                                     class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                                 >
                                     <option value="">-- Metadata 선택 --</option>
-                                    {#each selectedAttrDefs as attr (attr.key)}
+                                    {#each availableAttributes as attr (attr.key)}
                                         <option value={attr.display_name}>{attr.display_name}</option>
                                     {/each}
                                 </select>

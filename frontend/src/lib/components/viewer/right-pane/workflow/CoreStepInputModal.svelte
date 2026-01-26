@@ -26,9 +26,6 @@
         startCapture: { presetId: string };
     }>();
 
-    // Get selected phenomenon attribute definitions
-    $: selectedAttrDefs = availableAttributes.filter(a => phenomenonAttributes.includes(a.key));
-
     // Track which presets are in text-edit mode (for metadata type)
     let metadataTextEditMode: Record<string, boolean> = {};
 
@@ -298,7 +295,7 @@
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                                 >
                                     <option value="">-- Metadata 선택 --</option>
-                                    {#each selectedAttrDefs as attr (attr.key)}
+                                    {#each availableAttributes as attr (attr.key)}
                                         <option value={attr.display_name}>{attr.display_name}</option>
                                     {/each}
                                 </select>

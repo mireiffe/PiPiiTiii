@@ -55,9 +55,6 @@
     // Track defaultMetadataKey for new preset being added
     let newPresetDefaultMetadataKey: string = "";
 
-    // Get selected phenomenon attribute definitions
-    $: selectedAttrDefs = availableAttributes.filter(a => phenomenonAttributes.includes(a.key));
-
     const dispatch = createEventDispatcher<{
         update: {
             workflows: WorkflowDefinition[];
@@ -1070,7 +1067,7 @@
                                                                                 class="border border-gray-300 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                                                                             >
                                                                                 <option value="">-- 선택 안함 --</option>
-                                                                                {#each selectedAttrDefs as attr (attr.key)}
+                                                                                {#each availableAttributes as attr (attr.key)}
                                                                                     <option value={attr.key}>{attr.display_name}</option>
                                                                                 {/each}
                                                                             </select>
@@ -1171,7 +1168,7 @@
                                                                             class="border border-gray-300 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
                                                                         >
                                                                             <option value="">-- 선택 안함 --</option>
-                                                                            {#each selectedAttrDefs as attr (attr.key)}
+                                                                            {#each availableAttributes as attr (attr.key)}
                                                                                 <option value={attr.key}>{attr.display_name}</option>
                                                                             {/each}
                                                                         </select>
