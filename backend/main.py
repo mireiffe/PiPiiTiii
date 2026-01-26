@@ -972,25 +972,25 @@ def remove_invalid_workflow_steps(request: RemoveInvalidStepsRequest):
 @app.get("/api/projects/workflow-confirmation-status")
 def get_workflow_confirmation_status():
     """
-    Get list of projects with workflows that have started but not confirmed,
-    and projects with confirmed workflows.
-    Returns project IDs where unifiedSteps exist but isConfirmed is false/missing,
-    and project IDs where isConfirmed is true.
+    Get workflow status for all projects.
+    Returns:
+      - not_started_project_ids: no workflow authoring started (no unifiedSteps in any workflow)
+      - pending_project_ids: unifiedSteps exist but isConfirmed is false
+      - confirmed_project_ids: isConfirmed is true
     """
     try:
         all_projects = db.get_all_workflows()
+        not_started_project_ids = []
         pending_project_ids = []
         confirmed_project_ids = []
 
         for project in all_projects:
             project_workflows = project.get("workflows", {})
-            if not project_workflows:
-                continue
 
+            has_any_unified_steps = False
             has_pending = False
             has_confirmed = False
 
-            # Check each workflow in the project
             for workflow_id, workflow_data in project_workflows.items():
                 if not workflow_data:
                     continue
@@ -998,18 +998,23 @@ def get_workflow_confirmation_status():
                 unified_steps = workflow_data.get("unifiedSteps", [])
                 is_confirmed = workflow_data.get("isConfirmed", False)
 
-                # If there are unified steps but workflow is not confirmed
-                if len(unified_steps) > 0 and not is_confirmed:
-                    has_pending = True
-                elif is_confirmed:
-                    has_confirmed = True
+                if len(unified_steps) > 0:
+                    has_any_unified_steps = True
+                    if not is_confirmed:
+                        has_pending = True
+                    else:
+                        has_confirmed = True
 
-            if has_pending:
-                pending_project_ids.append(project["id"])
-            if has_confirmed:
-                confirmed_project_ids.append(project["id"])
+            if not has_any_unified_steps:
+                not_started_project_ids.append(project["id"])
+            else:
+                if has_pending:
+                    pending_project_ids.append(project["id"])
+                if has_confirmed:
+                    confirmed_project_ids.append(project["id"])
 
         return {
+            "not_started_project_ids": not_started_project_ids,
             "pending_project_ids": pending_project_ids,
             "confirmed_project_ids": confirmed_project_ids,
         }
