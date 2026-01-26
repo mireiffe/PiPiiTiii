@@ -125,7 +125,7 @@
     function getPreviewText(): string {
         const filledPresets = instance.presetValues.filter((pv) => {
             if (pv.type === "text")
-                return pv.textValue && pv.textValue.trim().length > 0;
+                return pv.imageCaption && pv.imageCaption.trim().length > 0;
             if (pv.type === "capture")
                 return (
                     pv.captureValue !== null && pv.captureValue !== undefined
@@ -142,11 +142,11 @@
         return filledPresets
             .map((pv) => {
                 const preset = getPresetDefinition(pv.presetId);
-                if (pv.type === "text" && pv.textValue) {
+                if (pv.type === "text" && pv.imageCaption) {
                     const truncated =
-                        pv.textValue.length > 15
-                            ? pv.textValue.substring(0, 15) + "..."
-                            : pv.textValue;
+                        pv.imageCaption.length > 15
+                            ? pv.imageCaption.substring(0, 15) + "..."
+                            : pv.imageCaption;
                     return `${preset?.name}: ${truncated}`;
                 }
                 if (pv.type === "capture") return `${preset?.name}: 캡처`;
@@ -165,10 +165,6 @@
             instance.presetValues[idx] = {
                 ...instance.presetValues[idx],
                 type,
-                textValue:
-                    type === "text"
-                        ? (instance.presetValues[idx].textValue || "")
-                        : undefined,
                 captureValue:
                     type === "capture"
                         ? instance.presetValues[idx].captureValue
@@ -189,7 +185,6 @@
                 {
                     presetId,
                     type,
-                    textValue: type === "text" ? "" : undefined,
                     imageCaption: defaultCaption || undefined,
                 },
             ];
@@ -421,17 +416,19 @@
                     {
                         presetId: preset.id,
                         type: initType,
-                        textValue: initType === "text" ? "" : undefined,
                         imageCaption: defaultCaption || undefined,
                     },
                 ];
             } else {
-                // Migrate legacy 'metadata' type to 'text'
                 const pv = instance.presetValues[existingIdx];
-                if ((pv.type as string) === "metadata") {
+                // Migrate legacy 'metadata' type to 'text', and
+                // migrate legacy textValue → imageCaption for text type
+                if ((pv.type as string) === "metadata" || (pv.type === "text" && pv.textValue && !pv.imageCaption)) {
                     instance.presetValues[existingIdx] = {
                         ...pv,
                         type: "text",
+                        imageCaption: pv.imageCaption || pv.textValue || undefined,
+                        textValue: undefined,
                     };
                 }
             }
@@ -736,17 +733,15 @@
                             {/if}
                         </div>
 
-                        <!-- Text Input -->
+                        <!-- Text Input (caption only) -->
                         {#if currentType === "text"}
-                            {#if isEditingThis}
+                            {#if editingCaptionPresetId === preset.id}
                                 <textarea
-                                    value={presetValue?.textValue || ""}
-                                    on:input={(e) =>
-                                        handleTextareaInput(e, preset.id)}
-                                    on:blur={stopEditing}
-                                    on:keydown={(e) =>
-                                        handleTextKeydown(e, preset.id)}
-                                    placeholder="{preset.name} 입력... (Ctrl+S로 저장)"
+                                    value={presetValue?.imageCaption || ""}
+                                    on:input={(e) => handleCaptionInput(e, preset.id)}
+                                    on:blur={stopEditingCaption}
+                                    on:keydown={handleCaptionKeydown}
+                                    placeholder="캡션 입력... (Ctrl+S로 저장)"
                                     class="w-full min-h-[60px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
                                     use:autoResizeTextarea
                                     autofocus
@@ -756,46 +751,13 @@
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
                                     class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
-                                    on:click={() => startEditing(preset.id)}
-                                    title="클릭하여 편집"
-                                >
-                                    {#if presetValue?.textValue && presetValue.textValue.trim()}
-                                        <p
-                                            class="text-gray-700 whitespace-pre-wrap break-words"
-                                        >
-                                            {presetValue.textValue}
-                                        </p>
-                                    {:else}
-                                        <p class="text-gray-400 italic">
-                                            클릭하여 입력...
-                                        </p>
-                                    {/if}
-                                </div>
-                            {/if}
-                            <!-- Caption for text -->
-                            {#if editingCaptionPresetId === preset.id}
-                                <textarea
-                                    value={presetValue?.imageCaption || ""}
-                                    on:input={(e) => handleCaptionInput(e, preset.id)}
-                                    on:blur={stopEditingCaption}
-                                    on:keydown={handleCaptionKeydown}
-                                    placeholder="캡션 입력... (Ctrl+S로 저장)"
-                                    class="w-full mt-1.5 min-h-[36px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
-                                    use:autoResizeTextarea
-                                    autofocus
-                                ></textarea>
-                            {:else}
-                                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                <div
-                                    class="w-full mt-1.5 min-h-[24px] border border-gray-200 rounded px-2 py-1 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
                                     on:click={() => startEditingCaption(preset.id)}
-                                    title="클릭하여 캡션 편집"
+                                    title="클릭하여 편집"
                                 >
                                     {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
                                         <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
                                     {:else}
-                                        <p class="text-gray-400 italic">캡션 입력...</p>
+                                        <p class="text-gray-400 italic">클릭하여 입력...</p>
                                     {/if}
                                 </div>
                             {/if}

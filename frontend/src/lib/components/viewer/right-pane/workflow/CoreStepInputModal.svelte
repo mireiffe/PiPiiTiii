@@ -80,7 +80,7 @@
         if (!input || !input.type) return false;
         switch (input.type) {
             case 'text':
-                return input.textValue.trim().length > 0;
+                return input.caption.trim().length > 0;
             case 'capture':
                 return input.captureValue !== null;
             case 'image_clipboard':
@@ -188,7 +188,7 @@
 
             switch (input.type) {
                 case 'text':
-                    value.textValue = input.textValue.trim();
+                    // text type uses caption only (set above)
                     break;
                 case 'capture':
                     value.captureValue = input.captureValue!;
@@ -255,14 +255,9 @@
                     </div>
 
                     {#if input}
-                        <!-- Text Input -->
+                        <!-- Text type uses caption only (shown below) -->
                         {#if input.type === 'text'}
-                            <textarea
-                                bind:value={input.textValue}
-                                placeholder="{preset.name} 입력..."
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                                rows="3"
-                            ></textarea>
+                            <!-- No separate content area; caption below IS the text input -->
 
                         <!-- Capture Input -->
                         {:else if input.type === 'capture'}
@@ -334,13 +329,16 @@
                             {/if}
                         {/if}
 
-                        <!-- Caption (for all types) -->
-                        <div class="mt-3">
+                        <!-- Caption (for all types; primary input for text type) -->
+                        <div class={input.type === 'text' ? '' : 'mt-3'}>
                             <textarea
                                 bind:value={input.caption}
-                                placeholder="캡션 입력..."
-                                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                                rows="2"
+                                placeholder={input.type === 'text' ? `${preset.name} 입력...` : '캡션 입력...'}
+                                class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none
+                                    {input.type === 'text'
+                                        ? 'border-gray-300 text-sm'
+                                        : 'border-gray-200 text-xs text-gray-600'}"
+                                rows={input.type === 'text' ? 3 : 2}
                             ></textarea>
                             {#if preset.defaultMetadataKey}
                                 {@const defaultCaptionVal = projectAttributeValues[preset.defaultMetadataKey]}
