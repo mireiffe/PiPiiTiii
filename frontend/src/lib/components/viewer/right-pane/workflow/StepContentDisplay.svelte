@@ -33,20 +33,22 @@
         <!-- Captures -->
         {#if captures.length > 0}
             <div class="grid {captures.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
-                {#each captures as capture (capture.id)}
-                    <CaptureCard
-                        {capture}
-                        {projectId}
-                        {slideWidth}
-                        {slideHeight}
-                        {showRecaptureButton}
-                        on:remove={() =>
-                            dispatch("removeCapture", {
-                                captureId: capture.id,
-                            })}
-                        on:recapture={() =>
-                            dispatch("recapture", { captureId: capture.id })}
-                    />
+                {#each captures as capture, i (capture.id)}
+                    <div class="{i === captures.length - 1 && captures.length >= 2 && captures.length % 2 !== 0 ? 'col-span-2' : ''}">
+                        <CaptureCard
+                            {capture}
+                            {projectId}
+                            {slideWidth}
+                            {slideHeight}
+                            {showRecaptureButton}
+                            on:remove={() =>
+                                dispatch("removeCapture", {
+                                    captureId: capture.id,
+                                })}
+                            on:recapture={() =>
+                                dispatch("recapture", { captureId: capture.id })}
+                        />
+                    </div>
                 {/each}
             </div>
         {/if}
@@ -54,17 +56,19 @@
         <!-- Image Attachments -->
         {#if imageAttachments.length > 0}
             <div class="grid {imageAttachments.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
-                {#each imageAttachments as attachment (attachment.id)}
-                    <ImageAttachmentCard
-                        imageId={attachment.imageId || ""}
-                        caption={attachment.caption}
-                        on:click={() =>
-                            dispatch("openAttachment", { attachment })}
-                        on:remove={() =>
-                            dispatch("removeAttachment", {
-                                attachmentId: attachment.id,
-                            })}
-                    />
+                {#each imageAttachments as attachment, i (attachment.id)}
+                    <div class="{i === imageAttachments.length - 1 && imageAttachments.length >= 2 && imageAttachments.length % 2 !== 0 ? 'col-span-2' : ''}">
+                        <ImageAttachmentCard
+                            imageId={attachment.imageId || ""}
+                            caption={attachment.caption}
+                            on:click={() =>
+                                dispatch("openAttachment", { attachment })}
+                            on:remove={() =>
+                                dispatch("removeAttachment", {
+                                    attachmentId: attachment.id,
+                                })}
+                        />
+                    </div>
                 {/each}
             </div>
         {/if}
