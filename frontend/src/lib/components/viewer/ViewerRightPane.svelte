@@ -31,6 +31,10 @@
     // Tutorial mode indicator
     export let isTutorialMode = false;
 
+    // Phenomenon attribute data for metadata presets
+    export let availableAttributes = [];
+    export let projectAttributeValues = {};
+
     // Workflow step-based data - now supports multiple workflows
     export let workflowData = { steps: [] };
     export let allWorkflowsData = {};  // { workflowId: ProjectWorkflowData }
@@ -60,6 +64,9 @@
 
     // Get core steps for current workflow
     $: currentCoreStepsSettings = currentWorkflow?.coreSteps || { definitions: [] };
+
+    // Phenomenon attribute data
+    $: phenomenonAttributes = settings?.phenomenon_attributes || [];
 
     function toggleSection(section) {
         expandedSection = expandedSection === section ? null : section;
@@ -148,6 +155,9 @@
             {workflows}
             {activeWorkflowId}
             {allWorkflowsData}
+            {phenomenonAttributes}
+            {availableAttributes}
+            {projectAttributeValues}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
             on:workflowChange={handleWorkflowChange}

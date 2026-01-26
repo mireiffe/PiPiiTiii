@@ -283,8 +283,9 @@ class PhaseType(BaseModel):
 class CoreStepPreset(BaseModel):
     id: str
     name: str
-    allowedTypes: List[str] = []  # 'capture', 'text', 'image_clipboard'
+    allowedTypes: List[str] = []  # 'capture', 'text', 'image_clipboard', 'metadata'
     order: int
+    defaultMetadataKey: Optional[str] = None  # Default phenomenon attribute key for 'metadata' type
 
 
 class CoreStepDefinition(BaseModel):
@@ -806,6 +807,21 @@ def update_settings(settings: Settings):
 def get_all_attributes():
     """Get all available attribute definitions."""
     return attr_manager.get_active_attributes()
+
+
+@app.get("/api/project/{project_id}/attributes")
+def get_project_attributes(project_id: str):
+    """Get attribute values for a specific project."""
+    project = db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    active_attrs = attr_manager.get_active_attributes()
+    result = {}
+    for attr in active_attrs:
+        key = attr["key"]
+        result[key] = project.get(key)
+    return result
 
 
 # ========== Workflow API ==========

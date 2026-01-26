@@ -25,6 +25,9 @@
     export let allCoreStepsAdded: boolean = false;
     export let regularStepCount: number = 0;
     export let keyStepLinks: KeyStepLinkingData[] = [];
+    export let phenomenonAttributes: string[] = [];
+    export let availableAttributes: { key: string; display_name: string; attr_type: { variant: string } }[] = [];
+    export let projectAttributeValues: Record<string, string> = {};
 
     // Step expansion state
     export let expandedStepId: string | null = null;
@@ -206,6 +209,9 @@
                             allSteps={sortedUnifiedSteps}
                             coreStepDefinitions={coreStepsSettings.definitions}
                             {workflowSteps}
+                            {phenomenonAttributes}
+                            {availableAttributes}
+                            {projectAttributeValues}
                             on:toggleExpand={() =>
                                 dispatch("toggleCoreStepExpand", {
                                     instanceId: unifiedStep.id,

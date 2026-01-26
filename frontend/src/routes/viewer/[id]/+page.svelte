@@ -29,6 +29,8 @@
         updateProjectPromptVersion,
         fetchProjectWorkflows,
         updateProjectWorkflow,
+        fetchAllAttributes,
+        fetchProjectAttributes,
     } from "$lib/api/project";
     import {
         ENABLE_REPARSE_ALL,
@@ -90,6 +92,8 @@
         summary_fields: [],
         workflow_steps: { columns: [], rows: [] },
     };
+    let availableAttributes: { key: string; display_name: string; attr_type: { variant: string } }[] = [];
+    let projectAttributeValues: Record<string, string> = {};
     let summaryData = {}; // User version (displayed/edited)
     let summaryDataLLM = {}; // LLM-generated version (original)
     let savingSummary = false;
@@ -220,7 +224,11 @@
 
     async function loadSettings() {
         try {
-            const res = await fetchSettings();
+            const [res, attrsRes, projAttrsRes] = await Promise.all([
+                fetchSettings(),
+                fetchAllAttributes(),
+                fetchProjectAttributes(projectId),
+            ]);
             if (res.ok) {
                 settings = await res.json();
                 useThumbnails = settings.use_thumbnails || false;
@@ -230,6 +238,12 @@
                 if (workflows.length > 0 && !activeWorkflowId) {
                     activeWorkflowId = workflows[0].id;
                 }
+            }
+            if (attrsRes.ok) {
+                availableAttributes = await attrsRes.json();
+            }
+            if (projAttrsRes.ok) {
+                projectAttributeValues = await projAttrsRes.json();
             }
         } catch (e) {
             console.error("Failed to load settings", e);
@@ -1199,6 +1213,8 @@
         bind:editingDescription
         {project}
         {projectId}
+        {availableAttributes}
+        {projectAttributeValues}
         slideWidth={project?.slide_width || 960}
         slideHeight={project?.slide_height || 540}
         on:workflowChange={handleWorkflowChange}

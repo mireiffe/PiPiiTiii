@@ -9,8 +9,17 @@
     import { uploadAttachmentImage } from "$lib/api/project";
     import { generateAttachmentId } from "$lib/types/workflow";
 
+    interface AttributeDefinition {
+        key: string;
+        display_name: string;
+        attr_type: { variant: string };
+    }
+
     export let coreStepDef: CoreStepDefinition;
     export let projectId: string;
+    export let phenomenonAttributes: string[] = [];
+    export let availableAttributes: AttributeDefinition[] = [];
+    export let projectAttributeValues: Record<string, string> = {};
 
     const dispatch = createEventDispatcher<{
         confirm: { presetValues: CoreStepPresetValue[] };
@@ -39,9 +48,16 @@
         if (coreStepDef) {
             coreStepDef.presets.forEach(preset => {
                 if (!presetInputs[preset.id]) {
+                    const initialType = preset.allowedTypes[0] || null;
+                    // For metadata type, pre-fill with default metadata display name
+                    let initialText = '';
+                    if (initialType === 'metadata' && preset.defaultMetadataKey) {
+                        const val = projectAttributeValues[preset.defaultMetadataKey];
+                        if (val != null) initialText = String(val);
+                    }
                     presetInputs[preset.id] = {
-                        type: preset.allowedTypes[0] || null,
-                        textValue: '',
+                        type: initialType,
+                        textValue: initialText,
                         captureValue: null,
                         imageId: null,
                         imagePreview: null
@@ -60,6 +76,8 @@
         if (!input || !input.type) return false;
         switch (input.type) {
             case 'text':
+                return input.textValue.trim().length > 0;
+            case 'metadata':
                 return input.textValue.trim().length > 0;
             case 'capture':
                 return input.captureValue !== null;
@@ -169,6 +187,9 @@
                 case 'text':
                     value.textValue = input.textValue.trim();
                     break;
+                case 'metadata':
+                    value.textValue = input.textValue.trim();
+                    break;
                 case 'capture':
                     value.captureValue = input.captureValue!;
                     break;
@@ -242,6 +263,32 @@
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
                                 rows="3"
                             ></textarea>
+
+                        <!-- Metadata Input (text-like with reset to default) -->
+                        {:else if input.type === 'metadata'}
+                            <textarea
+                                bind:value={input.textValue}
+                                placeholder="{preset.name} 입력..."
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                                rows="3"
+                            ></textarea>
+                            {#if preset.defaultMetadataKey}
+                                {@const defaultMetadataVal = projectAttributeValues[preset.defaultMetadataKey]}
+                                {#if defaultMetadataVal != null && input.textValue !== String(defaultMetadataVal)}
+                                    <button
+                                        class="mt-1 text-xs text-gray-400 hover:text-purple-600 transition-colors"
+                                        on:click={() => {
+                                            if (presetInputs[preset.id] && defaultMetadataVal != null) {
+                                                presetInputs[preset.id].textValue = String(defaultMetadataVal);
+                                                presetInputs = { ...presetInputs };
+                                            }
+                                        }}
+                                        title="기본값: {defaultMetadataVal}"
+                                    >
+                                        기본값으로 돌리기
+                                    </button>
+                                {/if}
+                            {/if}
 
                         <!-- Capture Input -->
                         {:else if input.type === 'capture'}
