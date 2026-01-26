@@ -758,6 +758,8 @@
             {@const sortedPresets = [...definition.presets].sort(
                 (a, b) => a.order - b.order,
             )}
+            {@const nonTextCount = sortedPresets.filter(p => (instance.presetValues.find(v => v.presetId === p.id)?.type || p.allowedTypes[0] || 'text') !== 'text').length}
+            {@const useTwoCols = nonTextCount >= 2 && nonTextCount % 2 === 0}
 
             <div
                 class="px-3 pb-3 border-t border-purple-100 pt-2 space-y-2"
@@ -802,7 +804,7 @@
                 {/if}
 
                 <!-- All Presets in order -->
-                <div class="grid grid-cols-2 gap-2">
+                <div class="grid {useTwoCols ? 'grid-cols-2' : 'grid-cols-1'} gap-2">
                 {#each sortedPresets as preset (preset.id)}
                     {@const presetValue = getPresetValue(preset.id)}
                     {@const currentType =
@@ -810,7 +812,7 @@
                     {@const isEditingThis = editingPresetId === preset.id}
 
                     <div
-                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType === 'text'
+                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType === 'text' && useTwoCols
                             ? 'col-span-2'
                             : ''}"
                         data-preset-id={preset.id}
@@ -1134,7 +1136,7 @@
 
                 <!-- Delete Button -->
                 <div
-                    class="col-span-2 pt-1 border-t border-purple-50 flex justify-end"
+                    class="{useTwoCols ? 'col-span-2' : ''} pt-1 border-t border-purple-50 flex justify-end"
                 >
                     <button
                         class="text-[10px] text-red-300 hover:text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
