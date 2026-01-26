@@ -260,7 +260,16 @@
             (pv) => pv.presetId === presetId,
         );
         if (idx >= 0) {
-            instance.presetValues[idx].imageCaption = value || undefined;
+            const pv = instance.presetValues[idx];
+            if (pv.type === "capture" && pv.captureValues && pv.captureValues.length > 0) {
+                // For capture type, write to all captures' captions
+                instance.presetValues[idx].captureValues = pv.captureValues.map(cv => ({
+                    ...cv,
+                    caption: value || undefined,
+                }));
+            } else {
+                instance.presetValues[idx].imageCaption = value || undefined;
+            }
         }
         instance = { ...instance };
         dispatch("update", { instance });
@@ -312,6 +321,13 @@
         // Close editing mode so streaming text shows in preview area
         if (editingCaptionPresetId === presetId) {
             editingCaptionPresetId = null;
+        }
+        // Also close any capture caption editing for this preset
+        if (editingCaptionCaptureId) {
+            const pv = getPresetValue(presetId);
+            if (pv?.captureValues?.some(cv => cv.id === editingCaptionCaptureId)) {
+                editingCaptionCaptureId = null;
+            }
         }
 
         let generatedContent = "";
@@ -897,11 +913,15 @@
                                 >
                                 {#if currentType === 'capture' && (presetValue?.captureValues?.length ?? 0) > 0}
                                     <button
-                                        class="text-[10px] text-purple-400 hover:text-purple-600 hover:bg-purple-100 px-1 py-0.5 rounded transition-colors"
+                                        class="group relative w-4 h-4 flex items-center justify-center rounded text-purple-300 hover:text-purple-600 hover:bg-purple-100 transition-colors"
                                         on:click={() => startCapture(preset.id)}
-                                        title="다른 캡처 추가"
                                     >
-                                        + 다른 캡처 추가
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        <span class="absolute left-full ml-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[10px] text-white bg-gray-700 rounded whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-10">
+                                            다른 캡처 추가
+                                        </span>
                                     </button>
                                 {/if}
                             </div>
@@ -1054,12 +1074,21 @@
                                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                                 <div
-                                                    class="w-full mt-1 min-h-[24px] border rounded px-2 py-1 text-xs bg-white transition-all border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30"
-                                                    on:click={() => startEditingCaptureCaption(cap.id)}
-                                                    title="클릭하여 캡션 편집"
+                                                    class="w-full mt-1 min-h-[24px] border rounded px-2 py-1 text-xs bg-white transition-all
+                                                        {generatingPresetIds.has(preset.id)
+                                                        ? 'border-indigo-300 bg-indigo-50/30'
+                                                        : 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30'}"
+                                                    on:click={() => {
+                                                        if (!generatingPresetIds.has(preset.id)) {
+                                                            startEditingCaptureCaption(cap.id);
+                                                        }
+                                                    }}
+                                                    title={generatingPresetIds.has(preset.id) ? "생성 중..." : "클릭하여 캡션 편집"}
                                                 >
                                                     {#if cap.caption && cap.caption.trim()}
                                                         <p class="text-gray-700 whitespace-pre-wrap break-words">{cap.caption}</p>
+                                                    {:else if generatingPresetIds.has(preset.id)}
+                                                        <p class="text-indigo-400 italic">생성 중...</p>
                                                     {:else}
                                                         <p class="text-gray-400 italic">캡션 입력...</p>
                                                     {/if}
