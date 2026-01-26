@@ -454,13 +454,22 @@
         captureOverlays = [];
     }
 
+    // Helper: get the current active workflow definition from settings
+    function getActiveWorkflowDef() {
+        const workflows = settings?.workflow_settings?.workflows || [];
+        return workflows.find((w: any) => w.id === activeWorkflowId);
+    }
+
     async function handleDeleteStepDefinition(
         event: CustomEvent<{ stepId: string }>,
     ) {
         const { stepId } = event.detail;
-        // Remove from settings.workflow_steps.rows
-        settings.workflow_steps.rows = settings.workflow_steps.rows.filter(
-            (r) => r.id !== stepId,
+        const workflow = getActiveWorkflowDef();
+        if (!workflow?.steps) return;
+
+        // Remove from the active workflow's step rows
+        workflow.steps.rows = workflow.steps.rows.filter(
+            (r: any) => r.id !== stepId,
         );
         settings = { ...settings };
 
@@ -483,6 +492,9 @@
         event: CustomEvent<{ values: Record<string, string> }>,
     ) {
         const { values } = event.detail;
+        const workflow = getActiveWorkflowDef();
+        if (!workflow?.steps) return;
+
         const newId = `row_${Date.now()}`;
         const newRow = {
             id: newId,
@@ -490,14 +502,14 @@
         };
 
         // Initialize empty values for all columns that weren't provided
-        settings.workflow_steps.columns.forEach((col) => {
+        workflow.steps.columns.forEach((col: any) => {
             if (!(col.id in newRow.values)) {
                 newRow.values[col.id] = "";
             }
         });
 
-        settings.workflow_steps.rows = [
-            ...settings.workflow_steps.rows,
+        workflow.steps.rows = [
+            ...workflow.steps.rows,
             newRow,
         ];
         settings = { ...settings };
@@ -508,6 +520,36 @@
             if (!res.ok) {
                 console.error(
                     "Failed to save settings after creating step definition",
+                );
+                alert("설정 저장에 실패했습니다.");
+            }
+        } catch (e) {
+            console.error("Failed to save settings", e);
+            alert("설정 저장 중 오류가 발생했습니다.");
+        }
+    }
+
+    async function handleUpdateStepDefinition(
+        event: CustomEvent<{ stepId: string; values: Record<string, string> }>,
+    ) {
+        const { stepId, values } = event.detail;
+        const workflow = getActiveWorkflowDef();
+        if (!workflow?.steps) return;
+
+        workflow.steps.rows = workflow.steps.rows.map((r: any) => {
+            if (r.id === stepId) {
+                return { ...r, values: { ...values } };
+            }
+            return r;
+        });
+        settings = { ...settings };
+
+        // Save updated settings
+        try {
+            const res = await updateSettings(settings);
+            if (!res.ok) {
+                console.error(
+                    "Failed to save settings after updating step definition",
                 );
                 alert("설정 저장에 실패했습니다.");
             }
@@ -1166,6 +1208,7 @@
         on:deleteUndefinedWorkflow={handleDeleteUndefinedWorkflow}
         on:deleteStepDefinition={handleDeleteStepDefinition}
         on:createStepDefinition={handleCreateStepDefinition}
+        on:updateStepDefinition={handleUpdateStepDefinition}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
             toggleSlideSelection(e.detail.slideIndex)}
