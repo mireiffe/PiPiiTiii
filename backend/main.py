@@ -279,6 +279,12 @@ class PhaseType(BaseModel):
     order: int
 
 
+# LLM Auto-Generation Config for Core Step Presets
+class LLMAutoGenConfig(BaseModel):
+    enabled: bool = False
+    userPrompt: str = ""
+
+
 # Core Step Models (defined before WorkflowDefinition since it references them)
 class CoreStepPreset(BaseModel):
     id: str
@@ -286,6 +292,7 @@ class CoreStepPreset(BaseModel):
     allowedTypes: List[str] = []  # 'capture', 'text', 'image_clipboard'
     order: int
     defaultMetadataKey: Optional[str] = None  # Phenomenon attribute key for caption default value
+    llmAutoGen: Optional[LLMAutoGenConfig] = None  # LLM auto-generation config
 
 
 class CoreStepDefinition(BaseModel):
@@ -295,6 +302,7 @@ class CoreStepDefinition(BaseModel):
     requiresKeyStepLinking: bool = (
         False  # Whether this Core Step requires linking to prior key steps
     )
+    llmSystemPrompt: Optional[str] = None  # Shared system prompt for LLM auto-generation
     createdAt: str = ""
 
 
@@ -344,6 +352,12 @@ class SummaryData(BaseModel):
 
 class GenerateSummaryRequest(BaseModel):
     slide_indices: List[int]
+
+
+class GenerateTextRequest(BaseModel):
+    system_prompt: str
+    user_prompt: str
+    slide_indices: List[int] = []
 
 
 @app.middleware("http")
@@ -1131,6 +1145,53 @@ async def generate_summary(
         user_prompt = "이 슬라이드들의 내용을 요약해주세요."
 
     # Create LLM service
+    llm_config = settings.get("llm", {})
+    llm_service = LLMService(llm_config)
+
+    # Return streaming response
+    async def stream_generator():
+        async for chunk in llm_service.generate_stream(
+            system_prompt, user_prompt, thumbnail_paths
+        ):
+            yield chunk
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/project/{project_id}/generate_text")
+async def generate_text(project_id: str, request: GenerateTextRequest):
+    """
+    Generic LLM text generation endpoint with optional slide thumbnails.
+    Used for Core Step auto-generation and other text generation needs.
+    Returns streaming response.
+    """
+    # Verify project exists
+    project_dir = os.path.join(RESULT_DIR, project_id)
+    if not os.path.exists(project_dir):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Build thumbnail paths from slide indices (optional, max 3)
+    thumbnail_paths = []
+    if request.slide_indices:
+        for idx in request.slide_indices[:3]:
+            thumb_path = os.path.join(
+                project_dir, "thumbnails", f"slide_{idx:03d}_thumb.png"
+            )
+            if os.path.exists(thumb_path):
+                thumbnail_paths.append(thumb_path)
+
+    system_prompt = request.system_prompt or "당신은 PPT 프레젠테이션을 분석하는 전문가입니다."
+    user_prompt = request.user_prompt or "이 슬라이드들의 내용을 분석해주세요."
+
+    # Create LLM service
+    settings = load_settings()
     llm_config = settings.get("llm", {})
     llm_service = LLMService(llm_config)
 

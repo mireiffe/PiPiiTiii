@@ -11,6 +11,7 @@
         WorkflowStepRow,
     } from "$lib/types/workflow";
     import { getInputTypeDisplayName } from "$lib/types/workflow";
+    import { generateTextStream } from "$lib/api/project";
     import CaptureCard from "./CaptureCard.svelte";
     import ImageAttachmentCard from "./ImageAttachmentCard.svelte";
 
@@ -29,6 +30,7 @@
     export let phenomenonAttributes: string[] = [];
     export let availableAttributes: { key: string; display_name: string; attr_type: { variant: string } }[] = [];
     export let projectAttributeValues: Record<string, string> = {};
+    export let selectedSlideIndices: number[] = [];
 
     const dispatch = createEventDispatcher<{
         toggleExpand: void;
@@ -278,6 +280,74 @@
                 textarea.removeEventListener("input", resize);
             },
         };
+    }
+
+    // LLM auto-generation state
+    let generatingPresetIds: Set<string> = new Set();
+    let generatingAll = false;
+
+    $: hasAnyAutoGen = definition.presets.some((p) => p.llmAutoGen?.enabled);
+
+    async function generateTextForPreset(presetId: string) {
+        if (generatingPresetIds.has(presetId)) return;
+
+        const preset = getPresetDefinition(presetId);
+        if (!preset?.llmAutoGen?.enabled) return;
+
+        const systemPrompt = definition.llmSystemPrompt || "당신은 PPT 프레젠테이션을 분석하는 전문가입니다.";
+        const userPrompt = preset.llmAutoGen.userPrompt || "이 슬라이드의 내용을 분석해주세요.";
+
+        generatingPresetIds.add(presetId);
+        generatingPresetIds = generatingPresetIds;
+
+        // Close editing mode so streaming text shows in preview area
+        if (editingCaptionPresetId === presetId) {
+            editingCaptionPresetId = null;
+        }
+
+        let generatedContent = "";
+
+        try {
+            const stream = await generateTextStream(
+                projectId,
+                systemPrompt,
+                userPrompt,
+                selectedSlideIndices,
+            );
+            if (!stream) throw new Error("No stream returned");
+
+            const reader = stream.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                generatedContent += chunk;
+                updateCaption(presetId, generatedContent);
+            }
+        } catch (e) {
+            console.error("Failed to generate text for preset", e);
+        } finally {
+            generatingPresetIds.delete(presetId);
+            generatingPresetIds = generatingPresetIds;
+        }
+    }
+
+    async function generateAllTexts() {
+        if (generatingAll) return;
+        generatingAll = true;
+
+        const autoGenPresets = definition.presets.filter((p) => p.llmAutoGen?.enabled);
+
+        try {
+            await Promise.all(
+                autoGenPresets.map((preset) => generateTextForPreset(preset.id)),
+            );
+        } finally {
+            generatingAll = false;
+        }
     }
 
     function handleTextareaInput(event: Event, presetId: string) {
@@ -690,10 +760,49 @@
             )}
 
             <div
-                class="px-3 pb-3 border-t border-purple-100 pt-2 grid grid-cols-2 gap-2"
+                class="px-3 pb-3 border-t border-purple-100 pt-2 space-y-2"
                 on:click|stopPropagation
             >
+                <!-- Generate All button -->
+                {#if hasAnyAutoGen}
+                    <div class="flex justify-end">
+                        <button
+                            class="flex items-center gap-1 px-2 py-1 text-[10px] rounded
+                                text-gray-400 border border-gray-200 hover:text-indigo-500 hover:border-indigo-200 hover:bg-indigo-50
+                                transition-colors duration-150
+                                disabled:opacity-40 disabled:cursor-not-allowed"
+                            on:click={generateAllTexts}
+                            disabled={generatingAll || generatingPresetIds.size > 0}
+                            title="모든 자동 생성 Preset 텍스트 생성"
+                        >
+                            {#if generatingAll}
+                                <svg class="animate-spin w-3 h-3" viewBox="0 0 24 24">
+                                    <circle
+                                        class="opacity-25"
+                                        cx="12" cy="12" r="10"
+                                        stroke="currentColor" stroke-width="4" fill="none"
+                                    ></circle>
+                                    <path
+                                        class="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    ></path>
+                                </svg>
+                            {:else}
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                        stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                                    />
+                                </svg>
+                            {/if}
+                            <span>전체 자동 생성</span>
+                        </button>
+                    </div>
+                {/if}
+
                 <!-- All Presets in order -->
+                <div class="grid grid-cols-2 gap-2">
                 {#each sortedPresets as preset (preset.id)}
                     {@const presetValue = getPresetValue(preset.id)}
                     {@const currentType =
@@ -711,26 +820,65 @@
                                 >{preset.name}</span
                             >
 
-                            <!-- Type selector if multiple types allowed -->
-                            {#if preset.allowedTypes.length > 1}
-                                <div class="flex gap-1">
-                                    {#each preset.allowedTypes as type}
-                                        <button
-                                            class="px-1.5 py-0.5 text-[10px] rounded transition
-                                                {currentType === type
-                                                ? 'bg-purple-200 text-purple-700 border border-purple-400'
-                                                : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'}"
-                                            on:click={() =>
-                                                selectInputType(
-                                                    preset.id,
-                                                    type,
-                                                )}
-                                        >
-                                            {getInputTypeDisplayName(type)}
-                                        </button>
-                                    {/each}
-                                </div>
-                            {/if}
+                            <div class="flex items-center gap-1.5">
+                                <!-- LLM Auto-gen button -->
+                                {#if preset.llmAutoGen?.enabled}
+                                    <button
+                                        class="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded
+                                            text-gray-400 hover:text-indigo-500 hover:bg-indigo-50
+                                            transition-colors duration-150
+                                            disabled:opacity-40 disabled:cursor-not-allowed"
+                                        on:click|stopPropagation={() =>
+                                            generateTextForPreset(preset.id)}
+                                        disabled={generatingPresetIds.has(preset.id)}
+                                        title="LLM으로 자동 생성"
+                                    >
+                                        {#if generatingPresetIds.has(preset.id)}
+                                            <svg class="animate-spin w-2.5 h-2.5" viewBox="0 0 24 24">
+                                                <circle
+                                                    class="opacity-25"
+                                                    cx="12" cy="12" r="10"
+                                                    stroke="currentColor" stroke-width="4" fill="none"
+                                                ></circle>
+                                                <path
+                                                    class="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                ></path>
+                                            </svg>
+                                        {:else}
+                                            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path
+                                                    stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                                                />
+                                            </svg>
+                                        {/if}
+                                        <span>자동 생성</span>
+                                    </button>
+                                {/if}
+
+                                <!-- Type selector if multiple types allowed -->
+                                {#if preset.allowedTypes.length > 1}
+                                    <div class="flex gap-1">
+                                        {#each preset.allowedTypes as type}
+                                            <button
+                                                class="px-1.5 py-0.5 text-[10px] rounded transition
+                                                    {currentType === type
+                                                    ? 'bg-purple-200 text-purple-700 border border-purple-400'
+                                                    : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'}"
+                                                on:click={() =>
+                                                    selectInputType(
+                                                        preset.id,
+                                                        type,
+                                                    )}
+                                            >
+                                                {getInputTypeDisplayName(type)}
+                                            </button>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </div>
                         </div>
 
                         <!-- Text Input (caption only) -->
@@ -750,12 +898,21 @@
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
-                                    class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
-                                    on:click={() => startEditingCaption(preset.id)}
-                                    title="클릭하여 편집"
+                                    class="w-full min-h-[40px] border rounded px-2 py-1.5 text-xs bg-white transition-all
+                                        {generatingPresetIds.has(preset.id)
+                                        ? 'border-indigo-300 bg-indigo-50/30'
+                                        : 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30'}"
+                                    on:click={() => {
+                                        if (!generatingPresetIds.has(preset.id)) {
+                                            startEditingCaption(preset.id);
+                                        }
+                                    }}
+                                    title={generatingPresetIds.has(preset.id) ? "생성 중..." : "클릭하여 편집"}
                                 >
                                     {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
                                         <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
+                                    {:else if generatingPresetIds.has(preset.id)}
+                                        <p class="text-indigo-400 italic">생성 중...</p>
                                     {:else}
                                         <p class="text-gray-400 italic">클릭하여 입력...</p>
                                     {/if}
@@ -802,12 +959,21 @@
                                     <!-- svelte-ignore a11y-click-events-have-key-events -->
                                     <!-- svelte-ignore a11y-no-static-element-interactions -->
                                     <div
-                                        class="w-full mt-1.5 min-h-[24px] border border-gray-200 rounded px-2 py-1 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
-                                        on:click={() => startEditingCaption(preset.id)}
-                                        title="클릭하여 캡션 편집"
+                                        class="w-full mt-1.5 min-h-[24px] border rounded px-2 py-1 text-xs bg-white transition-all
+                                            {generatingPresetIds.has(preset.id)
+                                            ? 'border-indigo-300 bg-indigo-50/30'
+                                            : 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30'}"
+                                        on:click={() => {
+                                            if (!generatingPresetIds.has(preset.id)) {
+                                                startEditingCaption(preset.id);
+                                            }
+                                        }}
+                                        title={generatingPresetIds.has(preset.id) ? "생성 중..." : "클릭하여 캡션 편집"}
                                     >
                                         {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
                                             <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
+                                        {:else if generatingPresetIds.has(preset.id)}
+                                            <p class="text-indigo-400 italic">생성 중...</p>
                                         {:else}
                                             <p class="text-gray-400 italic">캡션 입력...</p>
                                         {/if}
@@ -871,12 +1037,21 @@
                                     <!-- svelte-ignore a11y-click-events-have-key-events -->
                                     <!-- svelte-ignore a11y-no-static-element-interactions -->
                                     <div
-                                        class="w-full mt-1.5 min-h-[24px] border border-gray-200 rounded px-2 py-1 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
-                                        on:click={() => startEditingCaption(preset.id)}
-                                        title="클릭하여 캡션 편집"
+                                        class="w-full mt-1.5 min-h-[24px] border rounded px-2 py-1 text-xs bg-white transition-all
+                                            {generatingPresetIds.has(preset.id)
+                                            ? 'border-indigo-300 bg-indigo-50/30'
+                                            : 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30'}"
+                                        on:click={() => {
+                                            if (!generatingPresetIds.has(preset.id)) {
+                                                startEditingCaption(preset.id);
+                                            }
+                                        }}
+                                        title={generatingPresetIds.has(preset.id) ? "생성 중..." : "클릭하여 캡션 편집"}
                                     >
                                         {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
                                             <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
+                                        {:else if generatingPresetIds.has(preset.id)}
+                                            <p class="text-indigo-400 italic">생성 중...</p>
                                         {:else}
                                             <p class="text-gray-400 italic">캡션 입력...</p>
                                         {/if}
@@ -967,6 +1142,7 @@
                     >
                         삭제
                     </button>
+                </div>
                 </div>
             </div>
         {/if}

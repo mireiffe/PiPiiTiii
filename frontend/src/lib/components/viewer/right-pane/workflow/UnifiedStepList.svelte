@@ -28,6 +28,7 @@
     export let phenomenonAttributes: string[] = [];
     export let availableAttributes: { key: string; display_name: string; attr_type: { variant: string } }[] = [];
     export let projectAttributeValues: Record<string, string> = {};
+    export let selectedSlideIndices: number[] = [];
 
     // Step expansion state
     export let expandedStepId: string | null = null;
@@ -212,6 +213,7 @@
                             {phenomenonAttributes}
                             {availableAttributes}
                             {projectAttributeValues}
+                            {selectedSlideIndices}
                             on:toggleExpand={() =>
                                 dispatch("toggleCoreStepExpand", {
                                     instanceId: unifiedStep.id,

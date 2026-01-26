@@ -169,6 +169,7 @@
             {phenomenonAttributes}
             {availableAttributes}
             {projectAttributeValues}
+            {selectedSlideIndices}
             bind:this={workflowSectionRef}
             on:toggleExpand={() => toggleSection("workflow")}
             on:workflowChange={handleWorkflowChange}

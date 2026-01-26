@@ -8,7 +8,6 @@
  *
  * Reduces duplication in:
  * - WorkflowDefinitionsSection
- * - CoreStepsSection
  * - WorkflowStepsSection
  * - PhaseSettingsSection
  */
