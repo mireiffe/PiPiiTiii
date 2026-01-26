@@ -738,8 +738,17 @@
             }
         >();
 
-        layoutRows.forEach((row, rowIndex) => {
-            const mainStepNumber = rowIndex + 1;
+        // Build unified display numbers matching the UI (UnifiedStepList uses idx+1)
+        const unifiedDisplayNumbers = new Map<string, number>();
+        sortedUnifiedSteps.forEach((unifiedStep, idx) => {
+            if (unifiedStep.type === "regular") {
+                unifiedDisplayNumbers.set(unifiedStep.id, idx + 1);
+            }
+        });
+
+        layoutRows.forEach((row) => {
+            const mainStepNumber =
+                unifiedDisplayNumbers.get(row.mainStep.id) ?? 0;
             stepDisplayMap.set(row.mainStep.id, {
                 displayNumber: mainStepNumber,
                 isSupporter: false,
