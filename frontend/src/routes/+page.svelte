@@ -100,6 +100,14 @@
   /** @type {Set<string>} */
   let workflowPendingConfirmation = new Set();
 
+  // Workflow confirmed projects
+  /** @type {Set<string>} */
+  let workflowConfirmedProjects = new Set();
+
+  // Workflow filter toggles
+  /** @type {Set<string>} */
+  let activeWorkflowFilters = new Set();
+
   // Pinned projects (stored in localStorage)
   const PINNED_STORAGE_KEY = "pipiiitiii_pinned_projects";
   /** @type {Set<string>} */
@@ -230,6 +238,19 @@
           }
         }
       }
+
+      // Workflow status filter
+      if (activeWorkflowFilters.size > 0) {
+        const matchesAny =
+          (activeWorkflowFilters.has("needs_definition") &&
+            workflowWarningProjects.has(p.id)) ||
+          (activeWorkflowFilters.has("needs_confirmation") &&
+            workflowPendingConfirmation.has(p.id)) ||
+          (activeWorkflowFilters.has("confirmed") &&
+            workflowConfirmedProjects.has(p.id));
+        if (!matchesAny) return false;
+      }
+
       return true;
     })
     .sort((a, b) => {
@@ -372,9 +393,25 @@
       if (res.ok) {
         const data = await res.json();
         workflowPendingConfirmation = new Set(data.pending_project_ids);
+        workflowConfirmedProjects = new Set(data.confirmed_project_ids || []);
       }
     } catch (e) {
       console.error("Failed to load workflow confirmation status", e);
+    }
+  }
+
+  function toggleWorkflowFilter(filterKey) {
+    if (filterKey === "all") {
+      // "전체" clears all specific filters
+      activeWorkflowFilters = new Set();
+    } else {
+      const newFilters = new Set(activeWorkflowFilters);
+      if (newFilters.has(filterKey)) {
+        newFilters.delete(filterKey);
+      } else {
+        newFilters.add(filterKey);
+      }
+      activeWorkflowFilters = newFilters;
     }
   }
 
@@ -766,6 +803,49 @@
         </div>
       </div>
 
+      <!-- Workflow Status Filter -->
+      <div
+        class="px-5 py-3 border-b border-gray-100 bg-gray-50/80 flex items-center gap-2 shrink-0"
+      >
+        <span class="text-xs font-semibold text-gray-500 mr-1">워크플로우</span>
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
+                 {activeWorkflowFilters.size === 0
+            ? 'bg-gray-800 text-white border-gray-800 shadow-sm'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:bg-gray-50'}"
+          on:click={() => toggleWorkflowFilter("all")}
+        >
+          전체
+        </button>
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
+                 {activeWorkflowFilters.has('needs_definition')
+            ? 'bg-red-500 text-white border-red-500 shadow-sm'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-red-300 hover:text-red-600 hover:bg-red-50'}"
+          on:click={() => toggleWorkflowFilter("needs_definition")}
+        >
+          정의 필요
+        </button>
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
+                 {activeWorkflowFilters.has('needs_confirmation')
+            ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50'}"
+          on:click={() => toggleWorkflowFilter("needs_confirmation")}
+        >
+          확정 필요
+        </button>
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
+                 {activeWorkflowFilters.has('confirmed')
+            ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'}"
+          on:click={() => toggleWorkflowFilter("confirmed")}
+        >
+          확정 완료
+        </button>
+      </div>
+
       <div class="flex-1 overflow-y-auto bg-gray-50/50">
         <!-- Selection Mode Toolbar -->
         {#if selectionMode}
@@ -878,9 +958,9 @@
                   on:click={(e) => togglePinProject(project.id, e)}
                   title={isPinned ? "고정 해제" : "상단에 고정"}
                 >
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <svg class="w-4 h-4 {isPinned ? '' : 'rotate-45'}" fill="currentColor" viewBox="0 0 16 16">
                     <path
-                      d="M12 2C8.69 2 6 4.69 6 8c0 2.36 1.37 4.41 3.36 5.42L8 18h3v4l1 1 1-1v-4h3l-1.36-4.58C16.63 12.41 18 10.36 18 8c0-3.31-2.69-6-6-6zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"
+                      d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5c0 .276-.224 1.5-.5 1.5s-.5-1.224-.5-1.5V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A6 6 0 0 1 5 6.708V2.277a3 3 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354z"
                     />
                   </svg>
                 </button>
@@ -940,10 +1020,10 @@
                           <svg
                             class="w-3 h-3 text-amber-600"
                             fill="currentColor"
-                            viewBox="0 0 24 24"
+                            viewBox="0 0 16 16"
                           >
                             <path
-                              d="M12 2C8.69 2 6 4.69 6 8c0 2.36 1.37 4.41 3.36 5.42L8 18h3v4l1 1 1-1v-4h3l-1.36-4.58C16.63 12.41 18 10.36 18 8c0-3.31-2.69-6-6-6zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"
+                              d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5c0 .276-.224 1.5-.5 1.5s-.5-1.224-.5-1.5V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A6 6 0 0 1 5 6.708V2.277a3 3 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354z"
                             />
                           </svg>
                           <span class="text-[10px] font-medium text-amber-700"

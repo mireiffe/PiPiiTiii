@@ -972,17 +972,23 @@ def remove_invalid_workflow_steps(request: RemoveInvalidStepsRequest):
 @app.get("/api/projects/workflow-confirmation-status")
 def get_workflow_confirmation_status():
     """
-    Get list of projects with workflows that have started but not confirmed.
-    Returns project IDs where unifiedSteps exist but isConfirmed is false/missing.
+    Get list of projects with workflows that have started but not confirmed,
+    and projects with confirmed workflows.
+    Returns project IDs where unifiedSteps exist but isConfirmed is false/missing,
+    and project IDs where isConfirmed is true.
     """
     try:
         all_projects = db.get_all_workflows()
         pending_project_ids = []
+        confirmed_project_ids = []
 
         for project in all_projects:
             project_workflows = project.get("workflows", {})
             if not project_workflows:
                 continue
+
+            has_pending = False
+            has_confirmed = False
 
             # Check each workflow in the project
             for workflow_id, workflow_data in project_workflows.items():
@@ -994,10 +1000,19 @@ def get_workflow_confirmation_status():
 
                 # If there are unified steps but workflow is not confirmed
                 if len(unified_steps) > 0 and not is_confirmed:
-                    pending_project_ids.append(project["id"])
-                    break  # Only need to add project once
+                    has_pending = True
+                elif is_confirmed:
+                    has_confirmed = True
 
-        return {"pending_project_ids": pending_project_ids}
+            if has_pending:
+                pending_project_ids.append(project["id"])
+            if has_confirmed:
+                confirmed_project_ids.append(project["id"])
+
+        return {
+            "pending_project_ids": pending_project_ids,
+            "confirmed_project_ids": confirmed_project_ids,
+        }
     except Exception as e:
         raise HTTPException(
             status_code=500,
