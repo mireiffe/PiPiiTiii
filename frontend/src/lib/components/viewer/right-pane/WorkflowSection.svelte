@@ -75,6 +75,7 @@
     export let phenomenonAttributes: string[] = [];
     export let availableAttributes: { key: string; display_name: string; attr_type: { variant: string } }[] = [];
     export let projectAttributeValues: Record<string, string> = {};
+    export let selectedSlideIndices: number[] = [];
 
     const dispatch = createEventDispatcher();
 
@@ -1416,6 +1417,7 @@
                         {phenomenonAttributes}
                         {availableAttributes}
                         {projectAttributeValues}
+                        {selectedSlideIndices}
                         {expandedStepId}
                         {expandedCoreStepId}
                         {captureTargetStepId}

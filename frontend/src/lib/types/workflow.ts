@@ -7,6 +7,12 @@
 // Allowed input types for Core Step presets
 export type CoreStepInputType = 'capture' | 'text' | 'image_clipboard';
 
+// LLM Auto-Generation Config for Core Step Presets
+export interface LLMAutoGenConfig {
+    enabled: boolean;
+    userPrompt: string;
+}
+
 // Core Step Preset Field Definition
 export interface CoreStepPreset {
     id: string;
@@ -14,6 +20,7 @@ export interface CoreStepPreset {
     allowedTypes: CoreStepInputType[];  // Which input types are allowed for this preset
     order: number;
     defaultMetadataKey?: string;  // Default phenomenon attribute key for caption default value
+    llmAutoGen?: LLMAutoGenConfig;  // LLM auto-generation config for this preset's text input
 }
 
 // Core Step Definition (defined in settings)
@@ -22,6 +29,7 @@ export interface CoreStepDefinition {
     name: string;
     presets: CoreStepPreset[];
     requiresKeyStepLinking: boolean;  // Whether this Core Step requires linking to prior key steps
+    llmSystemPrompt?: string;  // Shared system prompt for LLM auto-generation across all presets
     createdAt: string;
 }
 

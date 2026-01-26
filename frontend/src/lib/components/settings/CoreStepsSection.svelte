@@ -250,6 +250,48 @@
             dispatch("update", { coreSteps });
         }
     }
+
+    function handleSystemPromptChange(stepId: string, value: string) {
+        const step = coreSteps.definitions.find((d) => d.id === stepId);
+        if (step) {
+            step.llmSystemPrompt = value || undefined;
+            coreSteps.definitions = [...coreSteps.definitions];
+            dispatch("update", { coreSteps });
+        }
+    }
+
+    function togglePresetLLMAutoGen(stepId: string, presetId: string) {
+        const step = coreSteps.definitions.find((d) => d.id === stepId);
+        if (!step) return;
+        const preset = step.presets.find((p) => p.id === presetId);
+        if (!preset) return;
+
+        if (preset.llmAutoGen?.enabled) {
+            preset.llmAutoGen = { ...preset.llmAutoGen, enabled: false };
+        } else {
+            preset.llmAutoGen = {
+                enabled: true,
+                userPrompt: preset.llmAutoGen?.userPrompt || "",
+            };
+        }
+        coreSteps.definitions = [...coreSteps.definitions];
+        dispatch("update", { coreSteps });
+    }
+
+    function handlePresetUserPromptChange(
+        stepId: string,
+        presetId: string,
+        value: string,
+    ) {
+        const step = coreSteps.definitions.find((d) => d.id === stepId);
+        if (!step) return;
+        const preset = step.presets.find((p) => p.id === presetId);
+        if (!preset || !preset.llmAutoGen) return;
+
+        preset.llmAutoGen = { ...preset.llmAutoGen, userPrompt: value };
+        coreSteps.definitions = [...coreSteps.definitions];
+        dispatch("update", { coreSteps });
+    }
 </script>
 
 <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -400,8 +442,32 @@
 
                     <!-- Expanded Section -->
                     {#if expandedStepId === step.id}
-                        <div class="border-t border-purple-200 p-4 bg-white">
-                            <div class="mb-4">
+                        <div class="border-t border-purple-200 p-4 bg-white space-y-5">
+                            <!-- LLM System Prompt (shared across presets) -->
+                            <div>
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                                    LLM 자동 생성 - System Prompt
+                                    <span
+                                        class="text-[10px] text-gray-400 font-normal cursor-help"
+                                        title="이 Core Step의 모든 Preset에서 공유하는 시스템 프롬프트입니다. 각 Preset에서 자동 생성을 활성화하면 이 시스템 프롬프트가 사용됩니다."
+                                    >
+                                        (?)
+                                    </span>
+                                </h4>
+                                <textarea
+                                    value={step.llmSystemPrompt || ""}
+                                    on:input={(e) =>
+                                        handleSystemPromptChange(
+                                            step.id,
+                                            e.currentTarget.value,
+                                        )}
+                                    placeholder="시스템 프롬프트를 입력하세요. (예: 당신은 PPT 프레젠테이션을 분석하는 전문가입니다.)"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-y min-h-[60px]"
+                                    rows="2"
+                                ></textarea>
+                            </div>
+
+                            <div>
                                 <h4
                                     class="text-sm font-semibold text-gray-700 mb-3"
                                 >
@@ -530,6 +596,38 @@
                                                         <option value={attr.key}>{attr.display_name}</option>
                                                     {/each}
                                                 </select>
+                                            </div>
+                                            <!-- LLM Auto-Gen Config -->
+                                            <div class="ml-9 pl-3 mt-1">
+                                                <label class="flex items-center gap-1.5 cursor-pointer group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={preset.llmAutoGen?.enabled ?? false}
+                                                        on:change={() =>
+                                                            togglePresetLLMAutoGen(
+                                                                step.id,
+                                                                preset.id,
+                                                            )}
+                                                        class="w-3 h-3 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
+                                                    />
+                                                    <span class="text-[10px] text-gray-500 group-hover:text-gray-700">
+                                                        LLM 자동 생성 활성화
+                                                    </span>
+                                                </label>
+                                                {#if preset.llmAutoGen?.enabled}
+                                                    <textarea
+                                                        value={preset.llmAutoGen?.userPrompt || ""}
+                                                        on:input={(e) =>
+                                                            handlePresetUserPromptChange(
+                                                                step.id,
+                                                                preset.id,
+                                                                e.currentTarget.value,
+                                                            )}
+                                                        placeholder="User Prompt 입력... (예: 이 슬라이드의 내용을 요약해주세요.)"
+                                                        class="w-full mt-1 border border-gray-300 rounded px-2 py-1.5 text-[11px] focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y min-h-[40px]"
+                                                        rows="2"
+                                                    ></textarea>
+                                                {/if}
                                             </div>
                                         {/each}
                                     {/if}

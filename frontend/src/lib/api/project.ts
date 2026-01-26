@@ -149,6 +149,29 @@ export async function generateSummaryStream(
     return response.body;
 }
 
+export async function generateTextStream(
+    projectId: string,
+    systemPrompt: string,
+    userPrompt: string,
+    slideIndices: number[],
+): Promise<ReadableStream<Uint8Array> | null> {
+    const response = await apiFetch(`/api/project/${projectId}/generate_text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            system_prompt: systemPrompt,
+            user_prompt: userPrompt,
+            slide_indices: slideIndices,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to generate text: ${response.statusText}`);
+    }
+
+    return response.body;
+}
+
 export async function updateProjectSummaryLLM(id: string, fieldId: string, content: string): Promise<Response> {
     return apiFetch(`/api/project/${id}/summary_llm`, {
         method: 'POST',
