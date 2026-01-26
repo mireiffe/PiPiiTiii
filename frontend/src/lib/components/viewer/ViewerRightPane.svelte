@@ -70,7 +70,7 @@
                 ...d,
                 presets: d.presets.map(p => ({
                     ...p,
-                    allowedTypes: p.allowedTypes.filter(t => t !== 'metadata' as any),
+                    allowedTypes: p.allowedTypes.filter(t => t !== ('metadata' as any)),
                 })),
             })),
         };
