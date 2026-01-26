@@ -758,8 +758,9 @@
             {@const sortedPresets = [...definition.presets].sort(
                 (a, b) => a.order - b.order,
             )}
-            {@const nonTextCount = sortedPresets.filter(p => (instance.presetValues.find(v => v.presetId === p.id)?.type || p.allowedTypes[0] || 'text') !== 'text').length}
-            {@const useTwoCols = nonTextCount >= 2}
+            {@const nonTextPresets = sortedPresets.filter(p => (instance.presetValues.find(v => v.presetId === p.id)?.type || p.allowedTypes[0] || 'text') !== 'text')}
+            {@const useTwoCols = nonTextPresets.length >= 2}
+            {@const lastNonTextPresetId = useTwoCols && nonTextPresets.length % 2 !== 0 ? nonTextPresets.at(-1)?.id ?? null : null}
 
             <div
                 class="px-3 pb-3 border-t border-purple-100 pt-2 space-y-2"
@@ -812,7 +813,7 @@
                     {@const isEditingThis = editingPresetId === preset.id}
 
                     <div
-                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType === 'text' && useTwoCols
+                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {(currentType === 'text' && useTwoCols) || preset.id === lastNonTextPresetId
                             ? 'col-span-2'
                             : ''}"
                         data-preset-id={preset.id}
