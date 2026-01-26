@@ -296,6 +296,8 @@
                             phaseTypes={settings.workflow_settings?.phaseTypes || []}
                             {expandedWorkflowId}
                             expandedRowId={expandedWorkflowRowId}
+                            phenomenonAttributes={settings.phenomenon_attributes}
+                            {availableAttributes}
                             on:update={handleWorkflowDefinitionsUpdate}
                             on:toggleWorkflowExpand={handleToggleWorkflowExpand}
                             on:toggleRowExpand={handleToggleWorkflowRowExpand}

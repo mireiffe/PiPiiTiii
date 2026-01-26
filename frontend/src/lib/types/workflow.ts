@@ -5,7 +5,7 @@
 // ========== Core Step Definitions ==========
 
 // Allowed input types for Core Step presets
-export type CoreStepInputType = 'capture' | 'text' | 'image_clipboard';
+export type CoreStepInputType = 'capture' | 'text' | 'image_clipboard' | 'metadata';
 
 // Core Step Preset Field Definition
 export interface CoreStepPreset {
@@ -13,6 +13,7 @@ export interface CoreStepPreset {
     name: string;
     allowedTypes: CoreStepInputType[];  // Which input types are allowed for this preset
     order: number;
+    defaultMetadataKey?: string;  // Default phenomenon attribute key when type is 'metadata'
 }
 
 // Core Step Definition (defined in settings)
@@ -89,14 +90,19 @@ export function createCoreStepDefinition(name: string, requiresKeyStepLinking: b
 export function createCoreStepPreset(
     name: string,
     allowedTypes: CoreStepInputType[],
-    order: number
+    order: number,
+    defaultMetadataKey?: string
 ): CoreStepPreset {
-    return {
+    const preset: CoreStepPreset = {
         id: generateCoreStepPresetId(),
         name,
         allowedTypes,
         order,
     };
+    if (defaultMetadataKey) {
+        preset.defaultMetadataKey = defaultMetadataKey;
+    }
+    return preset;
 }
 
 // Create a new core step instance
@@ -120,6 +126,7 @@ export function getInputTypeDisplayName(type: CoreStepInputType): string {
         case 'capture': return '캡처';
         case 'text': return '텍스트';
         case 'image_clipboard': return '이미지 붙여넣기';
+        case 'metadata': return 'Metadata 중 선택';
         default: return type;
     }
 }

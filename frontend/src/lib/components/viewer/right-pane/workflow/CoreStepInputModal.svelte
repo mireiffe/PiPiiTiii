@@ -9,14 +9,28 @@
     import { uploadAttachmentImage } from "$lib/api/project";
     import { generateAttachmentId } from "$lib/types/workflow";
 
+    interface AttributeDefinition {
+        key: string;
+        display_name: string;
+        attr_type: { variant: string };
+    }
+
     export let coreStepDef: CoreStepDefinition;
     export let projectId: string;
+    export let phenomenonAttributes: string[] = [];
+    export let availableAttributes: AttributeDefinition[] = [];
 
     const dispatch = createEventDispatcher<{
         confirm: { presetValues: CoreStepPresetValue[] };
         cancel: void;
         startCapture: { presetId: string };
     }>();
+
+    // Get selected phenomenon attribute definitions
+    $: selectedAttrDefs = availableAttributes.filter(a => phenomenonAttributes.includes(a.key));
+
+    // Track which presets are in text-edit mode (for metadata type)
+    let metadataTextEditMode: Record<string, boolean> = {};
 
     // State for each preset value
     let presetInputs: Record<string, {
@@ -39,9 +53,16 @@
         if (coreStepDef) {
             coreStepDef.presets.forEach(preset => {
                 if (!presetInputs[preset.id]) {
+                    const initialType = preset.allowedTypes[0] || null;
+                    // For metadata type, pre-fill with default metadata display name
+                    let initialText = '';
+                    if (initialType === 'metadata' && preset.defaultMetadataKey) {
+                        const attr = availableAttributes.find(a => a.key === preset.defaultMetadataKey);
+                        if (attr) initialText = attr.display_name;
+                    }
                     presetInputs[preset.id] = {
-                        type: preset.allowedTypes[0] || null,
-                        textValue: '',
+                        type: initialType,
+                        textValue: initialText,
                         captureValue: null,
                         imageId: null,
                         imagePreview: null
@@ -60,6 +81,8 @@
         if (!input || !input.type) return false;
         switch (input.type) {
             case 'text':
+                return input.textValue.trim().length > 0;
+            case 'metadata':
                 return input.textValue.trim().length > 0;
             case 'capture':
                 return input.captureValue !== null;
@@ -169,6 +192,9 @@
                 case 'text':
                     value.textValue = input.textValue.trim();
                     break;
+                case 'metadata':
+                    value.textValue = input.textValue.trim();
+                    break;
                 case 'capture':
                     value.captureValue = input.captureValue!;
                     break;
@@ -242,6 +268,47 @@
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
                                 rows="3"
                             ></textarea>
+
+                        <!-- Metadata Input -->
+                        {:else if input.type === 'metadata'}
+                            {#if metadataTextEditMode[preset.id]}
+                                <!-- Text edit mode -->
+                                <textarea
+                                    bind:value={input.textValue}
+                                    placeholder="{preset.name} 직접 입력..."
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                                    rows="3"
+                                ></textarea>
+                                <button
+                                    class="mt-1 text-xs text-purple-600 hover:text-purple-800"
+                                    on:click={() => { metadataTextEditMode[preset.id] = false; metadataTextEditMode = { ...metadataTextEditMode }; }}
+                                >
+                                    Metadata 선택으로 돌아가기
+                                </button>
+                            {:else}
+                                <!-- Metadata select mode -->
+                                <select
+                                    value={input.textValue}
+                                    on:change={(e) => {
+                                        if (presetInputs[preset.id]) {
+                                            presetInputs[preset.id].textValue = e.currentTarget.value;
+                                            presetInputs = { ...presetInputs };
+                                        }
+                                    }}
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                                >
+                                    <option value="">-- Metadata 선택 --</option>
+                                    {#each selectedAttrDefs as attr (attr.key)}
+                                        <option value={attr.display_name}>{attr.display_name}</option>
+                                    {/each}
+                                </select>
+                                <button
+                                    class="mt-1 text-xs text-gray-500 hover:text-gray-700"
+                                    on:click={() => { metadataTextEditMode[preset.id] = true; metadataTextEditMode = { ...metadataTextEditMode }; }}
+                                >
+                                    직접 텍스트 입력
+                                </button>
+                            {/if}
 
                         <!-- Capture Input -->
                         {:else if input.type === 'capture'}

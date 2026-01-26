@@ -16,10 +16,18 @@
         getInputTypeDisplayName,
     } from "$lib/types/workflow";
 
+    interface AttributeDefinition {
+        key: string;
+        display_name: string;
+        attr_type: { variant: string };
+    }
+
     export let workflows: WorkflowDefinition[] = [];
     export let phaseTypes: PhaseType[] = [];
     export let expandedWorkflowId: string | null = null;
     export let expandedRowId: string | null = null;
+    export let phenomenonAttributes: string[] = [];
+    export let availableAttributes: AttributeDefinition[] = [];
 
     let addingWorkflow = false;
     let newWorkflowName = "";
@@ -41,7 +49,14 @@
         "capture",
         "text",
         "image_clipboard",
+        "metadata",
     ];
+
+    // Track defaultMetadataKey for new preset being added
+    let newPresetDefaultMetadataKey: string = "";
+
+    // Get selected phenomenon attribute definitions
+    $: selectedAttrDefs = availableAttributes.filter(a => phenomenonAttributes.includes(a.key));
 
     const dispatch = createEventDispatcher<{
         update: {
@@ -409,15 +424,18 @@
         );
         if (step) {
             const order = step.presets.length;
+            const metaKey = newPresetTypes.includes("metadata") ? newPresetDefaultMetadataKey || undefined : undefined;
             const newPreset = createCoreStepPreset(
                 newPresetName.trim(),
                 newPresetTypes,
                 order,
+                metaKey,
             );
             step.presets = [...step.presets, newPreset];
             workflows = [...workflows];
             newPresetName = "";
             newPresetTypes = ["text"];
+            newPresetDefaultMetadataKey = "";
             editingPresetStepId = null;
             emitUpdate();
         }
@@ -533,6 +551,28 @@
                 } else {
                     preset.allowedTypes = [...preset.allowedTypes, type];
                 }
+                workflows = [...workflows];
+                emitUpdate();
+            }
+        }
+    }
+
+    function handlePresetMetadataKeyChange(
+        workflowId: string,
+        stepId: string,
+        presetId: string,
+        metadataKey: string,
+    ) {
+        const workflow = workflows.find((w) => w.id === workflowId);
+        if (!workflow || !workflow.coreSteps) return;
+
+        const step = workflow.coreSteps.definitions.find(
+            (d) => d.id === stepId,
+        );
+        if (step) {
+            const preset = step.presets.find((p) => p.id === presetId);
+            if (preset) {
+                preset.defaultMetadataKey = metadataKey || undefined;
                 workflows = [...workflows];
                 emitUpdate();
             }
@@ -1014,6 +1054,28 @@
                                                                             ✕
                                                                         </button>
                                                                     </div>
+                                                                    <!-- Metadata default key selector -->
+                                                                    {#if preset.allowedTypes.includes("metadata")}
+                                                                        <div class="flex items-center gap-2 mt-1.5 ml-8 pl-4">
+                                                                            <span class="text-[10px] text-gray-500">기본 Metadata:</span>
+                                                                            <select
+                                                                                value={preset.defaultMetadataKey || ""}
+                                                                                on:change={(e) =>
+                                                                                    handlePresetMetadataKeyChange(
+                                                                                        workflow.id,
+                                                                                        coreStep.id,
+                                                                                        preset.id,
+                                                                                        e.currentTarget.value,
+                                                                                    )}
+                                                                                class="border border-gray-300 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                                                                            >
+                                                                                <option value="">-- 선택 안함 --</option>
+                                                                                {#each selectedAttrDefs as attr (attr.key)}
+                                                                                    <option value={attr.key}>{attr.display_name}</option>
+                                                                                {/each}
+                                                                            </select>
+                                                                        </div>
+                                                                    {/if}
                                                                 {/each}
                                                             {/if}
                                                         </div>
@@ -1094,11 +1156,27 @@
                                                                                 [
                                                                                     "text",
                                                                                 ];
+                                                                            newPresetDefaultMetadataKey = "";
                                                                         }}
                                                                     >
                                                                         취소
                                                                     </button>
                                                                 </div>
+                                                                <!-- Metadata default key for new preset -->
+                                                                {#if newPresetTypes.includes("metadata")}
+                                                                    <div class="mt-2 flex items-center gap-2">
+                                                                        <span class="text-[10px] text-gray-600">기본 Metadata:</span>
+                                                                        <select
+                                                                            bind:value={newPresetDefaultMetadataKey}
+                                                                            class="border border-gray-300 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                                                                        >
+                                                                            <option value="">-- 선택 안함 --</option>
+                                                                            {#each selectedAttrDefs as attr (attr.key)}
+                                                                                <option value={attr.key}>{attr.display_name}</option>
+                                                                            {/each}
+                                                                        </select>
+                                                                    </div>
+                                                                {/if}
                                                             </div>
                                                         {:else}
                                                             <button
