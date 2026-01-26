@@ -12,14 +12,22 @@
         getInputTypeDisplayName,
     } from "$lib/types/workflow";
 
+    interface AttributeDefinition {
+        key: string;
+        display_name: string;
+        attr_type: { variant: string };
+    }
+
     export let coreSteps: CoreStepsSettings = { definitions: [] };
     export let expandedStepId: string | null = null;
+    export let availableAttributes: AttributeDefinition[] = [];
 
     let addingStep = false;
     let newStepName = "";
     let editingPresetStepId: string | null = null;
     let newPresetName = "";
     let newPresetTypes: CoreStepInputType[] = ["text"];
+    let newPresetDefaultMetadataKey: string = "";
 
     const ALL_INPUT_TYPES: CoreStepInputType[] = [
         "capture",
@@ -97,15 +105,18 @@
         const step = coreSteps.definitions.find((d) => d.id === stepId);
         if (step) {
             const order = step.presets.length;
+            const metaKey = newPresetDefaultMetadataKey || undefined;
             const newPreset = createCoreStepPreset(
                 newPresetName.trim(),
                 newPresetTypes,
                 order,
+                metaKey,
             );
             step.presets = [...step.presets, newPreset];
             coreSteps.definitions = [...coreSteps.definitions];
             newPresetName = "";
             newPresetTypes = ["text"];
+            newPresetDefaultMetadataKey = "";
             editingPresetStepId = null;
             dispatch("update", { coreSteps });
         }
@@ -212,6 +223,22 @@
             }
         } else {
             newPresetTypes = [...newPresetTypes, type];
+        }
+    }
+
+    function handlePresetMetadataKeyChange(
+        stepId: string,
+        presetId: string,
+        metadataKey: string,
+    ) {
+        const step = coreSteps.definitions.find((d) => d.id === stepId);
+        if (step) {
+            const preset = step.presets.find((p) => p.id === presetId);
+            if (preset) {
+                preset.defaultMetadataKey = metadataKey || undefined;
+                coreSteps.definitions = [...coreSteps.definitions];
+                dispatch("update", { coreSteps });
+            }
         }
     }
 
@@ -485,6 +512,25 @@
                                                     ✕
                                                 </button>
                                             </div>
+                                            <!-- Caption default value selector -->
+                                            <div class="flex items-center gap-2 ml-9 pl-3">
+                                                <span class="text-[10px] text-gray-500">캡션 기본값:</span>
+                                                <select
+                                                    value={preset.defaultMetadataKey || ""}
+                                                    on:change={(e) =>
+                                                        handlePresetMetadataKeyChange(
+                                                            step.id,
+                                                            preset.id,
+                                                            e.currentTarget.value,
+                                                        )}
+                                                    class="border border-gray-300 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                                                >
+                                                    <option value="">-- 선택 안함 --</option>
+                                                    {#each availableAttributes as attr (attr.key)}
+                                                        <option value={attr.key}>{attr.display_name}</option>
+                                                    {/each}
+                                                </select>
+                                            </div>
                                         {/each}
                                     {/if}
                                 </div>
@@ -543,10 +589,24 @@
                                                     editingPresetStepId = null;
                                                     newPresetName = "";
                                                     newPresetTypes = ["text"];
+                                                    newPresetDefaultMetadataKey = "";
                                                 }}
                                             >
                                                 취소
                                             </button>
+                                        </div>
+                                        <!-- Caption default value for new preset -->
+                                        <div class="mt-2 flex items-center gap-2">
+                                            <span class="text-xs text-gray-600">캡션 기본값:</span>
+                                            <select
+                                                bind:value={newPresetDefaultMetadataKey}
+                                                class="border border-gray-300 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                                            >
+                                                <option value="">-- 선택 안함 --</option>
+                                                {#each availableAttributes as attr (attr.key)}
+                                                    <option value={attr.key}>{attr.display_name}</option>
+                                                {/each}
+                                            </select>
                                         </div>
                                     </div>
                                 {:else}

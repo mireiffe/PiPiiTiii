@@ -111,8 +111,8 @@
         return definition.presets.find((p) => p.id === presetId);
     }
 
-    // Get the default metadata value for a preset (project's attribute value)
-    function getDefaultMetadataValue(preset: CoreStepPreset): string | undefined {
+    // Get the default caption value for a preset from project metadata
+    function getDefaultCaptionValue(preset: CoreStepPreset): string | undefined {
         if (!preset.defaultMetadataKey) return undefined;
         const val = projectAttributeValues[preset.defaultMetadataKey];
         return val != null ? String(val) : undefined;
@@ -125,9 +125,7 @@
     function getPreviewText(): string {
         const filledPresets = instance.presetValues.filter((pv) => {
             if (pv.type === "text")
-                return pv.textValue && pv.textValue.trim().length > 0;
-            if (pv.type === "metadata")
-                return pv.textValue && pv.textValue.trim().length > 0;
+                return pv.imageCaption && pv.imageCaption.trim().length > 0;
             if (pv.type === "capture")
                 return (
                     pv.captureValue !== null && pv.captureValue !== undefined
@@ -144,11 +142,11 @@
         return filledPresets
             .map((pv) => {
                 const preset = getPresetDefinition(pv.presetId);
-                if ((pv.type === "text" || pv.type === "metadata") && pv.textValue) {
+                if (pv.type === "text" && pv.imageCaption) {
                     const truncated =
-                        pv.textValue.length > 15
-                            ? pv.textValue.substring(0, 15) + "..."
-                            : pv.textValue;
+                        pv.imageCaption.length > 15
+                            ? pv.imageCaption.substring(0, 15) + "..."
+                            : pv.imageCaption;
                     return `${preset?.name}: ${truncated}`;
                 }
                 if (pv.type === "capture") return `${preset?.name}: 캡처`;
@@ -164,18 +162,9 @@
             (pv) => pv.presetId === presetId,
         );
         if (idx >= 0) {
-            let textVal = instance.presetValues[idx].textValue || "";
-            if (type === "metadata" && !textVal) {
-                const presetDef = getPresetDefinition(presetId);
-                if (presetDef) textVal = getDefaultMetadataValue(presetDef) || "";
-            }
             instance.presetValues[idx] = {
                 ...instance.presetValues[idx],
                 type,
-                textValue:
-                    type === "text" || type === "metadata"
-                        ? textVal
-                        : undefined,
                 captureValue:
                     type === "capture"
                         ? instance.presetValues[idx].captureValue
@@ -184,19 +173,19 @@
                     type === "image_clipboard"
                         ? instance.presetValues[idx].imageId
                         : undefined,
+                // Preserve caption across type changes
+                imageCaption: instance.presetValues[idx].imageCaption,
             };
         } else {
-            let textVal = "";
-            if (type === "metadata") {
-                const presetDef = getPresetDefinition(presetId);
-                if (presetDef) textVal = getDefaultMetadataValue(presetDef) || "";
-            }
+            // Initialize caption with metadata default if available
+            const presetDef = getPresetDefinition(presetId);
+            const defaultCaption = presetDef ? getDefaultCaptionValue(presetDef) : undefined;
             instance.presetValues = [
                 ...instance.presetValues,
                 {
                     presetId,
                     type,
-                    textValue: type === "text" || type === "metadata" ? textVal : undefined,
+                    imageCaption: defaultCaption || undefined,
                 },
             ];
         }
@@ -418,23 +407,30 @@
     // Ensure all presets have values initialized
     $: {
         definition.presets.forEach((preset) => {
-            if (
-                !instance.presetValues.find((pv) => pv.presetId === preset.id)
-            ) {
+            const existingIdx = instance.presetValues.findIndex((pv) => pv.presetId === preset.id);
+            if (existingIdx < 0) {
                 const initType = preset.allowedTypes[0] || "text";
-                let initText: string | undefined = undefined;
-                if (initType === "metadata" && preset.defaultMetadataKey) {
-                    const val = projectAttributeValues[preset.defaultMetadataKey];
-                    if (val != null) initText = String(val);
-                }
+                const defaultCaption = getDefaultCaptionValue(preset);
                 instance.presetValues = [
                     ...instance.presetValues,
                     {
                         presetId: preset.id,
                         type: initType,
-                        textValue: initType === "text" || initType === "metadata" ? (initText || "") : undefined,
+                        imageCaption: defaultCaption || undefined,
                     },
                 ];
+            } else {
+                const pv = instance.presetValues[existingIdx];
+                // Migrate legacy 'metadata' type to 'text', and
+                // migrate legacy textValue → imageCaption for text type
+                if ((pv.type as string) === "metadata" || (pv.type === "text" && pv.textValue && !pv.imageCaption)) {
+                    instance.presetValues[existingIdx] = {
+                        ...pv,
+                        type: "text",
+                        imageCaption: pv.imageCaption || pv.textValue || undefined,
+                        textValue: undefined,
+                    };
+                }
             }
         });
     }
@@ -705,8 +701,7 @@
                     {@const isEditingThis = editingPresetId === preset.id}
 
                     <div
-                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType ===
-                            'text' || currentType === 'metadata'
+                        class="bg-purple-50/50 rounded-lg p-2 border border-purple-100 {currentType === 'text'
                             ? 'col-span-2'
                             : ''}"
                         data-preset-id={preset.id}
@@ -738,17 +733,15 @@
                             {/if}
                         </div>
 
-                        <!-- Text Input -->
+                        <!-- Text Input (caption only) -->
                         {#if currentType === "text"}
-                            {#if isEditingThis}
+                            {#if editingCaptionPresetId === preset.id}
                                 <textarea
-                                    value={presetValue?.textValue || ""}
-                                    on:input={(e) =>
-                                        handleTextareaInput(e, preset.id)}
-                                    on:blur={stopEditing}
-                                    on:keydown={(e) =>
-                                        handleTextKeydown(e, preset.id)}
-                                    placeholder="{preset.name} 입력... (Ctrl+S로 저장)"
+                                    value={presetValue?.imageCaption || ""}
+                                    on:input={(e) => handleCaptionInput(e, preset.id)}
+                                    on:blur={stopEditingCaption}
+                                    on:keydown={handleCaptionKeydown}
+                                    placeholder="캡션 입력... (Ctrl+S로 저장)"
                                     class="w-full min-h-[60px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
                                     use:autoResizeTextarea
                                     autofocus
@@ -758,66 +751,25 @@
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <div
                                     class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
-                                    on:click={() => startEditing(preset.id)}
+                                    on:click={() => startEditingCaption(preset.id)}
                                     title="클릭하여 편집"
                                 >
-                                    {#if presetValue?.textValue && presetValue.textValue.trim()}
-                                        <p
-                                            class="text-gray-700 whitespace-pre-wrap break-words"
-                                        >
-                                            {presetValue.textValue}
-                                        </p>
+                                    {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
+                                        <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
                                     {:else}
-                                        <p class="text-gray-400 italic">
-                                            클릭하여 입력...
-                                        </p>
-                                    {/if}
-                                </div>
-                            {/if}
-
-                            <!-- Metadata Input (text-like with reset to default) -->
-                        {:else if currentType === "metadata"}
-                            {#if isEditingThis}
-                                <textarea
-                                    value={presetValue?.textValue || ""}
-                                    on:input={(e) =>
-                                        handleTextareaInput(e, preset.id)}
-                                    on:blur={stopEditing}
-                                    on:keydown={(e) =>
-                                        handleTextKeydown(e, preset.id)}
-                                    placeholder="{preset.name} 입력... (Ctrl+S로 저장)"
-                                    class="w-full min-h-[60px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
-                                    use:autoResizeTextarea
-                                    autofocus
-                                ></textarea>
-                            {:else}
-                                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                <div
-                                    class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
-                                    on:click={() => startEditing(preset.id)}
-                                    title="클릭하여 편집"
-                                >
-                                    {#if presetValue?.textValue && presetValue.textValue.trim()}
-                                        <p class="text-gray-700 whitespace-pre-wrap break-words">
-                                            {presetValue.textValue}
-                                        </p>
-                                    {:else}
-                                        <p class="text-gray-400 italic">
-                                            클릭하여 입력...
-                                        </p>
+                                        <p class="text-gray-400 italic">클릭하여 입력...</p>
                                     {/if}
                                 </div>
                             {/if}
                             {#if preset.defaultMetadataKey}
-                                {@const defaultMetadataVal = projectAttributeValues[preset.defaultMetadataKey]}
-                                {#if defaultMetadataVal != null && presetValue?.textValue !== String(defaultMetadataVal)}
+                                {@const defaultCaptionVal = projectAttributeValues[preset.defaultMetadataKey]}
+                                {#if defaultCaptionVal != null && presetValue?.imageCaption !== String(defaultCaptionVal)}
                                     <button
                                         class="mt-1 text-[10px] text-gray-400 hover:text-purple-600 transition-colors"
-                                        on:click={() => updateTextValue(preset.id, String(defaultMetadataVal))}
-                                        title="기본값: {defaultMetadataVal}"
+                                        on:click={() => updateCaption(preset.id, String(defaultCaptionVal))}
+                                        title="캡션 기본값: {defaultCaptionVal}"
                                     >
-                                        기본값으로 돌리기
+                                        캡션 기본값으로 돌리기
                                     </button>
                                 {/if}
                             {/if}
@@ -860,6 +812,18 @@
                                             <p class="text-gray-400 italic">캡션 입력...</p>
                                         {/if}
                                     </div>
+                                {/if}
+                                {#if preset.defaultMetadataKey}
+                                    {@const defaultCaptionVal = projectAttributeValues[preset.defaultMetadataKey]}
+                                    {#if defaultCaptionVal != null && presetValue?.imageCaption !== String(defaultCaptionVal)}
+                                        <button
+                                            class="mt-1 text-[10px] text-gray-400 hover:text-purple-600 transition-colors"
+                                            on:click={() => updateCaption(preset.id, String(defaultCaptionVal))}
+                                            title="캡션 기본값: {defaultCaptionVal}"
+                                        >
+                                            캡션 기본값으로 돌리기
+                                        </button>
+                                    {/if}
                                 {/if}
                             {:else}
                                 <button
@@ -917,6 +881,18 @@
                                             <p class="text-gray-400 italic">캡션 입력...</p>
                                         {/if}
                                     </div>
+                                {/if}
+                                {#if preset.defaultMetadataKey}
+                                    {@const defaultCaptionVal = projectAttributeValues[preset.defaultMetadataKey]}
+                                    {#if defaultCaptionVal != null && presetValue?.imageCaption !== String(defaultCaptionVal)}
+                                        <button
+                                            class="mt-1 text-[10px] text-gray-400 hover:text-purple-600 transition-colors"
+                                            on:click={() => updateCaption(preset.id, String(defaultCaptionVal))}
+                                            title="캡션 기본값: {defaultCaptionVal}"
+                                        >
+                                            캡션 기본값으로 돌리기
+                                        </button>
+                                    {/if}
                                 {/if}
                             {:else}
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->

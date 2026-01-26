@@ -2,6 +2,7 @@
     import { createEventDispatcher } from "svelte";
     import type {
         CoreStepDefinition,
+        CoreStepPreset,
         CoreStepPresetValue,
         CoreStepInputType
     } from "$lib/types/workflow";
@@ -40,8 +41,16 @@
             label?: string;
         } | null;
         imageId: string | null;
-        imagePreview: string | null;  // for display
+        imagePreview: string | null;
+        caption: string;
     }> = {};
+
+    // Get the default caption value for a preset from project metadata
+    function getDefaultCaptionValue(preset: CoreStepPreset): string {
+        if (!preset.defaultMetadataKey) return '';
+        const val = projectAttributeValues[preset.defaultMetadataKey];
+        return val != null ? String(val) : '';
+    }
 
     // Initialize inputs
     $: {
@@ -49,18 +58,13 @@
             coreStepDef.presets.forEach(preset => {
                 if (!presetInputs[preset.id]) {
                     const initialType = preset.allowedTypes[0] || null;
-                    // For metadata type, pre-fill with default metadata display name
-                    let initialText = '';
-                    if (initialType === 'metadata' && preset.defaultMetadataKey) {
-                        const val = projectAttributeValues[preset.defaultMetadataKey];
-                        if (val != null) initialText = String(val);
-                    }
                     presetInputs[preset.id] = {
                         type: initialType,
-                        textValue: initialText,
+                        textValue: '',
                         captureValue: null,
                         imageId: null,
-                        imagePreview: null
+                        imagePreview: null,
+                        caption: getDefaultCaptionValue(preset),
                     };
                 }
             });
@@ -76,9 +80,7 @@
         if (!input || !input.type) return false;
         switch (input.type) {
             case 'text':
-                return input.textValue.trim().length > 0;
-            case 'metadata':
-                return input.textValue.trim().length > 0;
+                return input.caption.trim().length > 0;
             case 'capture':
                 return input.captureValue !== null;
             case 'image_clipboard':
@@ -180,15 +182,13 @@
             const input = presetInputs[preset.id];
             const value: CoreStepPresetValue = {
                 presetId: preset.id,
-                type: input.type!
+                type: input.type!,
+                imageCaption: input.caption.trim() || undefined,
             };
 
             switch (input.type) {
                 case 'text':
-                    value.textValue = input.textValue.trim();
-                    break;
-                case 'metadata':
-                    value.textValue = input.textValue.trim();
+                    // text type uses caption only (set above)
                     break;
                 case 'capture':
                     value.captureValue = input.captureValue!;
@@ -255,40 +255,9 @@
                     </div>
 
                     {#if input}
-                        <!-- Text Input -->
+                        <!-- Text type uses caption only (shown below) -->
                         {#if input.type === 'text'}
-                            <textarea
-                                bind:value={input.textValue}
-                                placeholder="{preset.name} 입력..."
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                                rows="3"
-                            ></textarea>
-
-                        <!-- Metadata Input (text-like with reset to default) -->
-                        {:else if input.type === 'metadata'}
-                            <textarea
-                                bind:value={input.textValue}
-                                placeholder="{preset.name} 입력..."
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                                rows="3"
-                            ></textarea>
-                            {#if preset.defaultMetadataKey}
-                                {@const defaultMetadataVal = projectAttributeValues[preset.defaultMetadataKey]}
-                                {#if defaultMetadataVal != null && input.textValue !== String(defaultMetadataVal)}
-                                    <button
-                                        class="mt-1 text-xs text-gray-400 hover:text-purple-600 transition-colors"
-                                        on:click={() => {
-                                            if (presetInputs[preset.id] && defaultMetadataVal != null) {
-                                                presetInputs[preset.id].textValue = String(defaultMetadataVal);
-                                                presetInputs = { ...presetInputs };
-                                            }
-                                        }}
-                                        title="기본값: {defaultMetadataVal}"
-                                    >
-                                        기본값으로 돌리기
-                                    </button>
-                                {/if}
-                            {/if}
+                            <!-- No separate content area; caption below IS the text input -->
 
                         <!-- Capture Input -->
                         {:else if input.type === 'capture'}
@@ -359,6 +328,36 @@
                                 </div>
                             {/if}
                         {/if}
+
+                        <!-- Caption (for all types; primary input for text type) -->
+                        <div class={input.type === 'text' ? '' : 'mt-3'}>
+                            <textarea
+                                bind:value={input.caption}
+                                placeholder={input.type === 'text' ? `${preset.name} 입력...` : '캡션 입력...'}
+                                class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none
+                                    {input.type === 'text'
+                                        ? 'border-gray-300 text-sm'
+                                        : 'border-gray-200 text-xs text-gray-600'}"
+                                rows={input.type === 'text' ? 3 : 2}
+                            ></textarea>
+                            {#if preset.defaultMetadataKey}
+                                {@const defaultCaptionVal = projectAttributeValues[preset.defaultMetadataKey]}
+                                {#if defaultCaptionVal != null && input.caption !== String(defaultCaptionVal)}
+                                    <button
+                                        class="mt-1 text-xs text-gray-400 hover:text-purple-600 transition-colors"
+                                        on:click={() => {
+                                            if (presetInputs[preset.id] && defaultCaptionVal != null) {
+                                                presetInputs[preset.id].caption = String(defaultCaptionVal);
+                                                presetInputs = { ...presetInputs };
+                                            }
+                                        }}
+                                        title="캡션 기본값: {defaultCaptionVal}"
+                                    >
+                                        캡션 기본값으로 돌리기
+                                    </button>
+                                {/if}
+                            {/if}
+                        </div>
                     {/if}
                 </div>
             {/each}
