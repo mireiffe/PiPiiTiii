@@ -43,8 +43,6 @@
     let isUploading = false;
     // Track which preset is in edit mode (for text input)
     let editingPresetId: string | null = null;
-    // Track which metadata presets are in text-edit mode
-    let metadataTextEditMode: Record<string, boolean> = {};
 
     // Track which preset is in caption edit mode
     let editingCaptionPresetId: string | null = null;
@@ -776,68 +774,51 @@
                                 </div>
                             {/if}
 
-                            <!-- Metadata Input -->
+                            <!-- Metadata Input (text-like with reset to default) -->
                         {:else if currentType === "metadata"}
-                            {#if metadataTextEditMode[preset.id]}
-                                <!-- Text edit mode for metadata -->
-                                {#if isEditingThis}
-                                    <textarea
-                                        value={presetValue?.textValue || ""}
-                                        on:input={(e) =>
-                                            handleTextareaInput(e, preset.id)}
-                                        on:blur={stopEditing}
-                                        on:keydown={(e) =>
-                                            handleTextKeydown(e, preset.id)}
-                                        placeholder="{preset.name} 직접 입력... (Ctrl+S로 저장)"
-                                        class="w-full min-h-[60px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
-                                        use:autoResizeTextarea
-                                        autofocus
-                                    ></textarea>
-                                {:else}
-                                    <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                    <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                    <div
-                                        class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
-                                        on:click={() => startEditing(preset.id)}
-                                        title="클릭하여 편집"
-                                    >
-                                        {#if presetValue?.textValue && presetValue.textValue.trim()}
-                                            <p class="text-gray-700 whitespace-pre-wrap break-words">
-                                                {presetValue.textValue}
-                                            </p>
-                                        {:else}
-                                            <p class="text-gray-400 italic">
-                                                클릭하여 입력...
-                                            </p>
-                                        {/if}
-                                    </div>
-                                {/if}
-                                <button
-                                    class="mt-1 text-[10px] text-purple-600 hover:text-purple-800"
-                                    on:click={() => { metadataTextEditMode[preset.id] = false; metadataTextEditMode = { ...metadataTextEditMode }; }}
-                                >
-                                    Metadata 선택으로 돌아가기
-                                </button>
-                            {:else}
-                                <!-- Metadata select mode -->
-                                <select
+                            {#if isEditingThis}
+                                <textarea
                                     value={presetValue?.textValue || ""}
-                                    on:change={(e) => {
-                                        updateTextValue(preset.id, e.currentTarget.value);
-                                    }}
-                                    class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                                    on:input={(e) =>
+                                        handleTextareaInput(e, preset.id)}
+                                    on:blur={stopEditing}
+                                    on:keydown={(e) =>
+                                        handleTextKeydown(e, preset.id)}
+                                    placeholder="{preset.name} 입력... (Ctrl+S로 저장)"
+                                    class="w-full min-h-[60px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
+                                    use:autoResizeTextarea
+                                    autofocus
+                                ></textarea>
+                            {:else}
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                <div
+                                    class="w-full min-h-[40px] border border-gray-200 rounded px-2 py-1.5 text-xs bg-white cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all"
+                                    on:click={() => startEditing(preset.id)}
+                                    title="클릭하여 편집"
                                 >
-                                    <option value="">-- Metadata 선택 --</option>
-                                    {#each availableAttributes as attr (attr.key)}
-                                        <option value={attr.display_name}>{attr.display_name}</option>
-                                    {/each}
-                                </select>
-                                <button
-                                    class="mt-1 text-[10px] text-gray-500 hover:text-gray-700"
-                                    on:click={() => { metadataTextEditMode[preset.id] = true; metadataTextEditMode = { ...metadataTextEditMode }; }}
-                                >
-                                    직접 텍스트 입력
-                                </button>
+                                    {#if presetValue?.textValue && presetValue.textValue.trim()}
+                                        <p class="text-gray-700 whitespace-pre-wrap break-words">
+                                            {presetValue.textValue}
+                                        </p>
+                                    {:else}
+                                        <p class="text-gray-400 italic">
+                                            클릭하여 입력...
+                                        </p>
+                                    {/if}
+                                </div>
+                            {/if}
+                            {#if preset.defaultMetadataKey}
+                                {@const defaultAttr = availableAttributes.find(a => a.key === preset.defaultMetadataKey)}
+                                {#if defaultAttr && presetValue?.textValue !== defaultAttr.display_name}
+                                    <button
+                                        class="mt-1 text-[10px] text-gray-400 hover:text-purple-600 transition-colors"
+                                        on:click={() => updateTextValue(preset.id, defaultAttr.display_name)}
+                                        title="기본값: {defaultAttr.display_name}"
+                                    >
+                                        기본값으로 돌리기
+                                    </button>
+                                {/if}
                             {/if}
 
                             <!-- Capture Input -->

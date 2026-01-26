@@ -26,9 +26,6 @@
         startCapture: { presetId: string };
     }>();
 
-    // Track which presets are in text-edit mode (for metadata type)
-    let metadataTextEditMode: Record<string, boolean> = {};
-
     // State for each preset value
     let presetInputs: Record<string, {
         type: CoreStepInputType | null;
@@ -266,45 +263,30 @@
                                 rows="3"
                             ></textarea>
 
-                        <!-- Metadata Input -->
+                        <!-- Metadata Input (text-like with reset to default) -->
                         {:else if input.type === 'metadata'}
-                            {#if metadataTextEditMode[preset.id]}
-                                <!-- Text edit mode -->
-                                <textarea
-                                    bind:value={input.textValue}
-                                    placeholder="{preset.name} 직접 입력..."
-                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-                                    rows="3"
-                                ></textarea>
-                                <button
-                                    class="mt-1 text-xs text-purple-600 hover:text-purple-800"
-                                    on:click={() => { metadataTextEditMode[preset.id] = false; metadataTextEditMode = { ...metadataTextEditMode }; }}
-                                >
-                                    Metadata 선택으로 돌아가기
-                                </button>
-                            {:else}
-                                <!-- Metadata select mode -->
-                                <select
-                                    value={input.textValue}
-                                    on:change={(e) => {
-                                        if (presetInputs[preset.id]) {
-                                            presetInputs[preset.id].textValue = e.currentTarget.value;
-                                            presetInputs = { ...presetInputs };
-                                        }
-                                    }}
-                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
-                                >
-                                    <option value="">-- Metadata 선택 --</option>
-                                    {#each availableAttributes as attr (attr.key)}
-                                        <option value={attr.display_name}>{attr.display_name}</option>
-                                    {/each}
-                                </select>
-                                <button
-                                    class="mt-1 text-xs text-gray-500 hover:text-gray-700"
-                                    on:click={() => { metadataTextEditMode[preset.id] = true; metadataTextEditMode = { ...metadataTextEditMode }; }}
-                                >
-                                    직접 텍스트 입력
-                                </button>
+                            <textarea
+                                bind:value={input.textValue}
+                                placeholder="{preset.name} 입력..."
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                                rows="3"
+                            ></textarea>
+                            {#if preset.defaultMetadataKey}
+                                {@const defaultAttr = availableAttributes.find(a => a.key === preset.defaultMetadataKey)}
+                                {#if defaultAttr && input.textValue !== defaultAttr.display_name}
+                                    <button
+                                        class="mt-1 text-xs text-gray-400 hover:text-purple-600 transition-colors"
+                                        on:click={() => {
+                                            if (presetInputs[preset.id] && defaultAttr) {
+                                                presetInputs[preset.id].textValue = defaultAttr.display_name;
+                                                presetInputs = { ...presetInputs };
+                                            }
+                                        }}
+                                        title="기본값: {defaultAttr.display_name}"
+                                    >
+                                        기본값으로 돌리기
+                                    </button>
+                                {/if}
                             {/if}
 
                         <!-- Capture Input -->
