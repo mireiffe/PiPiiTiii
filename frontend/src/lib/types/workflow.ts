@@ -859,6 +859,22 @@ export function getLayoutRows(
 }
 
 /**
+ * Build a map from unified step ID to its 1-based display number.
+ * This is the single source of truth for step numbering across the UI.
+ * All components that need to display step numbers should use this map
+ * instead of computing their own indices.
+ */
+export function buildUnifiedDisplayMap(
+    sortedUnifiedSteps: UnifiedStepItem[]
+): Map<string, number> {
+    const map = new Map<string, number>();
+    sortedUnifiedSteps.forEach((step, idx) => {
+        map.set(step.id, idx + 1);
+    });
+    return map;
+}
+
+/**
  * Get all phase types from workflow data (including implicit 'main' phase info)
  */
 export function getAllPhaseTypes(workflowData: ProjectWorkflowData): PhaseType[] {

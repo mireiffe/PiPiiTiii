@@ -34,6 +34,7 @@
         createUnifiedCoreStep,
         createUnifiedRegularStep,
         syncUnifiedToLegacy,
+        buildUnifiedDisplayMap,
         // Key step linking
         saveKeyStepLinks,
         confirmWorkflow,
@@ -177,6 +178,9 @@
     $: sortedUnifiedSteps = [...(workflowData.unifiedSteps ?? [])].sort(
         (a, b) => a.order - b.order,
     );
+
+    // Single source of truth: step ID → 1-based display number
+    $: unifiedDisplayMap = buildUnifiedDisplayMap(sortedUnifiedSteps);
 
     // Count of regular steps (for display when hidden)
     $: regularStepCount = sortedUnifiedSteps.filter(
@@ -726,40 +730,15 @@
     export function getCaptureOverlays() {
         const overlays: any[] = [];
 
-        // Build a map of step ID to display info based on layoutRows
-        // This ensures overlay numbering matches the UI list exactly
-        const stepDisplayMap = new Map<
+        // Build supporter info from layoutRows (for phase-name display)
+        const supporterInfo = new Map<
             string,
-            {
-                displayNumber: number | string; // number for main steps, phase name for supporters
-                isSupporter: boolean;
-                parentStepNumber?: number;
-                phaseName?: string;
-            }
+            { parentStepId: string; phaseName?: string }
         >();
-
-        // Build unified display numbers matching the UI (UnifiedStepList uses idx+1)
-        const unifiedDisplayNumbers = new Map<string, number>();
-        sortedUnifiedSteps.forEach((unifiedStep, idx) => {
-            if (unifiedStep.type === "regular") {
-                unifiedDisplayNumbers.set(unifiedStep.id, idx + 1);
-            }
-        });
-
         layoutRows.forEach((row) => {
-            const mainStepNumber =
-                unifiedDisplayNumbers.get(row.mainStep.id) ?? 0;
-            stepDisplayMap.set(row.mainStep.id, {
-                displayNumber: mainStepNumber,
-                isSupporter: false,
-            });
-
-            // Supporters get their parent's number + phase name
             row.supporters.forEach((supporter) => {
-                stepDisplayMap.set(supporter.step.id, {
-                    displayNumber: supporter.phase?.name || "위상",
-                    isSupporter: true,
-                    parentStepNumber: mainStepNumber,
+                supporterInfo.set(supporter.step.id, {
+                    parentStepId: row.mainStep.id,
                     phaseName: supporter.phase?.name,
                 });
             });
@@ -772,7 +751,10 @@
             stepIndex++
         ) {
             const step = workflowData.steps[stepIndex];
-            const displayInfo = stepDisplayMap.get(step.id);
+            const supInfo = supporterInfo.get(step.id);
+            const isSupporter = !!supInfo;
+            // Use the shared unifiedDisplayMap (single source of truth)
+            const displayNumber = unifiedDisplayMap.get(step.id) ?? stepIndex + 1;
             const color = EVIDENCE_COLORS[colorIndex % EVIDENCE_COLORS.length];
             let captureIndexInStep = 0;
 
@@ -781,14 +763,14 @@
                     ...capture,
                     stepId: step.id,
                     workflowName,
-                    stepNumber: displayInfo?.isSupporter
-                        ? displayInfo.parentStepNumber // Use parent's number for supporters
-                        : (displayInfo?.displayNumber ?? stepIndex + 1),
+                    stepNumber: isSupporter
+                        ? (unifiedDisplayMap.get(supInfo!.parentStepId) ?? displayNumber)
+                        : displayNumber,
                     captureIndexInStep,
                     color,
                     colorIndex,
-                    isSupporter: displayInfo?.isSupporter ?? false,
-                    phaseName: displayInfo?.phaseName,
+                    isSupporter,
+                    phaseName: supInfo?.phaseName,
                 });
                 captureIndexInStep++;
             }
@@ -1385,6 +1367,7 @@
                         {workflowData}
                         {workflowSteps}
                         {globalPhases}
+                        {unifiedDisplayMap}
                     />
                 {:else}
                     <!-- Selection Toolbar (shown when items are selected) -->
@@ -1415,6 +1398,7 @@
                     <!-- ========== Unified Step List ========== -->
                     <UnifiedStepList
                         {sortedUnifiedSteps}
+                        {unifiedDisplayMap}
                         {workflowSteps}
                         {coreStepsSettings}
                         {projectId}
@@ -1522,6 +1506,7 @@
     isOpen={showKeyStepLinkingWizard}
     coreStepsToLink={coreStepsRequiringLinking}
     allSteps={sortedUnifiedSteps}
+    {unifiedDisplayMap}
     coreStepDefinitions={coreStepsSettings.definitions}
     {workflowSteps}
     existingLinks={workflowData.keyStepLinks ?? []}

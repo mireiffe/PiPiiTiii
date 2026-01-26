@@ -101,6 +101,14 @@ When adding new fields to frontend TypeScript types (e.g., in `workflow.ts`), **
 
 Example: Adding `requiresKeyStepLinking` to `CoreStepDefinition` in TypeScript requires also adding it to the Pydantic model in `backend/main.py`.
 
+### Step Display Number (Single Source of Truth)
+
+Step display numbers (1-based index shown in the UI and overlays) must come from `buildUnifiedDisplayMap()` in `workflow.ts`. This function takes `sortedUnifiedSteps` and returns a `Map<string, number>` mapping step ID to display number.
+
+- **WorkflowSection.svelte** derives `$: unifiedDisplayMap = buildUnifiedDisplayMap(sortedUnifiedSteps)` and passes it to child components.
+- **Never compute display numbers independently** (e.g., `rowIndex + 1` from `layoutRows` or `idx + 1` inline). Always read from the shared `unifiedDisplayMap`.
+- Components that need display numbers: `UnifiedStepList`, `D3WorkflowGraph`, `KeyStepLinkingWizard`, `getCaptureOverlays()`.
+
 ## API Endpoints
 
 - `POST /api/upload` - Upload PPT, start background parsing

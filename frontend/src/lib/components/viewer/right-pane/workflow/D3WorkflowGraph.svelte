@@ -16,6 +16,7 @@
     export let workflowData: ProjectWorkflowData;
     export let workflowSteps: WorkflowSteps;
     export let globalPhases: PhaseType[] = [];
+    export let unifiedDisplayMap: Map<string, number> = new Map();
     export let onNodeClick: ((stepId: string) => void) | undefined = undefined;
 
     let svgContainer: HTMLDivElement;
@@ -134,7 +135,7 @@
                 width: NODE_WIDTH,
                 height: NODE_HEIGHT,
                 color,
-                stepIndex: rowIndex,
+                stepIndex: (unifiedDisplayMap.get(mainStep.id) ?? rowIndex + 1) - 1,
                 isSupporter: false,
             };
             nodes.push(mainNode);
