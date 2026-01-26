@@ -349,16 +349,16 @@
                                 title={overlay.isActionCapture ? `Action: ${overlay.actionName || ''}\nCause: ${overlay.causeName || ''}` : overlay.label || ''}
                             >
                                 <div
-                                    class="absolute -top-4 left-0 px-1 py-px text-[7px] font-bold text-white rounded-t whitespace-nowrap
+                                    class="absolute -top-4 left-0 px-1 py-px text-xs font-bold text-white rounded-t whitespace-nowrap
                                            {isHighlighted ? 'scale-110' : ''}"
                                     style="background-color: {color.border};"
                                 >
                                     {#if overlay.isActionCapture}
                                         A{overlay.colorIndex + 1}
                                     {:else if overlay.isSupporter}
-                                        {overlay.workflowName}: #{overlay.stepNumber}({overlay.phaseName || '위상'})-{overlay.captureIndexInStep + 1}
+                                        #{overlay.stepNumber}({overlay.phaseName || '위상'})-{overlay.captureIndexInStep + 1}
                                     {:else}
-                                        {overlay.workflowName}: #{overlay.stepNumber}-{overlay.captureIndexInStep + 1}
+                                        #{overlay.stepNumber}-{overlay.captureIndexInStep + 1}
                                     {/if}
                                 </div>
                                 {#if isHighlighted}
