@@ -27,9 +27,12 @@ from typing import Any, Dict, List, Optional, Tuple
 # Each entry maps a field_id (key in summary_data_llm JSON) to an extraction mode.
 #
 #   "direct"         -> value stored as-is; column name = field_id
-#   "markdown_table" -> value is a markdown table with two columns (key | value).
-#                       Parsed into a dict, then each dict entry becomes a column
-#                       named {field_id}_{sanitized_subkey}.
+#   "markdown_table" -> value is a horizontal markdown table:
+#                         | key1 | key2 | ... |
+#                         |------|------|-----|
+#                         | val1 | val2 | ... |
+#                       Headers become dict keys, first data row becomes values.
+#                       Each entry becomes a column named {field_id}_{header}.
 #
 # Example:
 #   EXTRACTION_CONFIG = [
@@ -54,17 +57,16 @@ DB_PATH = os.path.join(BASE_DIR, "backend", "data", "projects.db")
 # Markdown table parser
 # ---------------------------------------------------------------------------
 def parse_markdown_table(md_text: str) -> Dict[str, str]:
-    """Parse a two-column markdown table into a {key: value} dict.
+    """Parse a horizontal markdown table into a {header: value} dict.
 
     Accepts tables like:
-        | Key       | Value   |
-        |-----------|---------|
-        | some_key  | val1    |
-        | other_key | val2    |
+        | key1 | key2 | key3 |
+        |------|------|------|
+        | val1 | val2 | val3 |
 
-    The first column becomes the dict key, the second becomes the value.
-    The header row and separator row are skipped.
+    The header row provides dict keys, the first data row provides values.
     Handles tables with or without leading/trailing pipes.
+    If multiple data rows exist, only the first is used.
     """
     lines = md_text.strip().splitlines()
     result: Dict[str, str] = {}
@@ -72,29 +74,17 @@ def parse_markdown_table(md_text: str) -> Dict[str, str]:
     table_lines: List[str] = []
     for line in lines:
         stripped = line.strip()
-        # A table line must contain a pipe character
         if "|" in stripped:
             table_lines.append(stripped)
 
     if len(table_lines) < 3:
-        # Not enough lines for header + separator + at least 1 data row
+        # Need at least: header + separator + 1 data row
         return result
 
-    # Determine which lines are separators (contain only |, -, :, spaces)
     def is_separator(line: str) -> bool:
         return bool(re.match(r"^[\s|:\-]+$", line))
 
-    data_start = 0
-    for i, tl in enumerate(table_lines):
-        if is_separator(tl):
-            data_start = i + 1
-            break
-    else:
-        # No separator found – treat line 1 as separator (common format)
-        data_start = 2
-
     def split_cells(line: str) -> List[str]:
-        # Remove leading/trailing pipes and split
         line = line.strip()
         if line.startswith("|"):
             line = line[1:]
@@ -102,15 +92,33 @@ def parse_markdown_table(md_text: str) -> Dict[str, str]:
             line = line[:-1]
         return [c.strip() for c in line.split("|")]
 
-    for tl in table_lines[data_start:]:
+    # Find header: the line right before the first separator
+    header_idx = None
+    sep_idx = None
+    for i, tl in enumerate(table_lines):
         if is_separator(tl):
-            continue
-        cells = split_cells(tl)
-        if len(cells) >= 2:
-            key = cells[0].strip()
-            value = cells[1].strip()
-            if key:
-                result[key] = value
+            sep_idx = i
+            header_idx = i - 1 if i > 0 else None
+            break
+
+    if header_idx is None or sep_idx is None:
+        return result
+
+    headers = split_cells(table_lines[header_idx])
+
+    # First data row = line right after the separator
+    data_lines = [
+        tl for tl in table_lines[sep_idx + 1:] if not is_separator(tl)
+    ]
+    if not data_lines:
+        return result
+
+    values = split_cells(data_lines[0])
+
+    for key, val in zip(headers, values):
+        key = key.strip()
+        if key:
+            result[key] = val.strip()
 
     return result
 
