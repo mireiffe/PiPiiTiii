@@ -17,6 +17,7 @@
 
     // Props
     export let sortedUnifiedSteps: UnifiedStepItem[] = [];
+    export let unifiedDisplayMap: Map<string, number> = new Map();
     export let workflowSteps: WorkflowSteps;
     export let coreStepsSettings: CoreStepsSettings;
     export let projectId: string = "";
@@ -201,7 +202,7 @@
                             bind:this={coreStepItemRefs[unifiedStep.id]}
                             instance={asCoreStepInstance(unifiedStep)}
                             definition={csDef}
-                            displayNumber={idx + 1}
+                            displayNumber={unifiedDisplayMap.get(unifiedStep.id) ?? idx + 1}
                             isExpanded={expandedCoreStepId === unifiedStep.id}
                             {projectId}
                             {slideWidth}
@@ -371,7 +372,7 @@
                             {projectId}
                             {slideWidth}
                             {slideHeight}
-                            displayNumber={idx + 1}
+                            displayNumber={unifiedDisplayMap.get(unifiedStep.id) ?? idx + 1}
                             isExpanded={expandedStepId === unifiedStep.id}
                             isCapturing={captureTargetStepId === unifiedStep.id}
                             isAddingAttachment={addingAttachmentToStepId ===

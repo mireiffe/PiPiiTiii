@@ -14,6 +14,7 @@
     export let isOpen: boolean = false;
     export let coreStepsToLink: UnifiedStepItem[] = []; // Core Steps that need linking
     export let allSteps: UnifiedStepItem[] = []; // All unified steps
+    export let unifiedDisplayMap: Map<string, number> = new Map();
     export let coreStepDefinitions: CoreStepDefinition[] = [];
     export let workflowSteps: { rows: WorkflowStepRow[] } | null = null;
     export let existingLinks: KeyStepLinkingData[] = [];
@@ -91,10 +92,9 @@
         }
     }
 
-    // Get step index in the workflow
+    // Get step index in the workflow (uses shared display map)
     function getStepIndex(step: UnifiedStepItem): number {
-        const sortedSteps = [...allSteps].sort((a, b) => a.order - b.order);
-        return sortedSteps.findIndex((s) => s.id === step.id) + 1;
+        return unifiedDisplayMap.get(step.id) ?? 0;
     }
 
     // Toggle step selection
