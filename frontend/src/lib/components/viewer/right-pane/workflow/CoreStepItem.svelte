@@ -1118,6 +1118,56 @@
                                     캡처
                                 </button>
                             {/if}
+                            <!-- Caption for capture (always visible, preset-level for when no captures exist) -->
+                            {#if captures.length === 0}
+                                {#if editingCaptionPresetId === preset.id}
+                                    <textarea
+                                        value={presetValue?.imageCaption || ""}
+                                        on:input={(e) => handleCaptionInput(e, preset.id)}
+                                        on:blur={stopEditingCaption}
+                                        on:keydown={handleCaptionKeydown}
+                                        placeholder="캡션 입력... (Ctrl+S로 저장)"
+                                        class="w-full mt-1.5 min-h-[36px] border border-purple-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white overflow-hidden"
+                                        use:autoResizeTextarea
+                                        autofocus
+                                    ></textarea>
+                                {:else}
+                                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                    <div
+                                        class="w-full mt-1.5 min-h-[24px] border rounded px-2 py-1 text-xs bg-white transition-all
+                                            {generatingPresetIds.has(preset.id)
+                                            ? 'border-indigo-300 bg-indigo-50/30'
+                                            : 'border-gray-200 cursor-pointer hover:border-purple-300 hover:bg-purple-50/30'}"
+                                        on:click={() => {
+                                            if (!generatingPresetIds.has(preset.id)) {
+                                                startEditingCaption(preset.id);
+                                            }
+                                        }}
+                                        title={generatingPresetIds.has(preset.id) ? "생성 중..." : "클릭하여 캡션 편집"}
+                                    >
+                                        {#if presetValue?.imageCaption && presetValue.imageCaption.trim()}
+                                            <p class="text-gray-700 whitespace-pre-wrap break-words">{presetValue.imageCaption}</p>
+                                        {:else if generatingPresetIds.has(preset.id)}
+                                            <p class="text-indigo-400 italic">생성 중...</p>
+                                        {:else}
+                                            <p class="text-gray-400 italic">캡션 입력...</p>
+                                        {/if}
+                                    </div>
+                                {/if}
+                                {#if preset.defaultMetadataKey}
+                                    {@const defaultCaptionVal = projectAttributeValues[preset.defaultMetadataKey]}
+                                    {#if defaultCaptionVal != null && presetValue?.imageCaption !== String(defaultCaptionVal)}
+                                        <button
+                                            class="mt-1 text-[10px] text-gray-400 hover:text-purple-600 transition-colors"
+                                            on:click={() => updateCaption(preset.id, String(defaultCaptionVal))}
+                                            title="캡션 기본값: {defaultCaptionVal}"
+                                        >
+                                            캡션 기본값으로 돌리기
+                                        </button>
+                                    {/if}
+                                {/if}
+                            {/if}
 
                             <!-- Image Clipboard Input -->
                         {:else if currentType === "image_clipboard"}
