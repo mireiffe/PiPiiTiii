@@ -16,6 +16,7 @@
     export let enableReparseAll = true;
     export let enableReparseSlide = true;
     export let enableDownload = true;
+    export let isKept = false;
 
     const dispatch = createEventDispatcher();
 
@@ -25,14 +26,28 @@
 <div
     class="bg-white border-b border-gray-200 flex flex-col shrink-0 z-10"
 >
-    <!-- Top row: PPT Title -->
-    <div class="px-4 py-2 border-b border-gray-100">
+    <!-- Top row: PPT Title + Keep Button -->
+    <div class="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
         <h1
             class="font-bold text-gray-800 text-base"
             title={pptFileName}
         >
             {pptFileName}
         </h1>
+        <button
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-150
+                   {isKept
+                ? 'bg-teal-50 text-teal-700 border-teal-300 hover:bg-teal-100'
+                : 'bg-white text-gray-500 border-gray-300 hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50'}"
+            on:click={() => dispatch("toggleKeep")}
+            title={isKept ? "보관 해제" : "보관하기"}
+        >
+            <svg class="w-4 h-4" fill={isKept ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+            </svg>
+            <span>{isKept ? "보관됨" : "보관하기"}</span>
+        </button>
     </div>
 
     <!-- Bottom row: Controls -->

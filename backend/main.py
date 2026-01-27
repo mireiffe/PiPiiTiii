@@ -214,6 +214,7 @@ class ProjectSummary(BaseModel):
     subject: str = ""
     last_modified_by: str = ""
     revision_number: str = ""
+    kept: bool = False
 
     class Config:
         extra = "allow"
@@ -375,6 +376,8 @@ def list_projects():
     for p in projects:
         p_dict = dict(p)
         p_dict["name"] = p_dict.get("original_filename", "Unknown")
+        # Convert kept integer to bool
+        p_dict["kept"] = bool(p_dict.get("kept", 0))
         summary_list.append(ProjectSummary(**p_dict))
     return summary_list
 
@@ -1262,6 +1265,22 @@ def download_project(project_id: str):
         filename=output_filename,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
+
+
+class ProjectKeptUpdate(BaseModel):
+    kept: bool
+
+
+@app.post("/api/project/{project_id}/keep")
+def update_project_kept(project_id: str, update: ProjectKeptUpdate):
+    """Update the kept (archived) status of a project."""
+    try:
+        db.update_project_kept(project_id, update.kept)
+        return {"status": "success", "kept": update.kept}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update kept status: {str(e)}"
+        )
 
 
 @app.get("/api/settings/prompt_version")
