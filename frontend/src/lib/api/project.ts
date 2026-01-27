@@ -287,6 +287,16 @@ export async function updateProjectWorkflow(
     });
 }
 
+// ========== Keep (Archive) ==========
+
+export async function updateProjectKept(id: string, kept: boolean): Promise<Response> {
+    return apiFetch(`/api/project/${id}/keep`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kept }),
+    });
+}
+
 // ========== Attributes ==========
 
 export async function fetchAllAttributes(): Promise<Response> {

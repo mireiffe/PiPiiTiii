@@ -49,6 +49,11 @@ class Database:
             cursor.execute("ALTER TABLE projects ADD COLUMN workflow_data TEXT")
             print("Added workflow_data column to projects table")
 
+        # Migration: Add kept column for archiving projects
+        if "kept" not in columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN kept INTEGER DEFAULT 0")
+            print("Added kept column to projects table")
+
         # Migration: Remove phenomenon_data column (deprecated, data moved to workflow_data)
         if "phenomenon_data" in columns:
             try:
@@ -419,6 +424,17 @@ class Database:
         cursor.execute(
             "UPDATE projects SET workflow_data = ? WHERE id = ?",
             (json.dumps(workflow_data, ensure_ascii=False), project_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def update_project_kept(self, project_id: str, kept: bool):
+        """Update the kept (archived) status of a project."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET kept = ? WHERE id = ?",
+            (1 if kept else 0, project_id),
         )
         conn.commit()
         conn.close()

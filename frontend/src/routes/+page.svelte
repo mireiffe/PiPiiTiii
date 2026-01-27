@@ -17,6 +17,7 @@
     batchGenerateSummary,
     validateWorkflows,
     fetchWorkflowConfirmationStatus,
+    updateProjectKept,
   } from "$lib/api/project";
   import { ENABLE_DOWNLOAD } from "$lib/api/client";
 
@@ -107,6 +108,9 @@
   // Workflow confirmed projects
   /** @type {Set<string>} */
   let workflowConfirmedProjects = new Set();
+
+  // Keep (archive) viewing mode
+  let showKeptOnly = false;
 
   // Workflow filter toggles (persisted in sessionStorage)
   const WF_FILTER_STORAGE_KEY = "pipiiitiii_workflow_filters";
@@ -211,6 +215,13 @@
 
   $: filteredProjects = projects
     .filter((p) => {
+      // Keep filter: when showKeptOnly, show only kept; otherwise, hide kept
+      if (showKeptOnly) {
+        if (!p.kept) return false;
+      } else {
+        if (p.kept) return false;
+      }
+
       const term = searchTerm.toLowerCase();
       const matchesSearch =
         p.name.toLowerCase().includes(term) ||
@@ -260,8 +271,8 @@
         }
       }
 
-      // Workflow status filter
-      if (activeWorkflowFilters.size > 0) {
+      // Workflow status filter (only apply when not in kept mode)
+      if (!showKeptOnly && activeWorkflowFilters.size > 0) {
         const matchesAny =
           (activeWorkflowFilters.has("needs_definition") &&
             workflowNotStartedProjects.has(p.id)) ||
@@ -622,6 +633,24 @@
   const getSecondaryBadges = (project) =>
     getBadges(project, CARD_CONFIG.footer.secondary);
 
+  async function toggleProjectKept(projectId, event) {
+    event.stopPropagation();
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return;
+    const newKept = !project.kept;
+    try {
+      const res = await updateProjectKept(projectId, newKept);
+      if (res.ok) {
+        project.kept = newKept;
+        projects = projects; // Trigger reactivity
+      }
+    } catch (e) {
+      console.error("Failed to toggle keep status", e);
+    }
+  }
+
+  $: keptCount = projects.filter((p) => p.kept).length;
+
   function handleSortChange(key) {
     if (sortBy === key) {
       sortDirection = sortDirection === "asc" ? "desc" : "asc";
@@ -833,39 +862,55 @@
         <span class="text-xs font-semibold text-gray-500 mr-1">워크플로우</span>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
-                 {activeWorkflowFilters.size === 0
+                 {!showKeptOnly && activeWorkflowFilters.size === 0
             ? 'bg-gray-800 text-white border-gray-800 shadow-sm'
             : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:bg-gray-50'}"
-          on:click={() => toggleWorkflowFilter("all")}
+          on:click={() => { showKeptOnly = false; toggleWorkflowFilter("all"); }}
         >
           전체
         </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
-                 {activeWorkflowFilters.has('needs_definition')
+                 {!showKeptOnly && activeWorkflowFilters.has('needs_definition')
             ? 'bg-red-500 text-white border-red-500 shadow-sm'
             : 'bg-white text-gray-600 border-gray-300 hover:border-red-300 hover:text-red-600 hover:bg-red-50'}"
-          on:click={() => toggleWorkflowFilter("needs_definition")}
+          on:click={() => { showKeptOnly = false; toggleWorkflowFilter("needs_definition"); }}
         >
           정의 필요
         </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
-                 {activeWorkflowFilters.has('needs_confirmation')
+                 {!showKeptOnly && activeWorkflowFilters.has('needs_confirmation')
             ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
             : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50'}"
-          on:click={() => toggleWorkflowFilter("needs_confirmation")}
+          on:click={() => { showKeptOnly = false; toggleWorkflowFilter("needs_confirmation"); }}
         >
           확정 필요
         </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
-                 {activeWorkflowFilters.has('confirmed')
+                 {!showKeptOnly && activeWorkflowFilters.has('confirmed')
             ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
             : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'}"
-          on:click={() => toggleWorkflowFilter("confirmed")}
+          on:click={() => { showKeptOnly = false; toggleWorkflowFilter("confirmed"); }}
         >
           확정 완료
+        </button>
+
+        <div class="w-px h-5 bg-gray-300 mx-1"></div>
+
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150 flex items-center gap-1
+                 {showKeptOnly
+            ? 'bg-teal-500 text-white border-teal-500 shadow-sm'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50'}"
+          on:click={() => { showKeptOnly = !showKeptOnly; if (showKeptOnly) activeWorkflowFilters = new Set(); }}
+        >
+          <svg class="w-3 h-3" fill={showKeptOnly ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+          보관됨{keptCount > 0 ? ` (${keptCount})` : ''}
         </button>
       </div>
 
@@ -954,7 +999,9 @@
           </div>
         {:else if filteredProjects.length === 0}
           <div class="p-8 text-center text-gray-500 text-sm">
-            No projects found matching your criteria.
+            {showKeptOnly
+              ? "보관된 프로젝트가 없습니다."
+              : "No projects found matching your criteria."}
           </div>
         {:else}
           <div class="p-4 space-y-3">
@@ -972,31 +1019,48 @@
               {@const isPinned = pinnedProjectIds.has(project.id)}
 
               <div class="relative group">
-                <!-- Pin Button (outside the card button to avoid nesting) -->
-                <button
-                  class="absolute -right-1 -top-1 z-20 w-7 h-7 rounded-full flex items-center justify-center transition-all
-                         {isPinned
-                    ? 'bg-amber-500 text-white shadow-md hover:bg-amber-600'
-                    : 'bg-white border-2 border-gray-200 text-gray-400 opacity-0 group-hover:opacity-100 hover:border-amber-400 hover:text-amber-500'}"
-                  on:click={(e) => togglePinProject(project.id, e)}
-                  title={isPinned ? "고정 해제" : "상단에 고정"}
-                >
-                  <svg class="w-4 h-4 {isPinned ? '' : 'rotate-45'}" fill="currentColor" viewBox="0 0 16 16">
-                    <path
-                      d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5c0 .276-.224 1.5-.5 1.5s-.5-1.224-.5-1.5V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A6 6 0 0 1 5 6.708V2.277a3 3 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354z"
-                    />
-                  </svg>
-                </button>
+                {#if showKeptOnly}
+                  <!-- Un-keep Button (shown only in 보관됨 mode) -->
+                  <button
+                    class="absolute -right-1 -top-1 z-20 flex items-center gap-1 px-2 py-1 rounded-full bg-teal-500 text-white text-[10px] font-medium shadow-md hover:bg-teal-600 transition-all"
+                    on:click={(e) => toggleProjectKept(project.id, e)}
+                    title="보관 해제"
+                  >
+                    <svg class="w-3 h-3" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    보관 해제
+                  </button>
+                {:else}
+                  <!-- Pin Button (outside the card button to avoid nesting) -->
+                  <button
+                    class="absolute -right-1 -top-1 z-20 w-7 h-7 rounded-full flex items-center justify-center transition-all
+                           {isPinned
+                      ? 'bg-amber-500 text-white shadow-md hover:bg-amber-600'
+                      : 'bg-white border-2 border-gray-200 text-gray-400 opacity-0 group-hover:opacity-100 hover:border-amber-400 hover:text-amber-500'}"
+                    on:click={(e) => togglePinProject(project.id, e)}
+                    title={isPinned ? "고정 해제" : "상단에 고정"}
+                  >
+                    <svg class="w-4 h-4 {isPinned ? '' : 'rotate-45'}" fill="currentColor" viewBox="0 0 16 16">
+                      <path
+                        d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5c0 .276-.224 1.5-.5 1.5s-.5-1.224-.5-1.5V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A6 6 0 0 1 5 6.708V2.277a3 3 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354z"
+                      />
+                    </svg>
+                  </button>
+                {/if}
 
                 <button
                   class="w-full text-left p-4 rounded-xl transition-all duration-200 border bg-white flex flex-col gap-2 relative
                     {selectionMode && isChecked
                     ? 'border-purple-400 ring-1 ring-purple-300 bg-purple-50/50'
-                    : isPinned
-                      ? 'border-amber-400 ring-1 ring-amber-300 bg-amber-50/30 shadow-md'
-                      : isSelected
-                        ? 'border-blue-500 ring-1 ring-blue-500 shadow-md z-10'
-                        : 'border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300'}
+                    : showKeptOnly
+                      ? 'border-teal-300 ring-1 ring-teal-200 bg-teal-50/30 shadow-sm hover:shadow-md hover:border-teal-400'
+                      : isPinned
+                        ? 'border-amber-400 ring-1 ring-amber-300 bg-amber-50/30 shadow-md'
+                        : isSelected
+                          ? 'border-blue-500 ring-1 ring-blue-500 shadow-md z-10'
+                          : 'border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300'}
                     {batchGenerating &&
                   batchProgress.currentProjectId === project.id
                     ? 'animate-pulse'

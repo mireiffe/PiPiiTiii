@@ -15,6 +15,7 @@
 
     import {
         fetchProject,
+        fetchProjects,
         updateShapePositions,
         updateShapeDescription,
         reparseProject,
@@ -31,6 +32,7 @@
         updateProjectWorkflow,
         fetchAllAttributes,
         fetchProjectAttributes,
+        updateProjectKept,
     } from "$lib/api/project";
     import {
         ENABLE_REPARSE_ALL,
@@ -127,6 +129,9 @@
     // Right pane fullscreen mode
     let rightPaneFullscreen = false;
 
+    // Keep (archive) state
+    let isKept = false;
+
     // Initialize selected slides (first 3 by default)
     $: if (project && selectedSlideIndices.length === 0) {
         selectedSlideIndices = project.slides
@@ -179,6 +184,7 @@
         await loadSettings();
         await loadSummary();
         await loadWorkflow();
+        await loadKeptStatus();
         window.addEventListener("resize", updateScale);
         window.addEventListener("keydown", handleKeyDown);
         return () => {
@@ -318,6 +324,33 @@
             }
         } catch (e) {
             console.error("Failed to load workflow", e);
+        }
+    }
+
+    async function loadKeptStatus() {
+        try {
+            const res = await fetchProjects();
+            if (res.ok) {
+                const projects = await res.json();
+                const current = projects.find((p: any) => p.id === projectId);
+                if (current) {
+                    isKept = !!current.kept;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load kept status", e);
+        }
+    }
+
+    async function toggleKeep() {
+        const newKept = !isKept;
+        try {
+            const res = await updateProjectKept(projectId, newKept);
+            if (res.ok) {
+                isKept = newKept;
+            }
+        } catch (e) {
+            console.error("Failed to toggle keep status", e);
         }
     }
 
@@ -1125,6 +1158,7 @@
                 enableReparseAll={ENABLE_REPARSE_ALL}
                 enableReparseSlide={ENABLE_REPARSE_SLIDE}
                 enableDownload={ENABLE_DOWNLOAD}
+                {isKept}
                 on:undo={undo}
                 on:redo={redo}
                 on:saveState={handleSaveState}
@@ -1136,6 +1170,7 @@
                 on:download={handleDownload}
                 on:zoomIn={() => (scale *= 1.1)}
                 on:zoomOut={() => (scale *= 0.9)}
+                on:toggleKeep={toggleKeep}
             />
 
             <!-- Canvas -->
