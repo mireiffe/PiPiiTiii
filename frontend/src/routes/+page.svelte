@@ -108,9 +108,26 @@
   /** @type {Set<string>} */
   let workflowConfirmedProjects = new Set();
 
-  // Workflow filter toggles
+  // Workflow filter toggles (persisted in sessionStorage)
+  const WF_FILTER_STORAGE_KEY = "pipiiitiii_workflow_filters";
   /** @type {Set<string>} */
-  let activeWorkflowFilters = new Set();
+  let activeWorkflowFilters = loadWorkflowFilters();
+
+  function loadWorkflowFilters() {
+    try {
+      const stored = sessionStorage.getItem(WF_FILTER_STORAGE_KEY);
+      if (stored) {
+        return new Set(JSON.parse(stored));
+      }
+    } catch (_) {}
+    return new Set();
+  }
+
+  function saveWorkflowFilters() {
+    try {
+      sessionStorage.setItem(WF_FILTER_STORAGE_KEY, JSON.stringify([...activeWorkflowFilters]));
+    } catch (_) {}
+  }
 
   // Pinned projects (stored in localStorage)
   const PINNED_STORAGE_KEY = "pipiiitiii_pinned_projects";
@@ -418,6 +435,7 @@
       }
       activeWorkflowFilters = newFilters;
     }
+    saveWorkflowFilters();
   }
 
   function toggleSelectionMode() {
