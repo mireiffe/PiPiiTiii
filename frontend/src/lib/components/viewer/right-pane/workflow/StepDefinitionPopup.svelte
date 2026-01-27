@@ -310,15 +310,15 @@
                                     {step.values["step_category"] || "ETC"}
                                 </span>
                                 <span class="text-xs font-medium text-gray-800 group-hover:text-blue-700 break-words leading-snug flex-1">
-                                    {step.values["purpose"] || "목적 없음"}
+                                    {workflowSteps.columns
+                                    .filter(col => col.id !== "step_category" && col.id !== "purpose")
+                                    .map(col => step.values[col.id])
+                                    .filter(Boolean)
+                                    .join(" / ") || "-"}
                                 </span>
                             </div>
                             <div class="text-[10px] text-gray-400 pl-0.5 break-words leading-snug line-clamp-2">
-                              {workflowSteps.columns
-                                .filter(col => col.id !== "step_category" && col.id !== "purpose")
-                                .map(col => step.values[col.id])
-                                .filter(Boolean)
-                                .join(" / ") || "-"}
+                                {step.values["purpose"] || "목적 없음"}                              
                             </div>
                         </div>
 
