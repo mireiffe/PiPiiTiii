@@ -60,7 +60,7 @@
         unifiedMoveUp: { idx: number };
         unifiedMoveDown: { idx: number };
         unifiedCoreStepUpdate: { event: CustomEvent; unifiedStepId: string };
-        coreStepStartCapture: { instanceId: string; presetId: string };
+        coreStepStartCapture: { instanceId: string; presetId: string; captureId?: string };
         coreStepImagePaste: { event: CustomEvent; instanceId: string };
         coreStepImageClick: { event: CustomEvent; instanceId: string };
         // Regular Step events
@@ -237,6 +237,7 @@
                                 dispatch("coreStepStartCapture", {
                                     instanceId: unifiedStep.id,
                                     presetId: e.detail.presetId,
+                                    captureId: e.detail.captureId,
                                 })}
                             on:imagePaste={(e) =>
                                 dispatch("coreStepImagePaste", {
