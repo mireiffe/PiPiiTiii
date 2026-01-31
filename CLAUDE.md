@@ -26,6 +26,16 @@ cd frontend
 npm run dev  # http://localhost:5173
 ```
 
+### Test & Lint
+
+```bash
+# Run all tests and lints
+uv run pytest tests/                    # Backend tests (pytest)
+cd frontend && npm run test -- --run    # Frontend tests (vitest)
+cd frontend && npm run lint             # Frontend lint (svelte-check)
+uv run ruff check .                     # Backend lint (ruff)
+```
+
 ## Architecture
 
 ### Backend Structure

@@ -1,6 +1,6 @@
 <script>
     import { createEventDispatcher } from "svelte";
-    import WorkflowSection from "./right-pane/WorkflowSection.svelte";
+    import KeyInfoSection from "./right-pane/KeyInfoSection.svelte";
     import SummarySection from "./right-pane/SummarySection.svelte";
     import ObjectsSection from "./right-pane/ObjectsSection.svelte";
 
@@ -8,10 +8,6 @@
     export let rightPaneWidth = 300;
     export let expandedSection = null;
     export let settings;
-    export let allowEdit;
-    export let savingWorkflow;
-    export let captureMode = false;
-    export let workflowSectionRef = null;
     export let summaryData;
     export let summaryDataLLM;
     export let savingSummary;
@@ -28,72 +24,18 @@
     export let slideWidth = 960;  // Original slide width for capture preview
     export let slideHeight = 540;  // Original slide height for capture preview
 
-    // Tutorial mode indicator
-    export let isTutorialMode = false;
-
-    // Phenomenon attribute data for metadata presets
-    export let availableAttributes = [];
-    export let projectAttributeValues = {};
-
-    // Workflow step-based data - now supports multiple workflows
-    export let workflowData = { steps: [] };
-    export let allWorkflowsData = {};  // { workflowId: ProjectWorkflowData }
-    export let captureTargetStepId = null;
-
-    // Currently selected workflow tab
-    export let activeWorkflowId = null;
+    // Key Info data
+    export let keyInfoData = { instances: [] };
+    export let savingKeyInfo = false;
+    export let keyInfoCaptureMode = false;
+    /** @type {string | null} */
+    export let keyInfoCaptureTargetInstanceId = null;
+    export let keyInfoSectionRef = null;
 
     const dispatch = createEventDispatcher();
 
-    // Get workflows from settings
-    $: workflows = settings?.workflow_settings?.workflows || [];
-
-    // Auto-select first workflow if none selected
-    $: if (workflows.length > 0 && !activeWorkflowId) {
-        activeWorkflowId = workflows[0].id;
-    }
-
-    // Get current workflow definition
-    $: currentWorkflow = workflows.find(w => w.id === activeWorkflowId);
-
-    // Get workflow steps for current workflow
-    $: currentWorkflowSteps = currentWorkflow?.steps || { columns: [], rows: [] };
-
-    // Get current workflow data
-    $: currentWorkflowData = allWorkflowsData[activeWorkflowId] || workflowData;
-
-    // Get core steps for current workflow (strip legacy 'metadata' from allowedTypes)
-    $: currentCoreStepsSettings = (() => {
-        const raw = currentWorkflow?.coreSteps || { definitions: [] };
-        return {
-            definitions: raw.definitions.map(d => ({
-                ...d,
-                presets: d.presets.map(p => ({
-                    ...p,
-                    allowedTypes: p.allowedTypes.filter(t => ['capture', 'text', 'image_clipboard'].includes(t)),
-                })),
-            })),
-        };
-    })();
-
-    // Phenomenon attribute data
-    $: phenomenonAttributes = settings?.phenomenon_attributes || [];
-
     function toggleSection(section) {
         expandedSection = expandedSection === section ? null : section;
-    }
-
-    function selectWorkflowTab(workflowId) {
-        activeWorkflowId = workflowId;
-        dispatch("workflowTabChange", { workflowId });
-    }
-
-    function handleWorkflowChange(event) {
-        // Include the workflow ID in the event
-        dispatch("workflowChange", {
-            ...event.detail,
-            workflowId: activeWorkflowId,
-        });
     }
 </script>
 
@@ -149,37 +91,21 @@
     </div>
 
     <div class="flex-1 overflow-y-auto min-h-0 flex flex-col">
-        <!-- Workflow Section -->
-        <WorkflowSection
-            isExpanded={expandedSection === "workflow"}
+        <!-- Key Info Section -->
+        <KeyInfoSection
+            isExpanded={expandedSection === "keyinfo"}
             {projectId}
             {slideWidth}
             {slideHeight}
-            workflowData={currentWorkflowData}
-            workflowSteps={currentWorkflowSteps}
-            globalPhases={settings?.phase_types || []}
-            coreStepsSettings={currentCoreStepsSettings}
-            workflowName={currentWorkflow?.name || "Workflow"}
-            {savingWorkflow}
-            {captureMode}
-            {captureTargetStepId}
-            {workflows}
-            {activeWorkflowId}
-            {allWorkflowsData}
-            {phenomenonAttributes}
-            {availableAttributes}
-            {projectAttributeValues}
-            {selectedSlideIndices}
-            bind:this={workflowSectionRef}
-            on:toggleExpand={() => toggleSection("workflow")}
-            on:workflowChange={handleWorkflowChange}
-            on:toggleCaptureMode
-            on:deleteWorkflow
-            on:deleteStepDefinition
-            on:createStepDefinition
-            on:updateStepDefinition
-            on:selectWorkflowTab={(e) => selectWorkflowTab(e.detail.workflowId)}
-            on:deleteUndefinedWorkflow
+            bind:keyInfoData
+            keyInfoSettings={settings?.key_info_settings || { categories: [] }}
+            {savingKeyInfo}
+            captureMode={keyInfoCaptureMode}
+            captureTargetInstanceId={keyInfoCaptureTargetInstanceId}
+            bind:this={keyInfoSectionRef}
+            on:toggleExpand={() => toggleSection("keyinfo")}
+            on:keyInfoChange
+            on:toggleCaptureMode={(e) => dispatch("toggleKeyInfoCaptureMode", e.detail)}
         />
 
         <!-- Summary Section -->

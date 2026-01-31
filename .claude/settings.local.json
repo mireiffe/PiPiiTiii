@@ -8,7 +8,15 @@
       "Bash(findstr:*)",
       "Bash(timeout 10 npm run dev:*)",
       "Bash(rm:*)",
-      "Bash(npx svelte-check:*)"
+      "Bash(npx svelte-check:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run lint)",
+      "Bash(uv run python:*)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(npm run lint:*)"
     ]
   }
 }

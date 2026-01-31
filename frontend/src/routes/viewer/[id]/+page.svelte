@@ -8,12 +8,6 @@
     import ViewerRightPane from "$lib/components/viewer/ViewerRightPane.svelte";
     import Toast from "$lib/components/ui/Toast.svelte";
     import {
-        createEmptyWorkflowData,
-        migrateToUnifiedSteps,
-        type ProjectWorkflowData,
-    } from "$lib/types/workflow";
-
-    import {
         fetchProject,
         fetchProjects,
         updateShapePositions,
@@ -28,12 +22,13 @@
         generateSummaryStream,
         updateProjectSummaryLLM,
         updateProjectPromptVersion,
-        fetchProjectWorkflows,
-        updateProjectWorkflow,
         fetchAllAttributes,
         fetchProjectAttributes,
         updateProjectKept,
+        fetchProjectKeyInfo,
+        updateProjectKeyInfo,
     } from "$lib/api/project";
+    import { createEmptyKeyInfoData, type ProjectKeyInfoData } from "$lib/types/keyInfo";
     import {
         ENABLE_REPARSE_ALL,
         ENABLE_REPARSE_SLIDE,
@@ -92,7 +87,6 @@
     // Settings and summary
     let settings = {
         summary_fields: [],
-        workflow_steps: { columns: [], rows: [] },
     };
     let availableAttributes: { key: string; display_name: string; attr_type: { variant: string } }[] = [];
     let projectAttributeValues: Record<string, string> = {};
@@ -100,19 +94,16 @@
     let summaryDataLLM = {}; // LLM-generated version (original)
     let savingSummary = false;
 
-    // Workflow state (step-based) - supports multiple workflows
-    let workflowData = createEmptyWorkflowData();  // Default/legacy workflow data
-    let allWorkflowsData: Record<string, any> = {};  // { workflowId: ProjectWorkflowData }
-    let activeWorkflowId: string | null = null;
-    let savingWorkflow = false;
-    let captureMode = false;
-    let captureTargetStepId = null; // Which step is capturing
-    let workflowSectionRef; // Reference to WorkflowSection component
-    let captureOverlays = []; // Capture regions to display on canvas
-    let showCaptureOverlays = true; // Toggle visibility of capture overlays
+    // Key Info state (핵심정보)
+    let keyInfoData: ProjectKeyInfoData = createEmptyKeyInfoData();
+    let savingKeyInfo = false;
+    let keyInfoCaptureMode = false;
+    let keyInfoCaptureTargetInstanceId: string | null = null;
+    let keyInfoSectionRef: any = null;
+    let keyInfoCaptureOverlays: any[] = [];
 
     // Accordion state for right pane sections
-    let expandedSection = "workflow"; // 'workflow' | 'summary' | 'objects' - default is workflow
+    let expandedSection = "keyinfo"; // 'keyinfo' | 'summary' | 'objects' - default is keyinfo
 
     // LLM auto-generation state
     let generatingFieldIds = new Set(); // Track multiple fields being generated in parallel
@@ -131,6 +122,9 @@
 
     // Keep (archive) state
     let isKept = false;
+
+    // Capture overlay toggle
+    let showCaptureOverlays = false;
 
     // Initialize selected slides (first 3 by default)
     $: if (project && selectedSlideIndices.length === 0) {
@@ -156,15 +150,24 @@
             s.type_code !== 13,
     );
 
-    // Update capture overlays whenever workflow changes
-    $: if (workflowData) {
-        // Use tick to ensure workflowSectionRef is ready
+    // Update key info capture overlays whenever key info data changes
+    $: if (keyInfoData) {
         tick().then(() => {
-            if (workflowSectionRef) {
-                updateCaptureOverlays();
+            if (keyInfoSectionRef) {
+                updateKeyInfoCaptureOverlays();
             }
         });
     }
+
+    // Capture mode (key info only)
+    $: combinedCaptureMode = keyInfoCaptureMode;
+
+    // Capture overlays (key info only)
+    $: combinedCaptureOverlays = keyInfoCaptureOverlays.map((o: any) => ({
+        ...o,
+        colorIndex: 0, // Blue color for key info
+        isKeyInfo: true,
+    }));
 
     onMount(async () => {
         // Load left pane state from localStorage
@@ -183,7 +186,7 @@
         await loadProject();
         await loadSettings();
         await loadSummary();
-        await loadWorkflow();
+        await loadKeyInfo();
         await loadKeptStatus();
         window.addEventListener("resize", updateScale);
         window.addEventListener("keydown", handleKeyDown);
@@ -238,12 +241,6 @@
             if (res.ok) {
                 settings = await res.json();
                 useThumbnails = settings.use_thumbnails || false;
-
-                // Set initial active workflow if workflows are defined
-                const workflows = settings.workflow_settings?.workflows || [];
-                if (workflows.length > 0 && !activeWorkflowId) {
-                    activeWorkflowId = workflows[0].id;
-                }
             }
             if (attrsRes.ok) {
                 availableAttributes = await attrsRes.json();
@@ -294,38 +291,6 @@
         }
     }
 
-    async function loadWorkflow() {
-        try {
-            const res = await fetchProjectWorkflows(projectId);
-            if (res.ok) {
-                const data = await res.json();
-                // data format: { workflows: { workflowId: ProjectWorkflowData, ... } }
-                const workflows = data.workflows || {};
-
-                // Populate allWorkflowsData with migration for legacy data
-                allWorkflowsData = {};
-                for (const [wfId, wfData] of Object.entries(workflows)) {
-                    if (wfData && typeof wfData === "object" && Array.isArray((wfData as any).steps)) {
-                        // Migrate legacy steps to unifiedSteps if needed
-                        allWorkflowsData[wfId] = migrateToUnifiedSteps(wfData as ProjectWorkflowData);
-                    } else {
-                        allWorkflowsData[wfId] = createEmptyWorkflowData();
-                    }
-                }
-
-                // Set current workflowData based on activeWorkflowId
-                if (activeWorkflowId && allWorkflowsData[activeWorkflowId]) {
-                    workflowData = allWorkflowsData[activeWorkflowId];
-                } else {
-                    // Fallback to first workflow or empty
-                    const firstWfId = Object.keys(allWorkflowsData)[0];
-                    workflowData = firstWfId ? allWorkflowsData[firstWfId] : createEmptyWorkflowData();
-                }
-            }
-        } catch (e) {
-            console.error("Failed to load workflow", e);
-        }
-    }
 
     async function loadKeptStatus() {
         try {
@@ -354,255 +319,65 @@
         }
     }
 
-    async function saveWorkflow(newWorkflow: ProjectWorkflowData, workflowId?: string) {
-        savingWorkflow = true;
+    async function loadKeyInfo() {
         try {
-            const wfId = workflowId || activeWorkflowId;
-            workflowData = newWorkflow;
-
-            // Update allWorkflowsData
-            if (wfId) {
-                allWorkflowsData[wfId] = newWorkflow;
-                allWorkflowsData = { ...allWorkflowsData };
+            const res = await fetchProjectKeyInfo(projectId);
+            if (res.ok) {
+                const data = await res.json();
+                keyInfoData = data || createEmptyKeyInfoData();
             }
-
-            // Save to backend with workflow ID
-            await updateProjectWorkflow(projectId, newWorkflow, wfId || undefined);
         } catch (e) {
-            console.error("Failed to save workflow", e);
+            console.error("Failed to load key info", e);
+        }
+    }
+
+    async function saveKeyInfo(newKeyInfoData: ProjectKeyInfoData) {
+        savingKeyInfo = true;
+        // Update state immediately for UI responsiveness (child already updated)
+        keyInfoData = newKeyInfoData;
+        try {
+            const res = await updateProjectKeyInfo(projectId, newKeyInfoData);
+            if (!res.ok) {
+                const text = await res.text();
+                console.error("Failed to save key info: HTTP", res.status, text);
+            }
+        } catch (e) {
+            console.error("Failed to save key info", e);
         } finally {
-            savingWorkflow = false;
+            savingKeyInfo = false;
         }
     }
 
-    function handleWorkflowChange(event) {
-        const { workflowId, ...newWorkflow } = event.detail;
-
-        // Save to the specific workflow (use provided workflowId or activeWorkflowId)
-        const targetWorkflowId = workflowId || activeWorkflowId;
-
-        if (targetWorkflowId) {
-            allWorkflowsData[targetWorkflowId] = newWorkflow;
-            allWorkflowsData = { ...allWorkflowsData };
-        }
-
-        workflowData = newWorkflow;
-        saveWorkflow(newWorkflow, targetWorkflowId);
-        // Update capture overlays after workflow change
-        updateCaptureOverlays();
+    function handleKeyInfoChange(event: CustomEvent) {
+        const { keyInfoData: newData } = event.detail;
+        saveKeyInfo(newData);
+        // Update key info capture overlays
+        updateKeyInfoCaptureOverlays();
     }
 
-    function handleWorkflowTabChange(event) {
-        const { workflowId } = event.detail;
-        activeWorkflowId = workflowId;
-        // Update workflowData to current workflow's data from allWorkflowsData
-        workflowData = allWorkflowsData[workflowId] || createEmptyWorkflowData();
-        updateCaptureOverlays();
+    function handleKeyInfoToggleCaptureMode(event: CustomEvent) {
+        const { instanceId } = event.detail;
+        if (instanceId) {
+            keyInfoCaptureMode = true;
+            keyInfoCaptureTargetInstanceId = instanceId;
+        } else {
+            keyInfoCaptureMode = false;
+            keyInfoCaptureTargetInstanceId = null;
+        }
+    }
+
+    function updateKeyInfoCaptureOverlays() {
+        if (keyInfoSectionRef?.getCaptureOverlays) {
+            keyInfoCaptureOverlays = keyInfoSectionRef.getCaptureOverlays();
+        }
     }
 
     function handleCapture(event) {
         const capture = event.detail;
-        // Add capture to the workflow section
-        if (workflowSectionRef && captureTargetStepId) {
-            // Check if this is a Core Step capture
-            if (typeof captureTargetStepId === 'string' && captureTargetStepId.startsWith('coreStep:')) {
-                workflowSectionRef.addCoreStepCapture(capture);
-            } else {
-                workflowSectionRef.addCapture(capture);
-            }
-        }
-    }
 
-    function handleToggleCaptureMode(event) {
-        const { stepId } = event.detail;
-        if (stepId) {
-            captureMode = true;
-            captureTargetStepId = stepId;
-        } else {
-            captureMode = false;
-            captureTargetStepId = null;
-        }
-    }
-
-    function updateCaptureOverlays() {
-        if (workflowSectionRef && workflowSectionRef.getCaptureOverlays) {
-            captureOverlays = workflowSectionRef.getCaptureOverlays();
-        } else {
-            captureOverlays = [];
-        }
-    }
-
-    async function handleDeleteWorkflow(
-        event: CustomEvent<{ workflowId: string }>,
-    ) {
-        const { workflowId } = event.detail;
-
-        // Reset workflow data to empty state for the specific workflow
-        const emptyWorkflow = createEmptyWorkflowData();
-
-        // Update allWorkflowsData with empty workflow
-        allWorkflowsData[workflowId] = emptyWorkflow;
-        allWorkflowsData = { ...allWorkflowsData };
-
-        // Save empty workflow to backend
-        try {
-            await updateProjectWorkflow(projectId, emptyWorkflow, workflowId);
-        } catch (e) {
-            console.error("Failed to delete workflow data", e);
-        }
-
-        // If deleting the active workflow, update current view
-        if (workflowId === activeWorkflowId) {
-            workflowData = emptyWorkflow;
-        }
-
-        // Turn off capture mode if it's active
-        if (captureMode) {
-            captureMode = false;
-            captureTargetStepId = null;
-        }
-
-        // Clear capture overlays
-        captureOverlays = [];
-    }
-
-    async function handleDeleteUndefinedWorkflow(
-        event: CustomEvent<{ workflowId: string }>,
-    ) {
-        const { workflowId } = event.detail;
-
-        // Remove workflow data from allWorkflowsData
-        delete allWorkflowsData[workflowId];
-        allWorkflowsData = { ...allWorkflowsData };
-
-        // Save empty workflow to backend to remove it
-        try {
-            await updateProjectWorkflow(projectId, null, workflowId);
-        } catch (e) {
-            console.error("Failed to delete undefined workflow", e);
-        }
-
-        // Switch to first available workflow or set to null
-        const workflows = settings?.workflow_settings?.workflows || [];
-        if (workflows.length > 0) {
-            activeWorkflowId = workflows[0].id;
-            workflowData =
-                allWorkflowsData[activeWorkflowId] || createEmptyWorkflowData();
-        } else {
-            activeWorkflowId = null;
-            workflowData = createEmptyWorkflowData();
-        }
-
-        // Clear capture mode if active
-        if (captureMode) {
-            captureMode = false;
-            captureTargetStepId = null;
-        }
-        captureOverlays = [];
-    }
-
-    // Helper: get the current active workflow definition from settings
-    function getActiveWorkflowDef() {
-        const workflows = settings?.workflow_settings?.workflows || [];
-        return workflows.find((w: any) => w.id === activeWorkflowId);
-    }
-
-    async function handleDeleteStepDefinition(
-        event: CustomEvent<{ stepId: string }>,
-    ) {
-        const { stepId } = event.detail;
-        const workflow = getActiveWorkflowDef();
-        if (!workflow?.steps) return;
-
-        // Remove from the active workflow's step rows
-        workflow.steps.rows = workflow.steps.rows.filter(
-            (r: any) => r.id !== stepId,
-        );
-        settings = { ...settings };
-
-        // Save updated settings
-        try {
-            const res = await updateSettings(settings);
-            if (!res.ok) {
-                console.error(
-                    "Failed to save settings after deleting step definition",
-                );
-                alert("설정 저장에 실패했습니다.");
-            }
-        } catch (e) {
-            console.error("Failed to save settings", e);
-            alert("설정 저장 중 오류가 발생했습니다.");
-        }
-    }
-
-    async function handleCreateStepDefinition(
-        event: CustomEvent<{ values: Record<string, string> }>,
-    ) {
-        const { values } = event.detail;
-        const workflow = getActiveWorkflowDef();
-        if (!workflow?.steps) return;
-
-        const newId = `row_${Date.now()}`;
-        const newRow = {
-            id: newId,
-            values: { ...values },
-        };
-
-        // Initialize empty values for all columns that weren't provided
-        workflow.steps.columns.forEach((col: any) => {
-            if (!(col.id in newRow.values)) {
-                newRow.values[col.id] = "";
-            }
-        });
-
-        workflow.steps.rows = [
-            ...workflow.steps.rows,
-            newRow,
-        ];
-        settings = { ...settings };
-
-        // Save updated settings
-        try {
-            const res = await updateSettings(settings);
-            if (!res.ok) {
-                console.error(
-                    "Failed to save settings after creating step definition",
-                );
-                alert("설정 저장에 실패했습니다.");
-            }
-        } catch (e) {
-            console.error("Failed to save settings", e);
-            alert("설정 저장 중 오류가 발생했습니다.");
-        }
-    }
-
-    async function handleUpdateStepDefinition(
-        event: CustomEvent<{ stepId: string; values: Record<string, string> }>,
-    ) {
-        const { stepId, values } = event.detail;
-        const workflow = getActiveWorkflowDef();
-        if (!workflow?.steps) return;
-
-        workflow.steps.rows = workflow.steps.rows.map((r: any) => {
-            if (r.id === stepId) {
-                return { ...r, values: { ...values } };
-            }
-            return r;
-        });
-        settings = { ...settings };
-
-        // Save updated settings
-        try {
-            const res = await updateSettings(settings);
-            if (!res.ok) {
-                console.error(
-                    "Failed to save settings after updating step definition",
-                );
-                alert("설정 저장에 실패했습니다.");
-            }
-        } catch (e) {
-            console.error("Failed to save settings", e);
-            alert("설정 저장 중 오류가 발생했습니다.");
+        // Handle key info capture
+        if (keyInfoCaptureMode && keyInfoCaptureTargetInstanceId && keyInfoSectionRef) {
+            keyInfoSectionRef.addCapture(keyInfoCaptureTargetInstanceId, capture);
         }
     }
 
@@ -874,7 +649,7 @@
     }
 
     function handleCanvasMouseDown() {
-        if (captureMode) return;
+        if (keyInfoCaptureMode) return;
         selectedShapeId = null;
     }
 
@@ -1184,8 +959,8 @@
                 {projectId}
                 {sortedShapes}
                 {selectedShapeId}
-                {captureMode}
-                {captureOverlays}
+                captureMode={combinedCaptureMode}
+                captureOverlays={combinedCaptureOverlays}
                 showOverlays={showCaptureOverlays}
                 on:wheel={handleWheel}
                 on:canvasMouseDown={handleCanvasMouseDown}
@@ -1225,16 +1000,13 @@
     <ViewerRightPane
         bind:rightPaneFullscreen
         bind:rightPaneWidth
-        bind:workflowSectionRef
+        bind:keyInfoSectionRef
         {expandedSection}
-        {workflowData}
-        {allWorkflowsData}
-        {activeWorkflowId}
-        {captureTargetStepId}
+        bind:keyInfoData
+        {savingKeyInfo}
+        {keyInfoCaptureMode}
+        keyInfoCaptureTargetInstanceId={keyInfoCaptureTargetInstanceId}
         {settings}
-        {allowEdit}
-        {savingWorkflow}
-        {captureMode}
         bind:summaryData
         bind:summaryDataLLM
         {savingSummary}
@@ -1248,18 +1020,10 @@
         bind:editingDescription
         {project}
         {projectId}
-        {availableAttributes}
-        {projectAttributeValues}
         slideWidth={project?.slide_width || 960}
         slideHeight={project?.slide_height || 540}
-        on:workflowChange={handleWorkflowChange}
-        on:workflowTabChange={handleWorkflowTabChange}
-        on:toggleCaptureMode={handleToggleCaptureMode}
-        on:deleteWorkflow={handleDeleteWorkflow}
-        on:deleteUndefinedWorkflow={handleDeleteUndefinedWorkflow}
-        on:deleteStepDefinition={handleDeleteStepDefinition}
-        on:createStepDefinition={handleCreateStepDefinition}
-        on:updateStepDefinition={handleUpdateStepDefinition}
+        on:keyInfoChange={handleKeyInfoChange}
+        on:toggleKeyInfoCaptureMode={handleKeyInfoToggleCaptureMode}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>
             toggleSlideSelection(e.detail.slideIndex)}

@@ -1,16 +1,15 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fetchSettings, updateSettings, fetchAllAttributes } from "$lib/api/project";
-    import type { PhaseType, WorkflowDefinition, WorkflowSettings } from "$lib/types/workflow";
+    import type { KeyInfoSettings } from "$lib/types/keyInfo";
     import LLMSettingsSection from "$lib/components/settings/LLMSettingsSection.svelte";
     import SummaryFieldsSection from "$lib/components/settings/SummaryFieldsSection.svelte";
     import PhenomenonAttributesSection from "$lib/components/settings/PhenomenonAttributesSection.svelte";
-        import PhaseSettingsSection from "$lib/components/settings/PhaseSettingsSection.svelte";
-    import WorkflowDefinitionsSection from "$lib/components/settings/WorkflowDefinitionsSection.svelte";
+    import KeyInfoSettingsSection from "$lib/components/settings/KeyInfoSettingsSection.svelte";
     import TutorialSettingsSection from "$lib/components/settings/TutorialSettingsSection.svelte";
 
     // Navigation sections
-    type SectionId = "llm" | "summary" | "phenomenon" | "workflows" | "phases" | "tutorial";
+    type SectionId = "keyinfo" | "llm" | "summary" | "phenomenon" | "tutorial";
 
     interface NavSection {
         id: SectionId;
@@ -19,15 +18,14 @@
     }
 
     const navSections: NavSection[] = [
-        { id: "workflows", label: "워크플로우 정의", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+        { id: "keyinfo", label: "핵심정보 설정", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
         { id: "llm", label: "LLM 설정", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
         { id: "summary", label: "PPT 요약 필드", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
         { id: "phenomenon", label: "발생현상 속성", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" },
-        { id: "phases", label: "위상 (Phase)", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
         { id: "tutorial", label: "Tutorial", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
     ];
 
-    let activeSection: SectionId = "workflows";
+    let activeSection: SectionId = "keyinfo";
 
     interface AttributeDefinition {
         key: string;
@@ -54,8 +52,7 @@
         summary_fields: SummaryField[];
         use_thumbnails: boolean;
         phenomenon_attributes: string[];
-        phase_types: PhaseType[];
-        workflow_settings?: WorkflowSettings;
+        key_info_settings?: KeyInfoSettings;
         tutorial_project_id?: string;
     }
 
@@ -63,18 +60,15 @@
     let saving = false;
     let availableAttributes: AttributeDefinition[] = [];
     let expandedFieldId: string | null = null;
-    let expandedWorkflowId: string | null = null;
-    let expandedWorkflowRowId: string | null = null;
+    let expandedKeyInfoCategoryId: string | null = null;
 
     let settings: Settings = {
         llm: { api_type: "openai", api_endpoint: "", model_name: "" },
         summary_fields: [],
         use_thumbnails: true,
         phenomenon_attributes: [],
-        phase_types: [],
-        workflow_settings: {
-            workflows: [],
-            phaseTypes: [],
+        key_info_settings: {
+            categories: [],
         },
         tutorial_project_id: undefined,
     };
@@ -115,19 +109,16 @@
                     })),
                     use_thumbnails: data.use_thumbnails ?? true,
                     phenomenon_attributes: data.phenomenon_attributes || [],
-                    phase_types: data.phase_types || [],
-                    workflow_settings: data.workflow_settings || {
-                        workflows: [],
-                        phaseTypes: [],
+                    key_info_settings: data.key_info_settings || {
+                        categories: [],
                     },
                     tutorial_project_id: data.tutorial_project_id || undefined,
                 };
 
-                // Ensure workflow_settings has workflows array
-                if (!settings.workflow_settings?.workflows) {
-                    settings.workflow_settings = {
-                        workflows: [],
-                        phaseTypes: settings.workflow_settings?.phaseTypes || [],
+                // Ensure key_info_settings has categories array
+                if (!settings.key_info_settings?.categories) {
+                    settings.key_info_settings = {
+                        categories: [],
                     };
                 }
             }
@@ -209,36 +200,21 @@
         }
     }
 
-    // Phase types handlers
-    function handlePhaseTypesUpdate(e: CustomEvent<{ phases: PhaseType[] }>) {
-        settings.phase_types = e.detail.phases;
-    }
-
-    // Workflow definitions handlers
-    function handleWorkflowDefinitionsUpdate(e: CustomEvent<{
-        workflows: WorkflowDefinition[];
-        phaseTypes: PhaseType[];
-    }>) {
-        settings.workflow_settings = {
-            workflows: e.detail.workflows,
-            phaseTypes: e.detail.phaseTypes,
-        };
-    }
-
-    function handleToggleWorkflowExpand(e: CustomEvent<{ workflowId: string }>) {
-        expandedWorkflowId = expandedWorkflowId === e.detail.workflowId ? null : e.detail.workflowId;
-    }
-
-    function handleToggleWorkflowRowExpand(e: CustomEvent<{ rowId: string }>) {
-        expandedWorkflowRowId = expandedWorkflowRowId === e.detail.rowId ? null : e.detail.rowId;
-    }
-
     // Tutorial settings handler
     function handleTutorialUpdate(e: CustomEvent<{ tutorialProjectId: string | undefined }>) {
         settings.tutorial_project_id = e.detail.tutorialProjectId;
     }
 
-    </script>
+    // Key Info settings handlers
+    function handleKeyInfoUpdate(e: CustomEvent<{ keyInfoSettings: KeyInfoSettings }>) {
+        settings.key_info_settings = e.detail.keyInfoSettings;
+    }
+
+    function handleToggleKeyInfoCategoryExpand(e: CustomEvent<{ categoryId: string }>) {
+        expandedKeyInfoCategoryId = expandedKeyInfoCategoryId === e.detail.categoryId ? null : e.detail.categoryId;
+    }
+
+</script>
 
 <div class="h-screen flex flex-col bg-gray-100">
     <!-- Header -->
@@ -289,18 +265,13 @@
                 <div class="text-center text-gray-500">로딩 중...</div>
             {:else}
                 <div class="max-w-4xl mx-auto space-y-8">
-                    <!-- 워크플로우 정의 -->
-                    <div id="section-workflows">
-                        <WorkflowDefinitionsSection
-                            workflows={settings.workflow_settings?.workflows || []}
-                            phaseTypes={settings.workflow_settings?.phaseTypes || []}
-                            {expandedWorkflowId}
-                            expandedRowId={expandedWorkflowRowId}
-                            phenomenonAttributes={settings.phenomenon_attributes}
-                            {availableAttributes}
-                            on:update={handleWorkflowDefinitionsUpdate}
-                            on:toggleWorkflowExpand={handleToggleWorkflowExpand}
-                            on:toggleRowExpand={handleToggleWorkflowRowExpand}
+                    <!-- 핵심정보 설정 -->
+                    <div id="section-keyinfo">
+                        <KeyInfoSettingsSection
+                            keyInfoSettings={settings.key_info_settings || { categories: [] }}
+                            expandedCategoryId={expandedKeyInfoCategoryId}
+                            on:update={handleKeyInfoUpdate}
+                            on:toggleCategoryExpand={handleToggleKeyInfoCategoryExpand}
                         />
                     </div>
 
@@ -329,14 +300,6 @@
                             {availableAttributes}
                             selectedAttributes={settings.phenomenon_attributes}
                             on:toggle={handleTogglePhenomenonAttribute}
-                        />
-                    </div>
-
-                    <!-- 위상 (Phase) 설정 -->
-                    <div id="section-phases">
-                        <PhaseSettingsSection
-                            phases={settings.phase_types}
-                            on:update={handlePhaseTypesUpdate}
                         />
                     </div>
 

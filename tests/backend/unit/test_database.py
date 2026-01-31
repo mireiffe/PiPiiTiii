@@ -4,8 +4,6 @@ Tests for backend/database.py
 Tests Database class methods with in-memory SQLite.
 """
 
-import json
-import pytest
 import sys
 import os
 from datetime import datetime
@@ -376,3 +374,140 @@ class TestProjectsSummaryStatus:
 
         assert no_summary["has_summary"] is False
         assert with_summary["has_summary"] is True
+
+
+class TestProjectKeyInfo:
+    """Tests for key info (핵심정보) related methods."""
+
+    def test_get_project_key_info_returns_empty_instances(
+        self, db_with_project: Database, sample_project_data
+    ):
+        """Should return dict with empty instances array when no key_info_data."""
+        result = db_with_project.get_project_key_info(sample_project_data["id"])
+        assert result == {"instances": []}
+
+    def test_update_and_get_project_key_info(
+        self, db_with_project: Database, sample_project_data, sample_key_info_data
+    ):
+        """Should save and retrieve key info data correctly."""
+        db_with_project.update_project_key_info(
+            sample_project_data["id"], sample_key_info_data
+        )
+
+        result = db_with_project.get_project_key_info(sample_project_data["id"])
+        assert result is not None
+        assert "instances" in result
+        assert len(result["instances"]) == 2
+
+    def test_key_info_instance_fields_preserved(
+        self, db_with_project: Database, sample_project_data, sample_key_info_data
+    ):
+        """Should preserve all instance fields after save/load."""
+        db_with_project.update_project_key_info(
+            sample_project_data["id"], sample_key_info_data
+        )
+
+        result = db_with_project.get_project_key_info(sample_project_data["id"])
+        instance = result["instances"][0]
+
+        assert instance["id"] == "kiin_001"
+        assert instance["categoryId"] == "kic_001"
+        assert instance["itemId"] == "kii_001"
+        assert instance["textValue"] == "Test text value"
+        assert instance["order"] == 0
+
+    def test_key_info_capture_value_preserved(
+        self, db_with_project: Database, sample_project_data, sample_key_info_data
+    ):
+        """Should preserve captureValue with all its fields."""
+        db_with_project.update_project_key_info(
+            sample_project_data["id"], sample_key_info_data
+        )
+
+        result = db_with_project.get_project_key_info(sample_project_data["id"])
+        instance_with_capture = result["instances"][1]
+        capture = instance_with_capture["captureValue"]
+
+        assert capture is not None
+        assert capture["id"] == "kicap_001"
+        assert capture["slideIndex"] == 0
+        assert capture["x"] == 100
+        assert capture["y"] == 50
+        assert capture["width"] == 200
+        assert capture["height"] == 100
+
+    def test_key_info_add_instance_updates_correctly(
+        self, db_with_project: Database, sample_project_data, sample_key_info_data
+    ):
+        """Should correctly update when adding new instances."""
+        # Save initial data
+        db_with_project.update_project_key_info(
+            sample_project_data["id"], sample_key_info_data
+        )
+
+        # Add new instance
+        updated_data = sample_key_info_data.copy()
+        updated_data["instances"] = sample_key_info_data["instances"] + [
+            {
+                "id": "kiin_003",
+                "categoryId": "kic_002",
+                "itemId": "kii_003",
+                "textValue": "New instance",
+                "captureValue": None,
+                "imageId": None,
+                "imageCaption": None,
+                "order": 2,
+                "createdAt": "2024-01-01T00:00:00",
+                "updatedAt": None,
+            }
+        ]
+        db_with_project.update_project_key_info(
+            sample_project_data["id"], updated_data
+        )
+
+        result = db_with_project.get_project_key_info(sample_project_data["id"])
+        assert len(result["instances"]) == 3
+        assert result["instances"][2]["id"] == "kiin_003"
+        assert result["instances"][2]["textValue"] == "New instance"
+
+    def test_key_info_remove_instance_updates_correctly(
+        self, db_with_project: Database, sample_project_data, sample_key_info_data
+    ):
+        """Should correctly update when removing instances."""
+        # Save initial data with 2 instances
+        db_with_project.update_project_key_info(
+            sample_project_data["id"], sample_key_info_data
+        )
+
+        # Remove one instance
+        updated_data = sample_key_info_data.copy()
+        updated_data["instances"] = [sample_key_info_data["instances"][0]]
+        db_with_project.update_project_key_info(
+            sample_project_data["id"], updated_data
+        )
+
+        result = db_with_project.get_project_key_info(sample_project_data["id"])
+        assert len(result["instances"]) == 1
+        assert result["instances"][0]["id"] == "kiin_001"
+
+    def test_get_project_key_info_nonexistent_project(self, temp_db: Database):
+        """Should return empty instances for nonexistent project."""
+        result = temp_db.get_project_key_info("nonexistent_id")
+        assert result == {"instances": []}
+
+    def test_key_info_handles_invalid_json(
+        self, db_with_project: Database, sample_project_data
+    ):
+        """Should return empty instances when key_info_data is invalid JSON."""
+        # Manually insert invalid JSON
+        conn = db_with_project.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET key_info_data = ? WHERE id = ?",
+            ("invalid json {{{", sample_project_data["id"]),
+        )
+        conn.commit()
+        conn.close()
+
+        result = db_with_project.get_project_key_info(sample_project_data["id"])
+        assert result == {"instances": []}

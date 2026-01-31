@@ -4,7 +4,6 @@ Tests for backend/ppt_parser/utils.py
 Tests PowerPoint parser utility functions.
 """
 
-import pytest
 import sys
 import os
 

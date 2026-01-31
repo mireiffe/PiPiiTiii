@@ -54,6 +54,11 @@ class Database:
             cursor.execute("ALTER TABLE projects ADD COLUMN kept INTEGER DEFAULT 0")
             print("Added kept column to projects table")
 
+        # Migration: Add key_info_data column for 핵심정보 data
+        if "key_info_data" not in columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN key_info_data TEXT")
+            print("Added key_info_data column to projects table")
+
         # Migration: Remove phenomenon_data column (deprecated, data moved to workflow_data)
         if "phenomenon_data" in columns:
             try:
@@ -468,3 +473,43 @@ class Database:
                 "workflows": workflows
             })
         return result
+
+    # ========== Key Info (핵심정보) Methods ==========
+
+    def get_project_key_info(self, project_id: str) -> Dict[str, Any]:
+        """Get key info data for a project (핵심정보 데이터 조회).
+
+        Returns:
+            Dict with 'instances' array containing key info instances
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT key_info_data FROM projects WHERE id = ?",
+            (project_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row or not row[0]:
+            return {"instances": []}
+
+        try:
+            data = json.loads(row[0])
+            # Ensure instances key exists
+            if not isinstance(data, dict) or 'instances' not in data:
+                data = {"instances": []}
+            return data
+        except json.JSONDecodeError:
+            return {"instances": []}
+
+    def update_project_key_info(self, project_id: str, key_info_data: Dict[str, Any]):
+        """Update key info data for a project (핵심정보 데이터 저장)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET key_info_data = ? WHERE id = ?",
+            (json.dumps(key_info_data, ensure_ascii=False), project_id),
+        )
+        conn.commit()
+        conn.close()

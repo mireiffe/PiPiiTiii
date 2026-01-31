@@ -357,6 +357,8 @@
                                         A{overlay.colorIndex + 1}
                                     {:else if overlay.isSupporter}
                                         #{overlay.stepNumber}({overlay.phaseName || '위상'})-{overlay.captureIndexInStep + 1}
+                                    {:else if overlay.isKeyInfo}
+                                        {overlay.label}
                                     {:else}
                                         #{overlay.stepNumber}-{overlay.captureIndexInStep + 1}
                                     {/if}

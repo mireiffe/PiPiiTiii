@@ -116,10 +116,10 @@ def regenerate_thumbnails_for_project(project_id, ppt_path, project_dir):
                 # Save updated JSON
                 with open(json_path, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-                print(f"  [INFO] Updated JSON with thumbnail information")
+                print("  [INFO] Updated JSON with thumbnail information")
                 return True
             else:
-                print(f"  [WARN] No thumbnails were generated")
+                print("  [WARN] No thumbnails were generated")
                 return False
 
         except Exception as e:
@@ -206,7 +206,7 @@ def regenerate_all_thumbnails(dry_run=True, max_process=None):
         else:
             fail_count += 1
 
-    print(f"\n=== Summary ===")
+    print("\n=== Summary ===")
     print(f"Total processed: {len(projects_to_process)}")
     print(f"Success: {success_count}")
     print(f"Failed: {fail_count}")

@@ -6,6 +6,7 @@
  */
 
 import type { WorkflowSteps, WorkflowSettings, ProjectWorkflowData, PhaseType } from './workflow';
+import type { KeyInfoSettings } from './keyInfo';
 
 // ========== Shape Types ==========
 
@@ -88,6 +89,7 @@ export interface Settings {
     summary_fields: SummaryField[];
     workflow_steps: WorkflowSteps;
     workflow_settings?: WorkflowSettings;
+    key_info_settings?: KeyInfoSettings;  // 핵심정보 카테고리 설정
     use_thumbnails?: boolean;
     tutorial_project_id?: string;  // Project ID for tutorial mode
 }

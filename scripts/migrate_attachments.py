@@ -15,7 +15,6 @@ This script:
 
 import os
 import sys
-import json
 
 # Add backend directory to path for imports
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -94,7 +93,7 @@ def migrate_attachments():
                     workflow_modified = True
                     project_migrated += 1
                     total_migrated += 1
-                    print(f"    -> Saved to attachments.db")
+                    print("    -> Saved to attachments.db")
                 else:
                     print(f"    [ERROR] Failed to save image {image_id}")
 
@@ -115,7 +114,7 @@ def migrate_attachments():
     # Show database sizes
     projects_db_size = os.path.getsize(db_path) / 1024 / 1024
     attachments_db_size = attachments_db.get_database_size() / 1024 / 1024
-    print(f"\nDatabase sizes:")
+    print("\nDatabase sizes:")
     print(f"  projects.db: {projects_db_size:.2f} MB")
     print(f"  attachments.db: {attachments_db_size:.2f} MB")
 

@@ -6,6 +6,7 @@
 
 import { apiFetch, BASE_URL } from './client';
 import type { ProjectWorkflowData } from '$lib/types/workflow';
+import type { ProjectKeyInfoData } from '$lib/types/keyInfo';
 import type {
     ShapePosition,
     ShapeDescription,
@@ -346,5 +347,29 @@ export function getAttachmentImageUrl(imageId: string): string {
 export async function deleteAttachmentImage(imageId: string): Promise<Response> {
     return apiFetch(`/api/attachments/image/${imageId}`, {
         method: 'DELETE',
+    });
+}
+
+// ========== Key Info API (핵심정보) ==========
+
+/**
+ * Fetch key info data for a project
+ * Returns: { instances: KeyInfoInstance[] }
+ */
+export async function fetchProjectKeyInfo(id: string): Promise<Response> {
+    return apiFetch(`/api/project/${id}/keyinfo`);
+}
+
+/**
+ * Update key info data for a project
+ */
+export async function updateProjectKeyInfo(
+    id: string,
+    data: ProjectKeyInfoData,
+): Promise<Response> {
+    return apiFetch(`/api/project/${id}/keyinfo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data }),
     });
 }

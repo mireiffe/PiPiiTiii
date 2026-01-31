@@ -4,7 +4,6 @@ Tests for backend/utils/shape_utils.py
 Tests shape tree navigation and manipulation utilities.
 """
 
-import pytest
 import sys
 import os
 

@@ -325,6 +325,79 @@ class WorkflowSettingsModel(BaseModel):
     phaseTypes: List[PhaseType] = []
 
 
+# ========== Key Info Models (핵심정보) ==========
+
+
+class KeyInfoItemDefinition(BaseModel):
+    """핵심정보 항목 정의 (설정에서 정의)"""
+    id: str
+    title: str  # 제목
+    description: str  # 설명
+    order: int
+
+
+class KeyInfoCategoryDefinition(BaseModel):
+    """핵심정보 카테고리 정의 (설정에서 정의)"""
+    id: str
+    name: str
+    order: int
+    items: List[KeyInfoItemDefinition] = []
+    createdAt: str = ""
+
+
+class KeyInfoSettings(BaseModel):
+    """핵심정보 설정"""
+    categories: List[KeyInfoCategoryDefinition] = []
+
+
+class KeyInfoCaptureValue(BaseModel):
+    """캡처 데이터"""
+    id: str
+    slideIndex: int
+    x: float
+    y: float
+    width: float
+    height: float
+    label: Optional[str] = None
+    caption: Optional[str] = None
+
+
+class KeyInfoInstance(BaseModel):
+    """프로젝트별 핵심정보 인스턴스 (모든 컨텐츠 타입 공존 가능)"""
+    id: str
+    categoryId: str
+    itemId: str
+    # inputType은 더 이상 사용하지 않음 (하위 호환성 위해 optional로 유지)
+    inputType: Optional[str] = None
+    textValue: Optional[str] = None
+
+    # 다중 캡처/이미지 지원 (신규 배열 필드)
+    captureValues: Optional[List[KeyInfoCaptureValue]] = None
+    imageIds: Optional[List[str]] = None
+    imageCaptions: Optional[Dict[str, str]] = None  # {imageId: caption}
+
+    # @deprecated - 하위 호환성을 위해 유지
+    captureValue: Optional[KeyInfoCaptureValue] = None
+    imageId: Optional[str] = None
+    imageCaption: Optional[str] = None
+
+    order: int
+    createdAt: str = ""
+    updatedAt: Optional[str] = None
+
+
+class ProjectKeyInfoData(BaseModel):
+    """프로젝트의 핵심정보 데이터"""
+    instances: List[KeyInfoInstance] = []
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+
+
+class KeyInfoUpdateRequest(BaseModel):
+    """핵심정보 업데이트 요청"""
+    data: ProjectKeyInfoData
+
+
 class Settings(BaseModel):
     llm: LLMConfig
     summary_fields: List[SummaryField]
@@ -333,6 +406,7 @@ class Settings(BaseModel):
     step_containers: Optional[List[StepContainer]] = None
     phase_types: Optional[List[PhaseType]] = None
     workflow_settings: Optional[WorkflowSettingsModel] = None
+    key_info_settings: Optional[KeyInfoSettings] = None  # 핵심정보 카테고리 설정
     tutorial_project_id: Optional[str] = None  # Project ID for tutorial mode
 
 
@@ -779,6 +853,9 @@ def load_settings() -> dict:
             # Ensure phenomenon_attributes exists (migration for existing settings)
             if "phenomenon_attributes" not in settings:
                 settings["phenomenon_attributes"] = []
+            # Ensure key_info_settings exists (migration for existing settings)
+            if "key_info_settings" not in settings:
+                settings["key_info_settings"] = {"categories": []}
             return settings
     else:
         return {
@@ -793,6 +870,7 @@ def load_settings() -> dict:
             "workflow_steps": get_default_workflow_steps(),
             "step_containers": [],
             "phase_types": [],
+            "key_info_settings": {"categories": []},
         }
 
 
@@ -1055,6 +1133,33 @@ def get_workflow_confirmation_status():
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get workflow confirmation status: {str(e)}",
+        )
+
+
+# ========== Key Info API (핵심정보) ==========
+
+
+@app.get("/api/project/{project_id}/keyinfo")
+def get_project_key_info(project_id: str):
+    """Get key info data for a project (핵심정보 데이터 조회)."""
+    try:
+        data = db.get_project_key_info(project_id)
+        return data
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load key info: {str(e)}"
+        )
+
+
+@app.post("/api/project/{project_id}/keyinfo")
+def update_project_key_info(project_id: str, request: KeyInfoUpdateRequest):
+    """Update key info data for a project (핵심정보 데이터 저장)."""
+    try:
+        db.update_project_key_info(project_id, request.data.dict())
+        return {"status": "success", "message": "Key info updated successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save key info: {str(e)}"
         )
 
 

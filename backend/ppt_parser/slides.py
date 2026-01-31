@@ -1,6 +1,5 @@
 import os
 import json
-import random
 import win32com.client as win32
 from .shapes import parse_shape
 

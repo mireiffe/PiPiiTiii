@@ -124,3 +124,45 @@ def db_with_project(temp_db: Database, sample_project_data: Dict[str, Any]) -> D
     """Database with a sample project already added."""
     temp_db.add_project(sample_project_data)
     return temp_db
+
+
+@pytest.fixture
+def sample_key_info_data() -> Dict[str, Any]:
+    """Sample key info data for testing."""
+    return {
+        "instances": [
+            {
+                "id": "kiin_001",
+                "categoryId": "kic_001",
+                "itemId": "kii_001",
+                "textValue": "Test text value",
+                "captureValue": None,
+                "imageId": None,
+                "imageCaption": None,
+                "order": 0,
+                "createdAt": datetime.now().isoformat(),
+                "updatedAt": None,
+            },
+            {
+                "id": "kiin_002",
+                "categoryId": "kic_001",
+                "itemId": "kii_002",
+                "textValue": None,
+                "captureValue": {
+                    "id": "kicap_001",
+                    "slideIndex": 0,
+                    "x": 100,
+                    "y": 50,
+                    "width": 200,
+                    "height": 100,
+                },
+                "imageId": None,
+                "imageCaption": None,
+                "order": 1,
+                "createdAt": datetime.now().isoformat(),
+                "updatedAt": None,
+            },
+        ],
+        "createdAt": datetime.now().isoformat(),
+        "updatedAt": None,
+    }
