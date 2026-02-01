@@ -343,6 +343,9 @@ class KeyInfoCategoryDefinition(BaseModel):
     order: int
     items: List[KeyInfoItemDefinition] = []
     createdAt: str = ""
+    # LLM 자동 생성용 프롬프트 (카테고리별 설정)
+    systemPrompt: Optional[str] = None
+    userPrompt: Optional[str] = None
 
 
 class KeyInfoSettings(BaseModel):

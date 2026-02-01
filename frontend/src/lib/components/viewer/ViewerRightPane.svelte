@@ -97,6 +97,7 @@
             {projectId}
             {slideWidth}
             {slideHeight}
+            {selectedSlideIndices}
             bind:keyInfoData
             keyInfoSettings={settings?.key_info_settings || { categories: [] }}
             {savingKeyInfo}

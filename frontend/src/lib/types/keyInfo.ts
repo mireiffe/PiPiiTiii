@@ -26,6 +26,9 @@ export interface KeyInfoCategoryDefinition {
     order: number;
     items: KeyInfoItemDefinition[];
     createdAt: string;
+    // LLM 자동 생성용 프롬프트 (카테고리별 설정)
+    systemPrompt?: string;
+    userPrompt?: string;  // {{key_info_title}}, {{key_info_description}} 템플릿 변수 지원
 }
 
 /**
