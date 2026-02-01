@@ -558,7 +558,7 @@
                                             <textarea
                                                 value={category.userPrompt || ''}
                                                 on:input={(e) => updateCategoryPrompt(category.id, 'userPrompt', e.currentTarget.value)}
-                                                placeholder="예: 슬라이드에서 {{key_info_title}}에 해당하는 내용을 찾아 설명해주세요."
+                                                placeholder={'예: 슬라이드에서 {{key_info_title}}에 해당하는 내용을 찾아 설명해주세요.'}
                                                 class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white"
                                                 rows="3"
                                             ></textarea>
