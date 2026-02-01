@@ -16,7 +16,7 @@
     fetchProjectsSummaryStatus,
     batchGenerateSummary,
     validateWorkflows,
-    fetchWorkflowConfirmationStatus,
+    fetchKeyinfoStatus,
     updateProjectKept,
   } from "$lib/api/project";
   import { ENABLE_DOWNLOAD } from "$lib/api/client";
@@ -97,29 +97,23 @@
   /** @type {Set<string>} */
   let workflowWarningProjects = new Set();
 
-  // Workflow confirmation status (projects with started but unconfirmed workflows)
+  // KeyInfo status
   /** @type {Set<string>} */
-  let workflowPendingConfirmation = new Set();
-
-  // Workflow not started projects (no unified steps in any workflow)
+  let keyinfoNotStartedProjects = new Set();
   /** @type {Set<string>} */
-  let workflowNotStartedProjects = new Set();
-
-  // Workflow confirmed projects
-  /** @type {Set<string>} */
-  let workflowConfirmedProjects = new Set();
+  let keyinfoInProgressProjects = new Set();
 
   // Keep (archive) viewing mode
   let showKeptOnly = false;
 
-  // Workflow filter toggles (persisted in sessionStorage)
-  const WF_FILTER_STORAGE_KEY = "pipiiitiii_workflow_filters";
+  // Keyinfo filter toggles (persisted in sessionStorage)
+  const KI_FILTER_STORAGE_KEY = "pipiiitiii_keyinfo_filters";
   /** @type {Set<string>} */
-  let activeWorkflowFilters = loadWorkflowFilters();
+  let activeKeyinfoFilters = loadKeyinfoFilters();
 
-  function loadWorkflowFilters() {
+  function loadKeyinfoFilters() {
     try {
-      const stored = sessionStorage.getItem(WF_FILTER_STORAGE_KEY);
+      const stored = sessionStorage.getItem(KI_FILTER_STORAGE_KEY);
       if (stored) {
         return new Set(JSON.parse(stored));
       }
@@ -127,9 +121,9 @@
     return new Set();
   }
 
-  function saveWorkflowFilters() {
+  function saveKeyinfoFilters() {
     try {
-      sessionStorage.setItem(WF_FILTER_STORAGE_KEY, JSON.stringify([...activeWorkflowFilters]));
+      sessionStorage.setItem(KI_FILTER_STORAGE_KEY, JSON.stringify([...activeKeyinfoFilters]));
     } catch (_) {}
   }
 
@@ -271,15 +265,13 @@
         }
       }
 
-      // Workflow status filter (only apply when not in kept mode)
-      if (!showKeptOnly && activeWorkflowFilters.size > 0) {
+      // KeyInfo status filter (only apply when not in kept mode)
+      if (!showKeptOnly && activeKeyinfoFilters.size > 0) {
         const matchesAny =
-          (activeWorkflowFilters.has("needs_definition") &&
-            workflowNotStartedProjects.has(p.id)) ||
-          (activeWorkflowFilters.has("needs_confirmation") &&
-            workflowPendingConfirmation.has(p.id)) ||
-          (activeWorkflowFilters.has("confirmed") &&
-            workflowConfirmedProjects.has(p.id));
+          (activeKeyinfoFilters.has("not_started") &&
+            keyinfoNotStartedProjects.has(p.id)) ||
+          (activeKeyinfoFilters.has("in_progress") &&
+            keyinfoInProgressProjects.has(p.id));
         if (!matchesAny) return false;
       }
 
@@ -377,8 +369,8 @@
       await loadSummaryStatus();
       // Load workflow validation status
       await loadWorkflowValidation();
-      // Load workflow confirmation status
-      await loadWorkflowConfirmationStatus();
+      // Load keyinfo status
+      await loadKeyinfoStatus();
     } catch (e) {
       console.error(e);
     } finally {
@@ -419,34 +411,32 @@
     }
   }
 
-  async function loadWorkflowConfirmationStatus() {
+  async function loadKeyinfoStatus() {
     try {
-      const res = await fetchWorkflowConfirmationStatus();
+      const res = await fetchKeyinfoStatus();
       if (res.ok) {
         const data = await res.json();
-        workflowNotStartedProjects = new Set(data.not_started_project_ids || []);
-        workflowPendingConfirmation = new Set(data.pending_project_ids);
-        workflowConfirmedProjects = new Set(data.confirmed_project_ids || []);
+        keyinfoNotStartedProjects = new Set(data.not_started_project_ids || []);
+        keyinfoInProgressProjects = new Set(data.in_progress_project_ids || []);
       }
     } catch (e) {
-      console.error("Failed to load workflow confirmation status", e);
+      console.error("Failed to load keyinfo status", e);
     }
   }
 
-  function toggleWorkflowFilter(filterKey) {
+  function toggleKeyinfoFilter(filterKey) {
     if (filterKey === "all") {
-      // "전체" clears all specific filters
-      activeWorkflowFilters = new Set();
+      activeKeyinfoFilters = new Set();
     } else {
-      const newFilters = new Set(activeWorkflowFilters);
+      const newFilters = new Set(activeKeyinfoFilters);
       if (newFilters.has(filterKey)) {
         newFilters.delete(filterKey);
       } else {
         newFilters.add(filterKey);
       }
-      activeWorkflowFilters = newFilters;
+      activeKeyinfoFilters = newFilters;
     }
-    saveWorkflowFilters();
+    saveKeyinfoFilters();
   }
 
   function toggleSelectionMode() {
@@ -855,46 +845,37 @@
         </div>
       </div>
 
-      <!-- Workflow Status Filter -->
+      <!-- KeyInfo Status Filter -->
       <div
         class="px-5 py-3 border-b border-gray-100 bg-gray-50/80 flex items-center gap-2 shrink-0"
       >
-        <span class="text-xs font-semibold text-gray-500 mr-1">워크플로우</span>
+        <span class="text-xs font-semibold text-gray-500 mr-1">핵심정보</span>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
-                 {!showKeptOnly && activeWorkflowFilters.size === 0
+                 {!showKeptOnly && activeKeyinfoFilters.size === 0
             ? 'bg-gray-800 text-white border-gray-800 shadow-sm'
             : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:bg-gray-50'}"
-          on:click={() => { showKeptOnly = false; toggleWorkflowFilter("all"); }}
+          on:click={() => { showKeptOnly = false; toggleKeyinfoFilter("all"); }}
         >
           전체
         </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
-                 {!showKeptOnly && activeWorkflowFilters.has('needs_definition')
-            ? 'bg-red-500 text-white border-red-500 shadow-sm'
-            : 'bg-white text-gray-600 border-gray-300 hover:border-red-300 hover:text-red-600 hover:bg-red-50'}"
-          on:click={() => { showKeptOnly = false; toggleWorkflowFilter("needs_definition"); }}
+                 {!showKeptOnly && activeKeyinfoFilters.has('not_started')
+            ? 'bg-gray-500 text-white border-gray-500 shadow-sm'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:text-gray-700 hover:bg-gray-50'}"
+          on:click={() => { showKeptOnly = false; toggleKeyinfoFilter("not_started"); }}
         >
-          정의 필요
+          시작전
         </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
-                 {!showKeptOnly && activeWorkflowFilters.has('needs_confirmation')
-            ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
-            : 'bg-white text-gray-600 border-gray-300 hover:border-orange-300 hover:text-orange-600 hover:bg-orange-50'}"
-          on:click={() => { showKeptOnly = false; toggleWorkflowFilter("needs_confirmation"); }}
+                 {!showKeptOnly && activeKeyinfoFilters.has('in_progress')
+            ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'}"
+          on:click={() => { showKeptOnly = false; toggleKeyinfoFilter("in_progress"); }}
         >
-          확정 필요
-        </button>
-        <button
-          class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
-                 {!showKeptOnly && activeWorkflowFilters.has('confirmed')
-            ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
-            : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'}"
-          on:click={() => { showKeptOnly = false; toggleWorkflowFilter("confirmed"); }}
-        >
-          확정 완료
+          작업중
         </button>
 
         <div class="w-px h-5 bg-gray-300 mx-1"></div>
@@ -904,7 +885,7 @@
                  {showKeptOnly
             ? 'bg-teal-500 text-white border-teal-500 shadow-sm'
             : 'bg-white text-gray-600 border-gray-300 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50'}"
-          on:click={() => { showKeptOnly = !showKeptOnly; if (showKeptOnly) activeWorkflowFilters = new Set(); }}
+          on:click={() => { showKeptOnly = !showKeptOnly; if (showKeptOnly) activeKeyinfoFilters = new Set(); }}
         >
           <svg class="w-3 h-3" fill={showKeptOnly ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1014,8 +995,6 @@
               {@const hasWorkflowWarning = workflowWarningProjects.has(
                 project.id,
               )}
-              {@const needsWorkflowConfirmation =
-                workflowPendingConfirmation.has(project.id)}
               {@const isPinned = pinnedProjectIds.has(project.id)}
 
               <div class="relative group">
@@ -1188,30 +1167,6 @@
                           </svg>
                           <span class="text-[10px] font-medium text-red-600"
                             >워크플로우 오류</span
-                          >
-                        </div>
-                      {/if}
-                      <!-- Workflow Confirmation Needed -->
-                      {#if needsWorkflowConfirmation}
-                        <div
-                          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200"
-                          title="워크플로우가 시작되었으나 아직 확정되지 않았습니다"
-                        >
-                          <svg
-                            class="w-3 h-3 text-orange-500"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          <span class="text-[10px] font-medium text-orange-600"
-                            >확정 필요</span
                           >
                         </div>
                       {/if}

@@ -513,3 +513,26 @@ class Database:
         )
         conn.commit()
         conn.close()
+
+    def get_all_keyinfo_status(self) -> List[Dict[str, Any]]:
+        """Get keyinfo instance status for all projects.
+
+        Returns list of { id, has_instances: bool }
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, key_info_data FROM projects")
+        rows = cursor.fetchall()
+        conn.close()
+        result = []
+        for row in rows:
+            has_instances = False
+            if row[1]:
+                try:
+                    data = json.loads(row[1])
+                    instances = data.get("instances", [])
+                    has_instances = len(instances) > 0
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            result.append({"id": row[0], "has_instances": has_instances})
+        return result
