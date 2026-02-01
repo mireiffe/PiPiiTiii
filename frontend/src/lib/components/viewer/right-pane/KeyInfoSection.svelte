@@ -20,6 +20,7 @@
         uploadAttachmentImage,
         deleteAttachmentImage,
         getAttachmentImageUrl,
+        generateTextStream,
     } from "$lib/api/project";
     import { generateAttachmentId } from "$lib/types/workflow";
 
@@ -32,6 +33,7 @@
     export let captureTargetInstanceId: string | null = null;
     export let slideWidth: number = 960;
     export let slideHeight: number = 540;
+    export let selectedSlideIndices: number[] = [];
 
     const dispatch = createEventDispatcher();
 
@@ -456,6 +458,69 @@
         return overlays;
     }
 
+    // LLM 자동 생성 상태
+    let generatingInstanceId: string | null = null;
+
+    // 템플릿 변수 치환
+    function resolveTemplate(template: string, item: KeyInfoItemDefinition): string {
+        return template
+            .replace(/\{\{key_info_title\}\}/g, item.title)
+            .replace(/\{\{key_info_description\}\}/g, item.description || '');
+    }
+
+    // LLM 자동 생성
+    async function autoGenerate(instance: KeyInfoInstance) {
+        const category = keyInfoSettings.categories.find(c => c.id === instance.categoryId);
+        const item = category?.items.find(i => i.id === instance.itemId);
+        if (!category || !item) return;
+
+        if (!category.systemPrompt && !category.userPrompt) {
+            alert('설정에서 이 카테고리의 LLM 프롬프트를 먼저 설정해주세요.');
+            return;
+        }
+
+        const slideIndices = selectedSlideIndices.length > 0
+            ? selectedSlideIndices
+            : Array.from({ length: 20 }, (_, i) => i); // fallback: first 20 slides
+
+        const systemPrompt = resolveTemplate(category.systemPrompt || '당신은 PPT 프레젠테이션을 분석하는 전문가입니다.', item);
+        const userPrompt = resolveTemplate(category.userPrompt || '이 슬라이드에서 {{key_info_title}}에 해당하는 내용을 찾아 설명해주세요.', item);
+
+        generatingInstanceId = instance.id;
+
+        try {
+            const stream = await generateTextStream(projectId, systemPrompt, userPrompt, slideIndices);
+            if (!stream) return;
+
+            const reader = stream.getReader();
+            const decoder = new TextDecoder();
+            let accumulated = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                accumulated += decoder.decode(value, { stream: true });
+
+                // 실시간 반영
+                keyInfoData = {
+                    ...keyInfoData,
+                    instances: keyInfoData.instances.map(inst =>
+                        inst.id === instance.id
+                            ? { ...inst, textValue: accumulated, updatedAt: new Date().toISOString() }
+                            : inst
+                    )
+                };
+            }
+
+            emitChange();
+        } catch (e) {
+            console.error('Auto-generate failed:', e);
+            alert('자동 생성에 실패했습니다.');
+        } finally {
+            generatingInstanceId = null;
+        }
+    }
+
     // Emit change event
     function emitChange() {
         dispatch("keyInfoChange", { keyInfoData });
@@ -656,15 +721,35 @@
                                                     <div class="text-[10px] text-gray-500 mt-0.5 truncate">{item.description}</div>
                                                 {/if}
                                             </div>
-                                            <button
-                                                class="text-gray-400 hover:text-red-500 transition-colors p-0.5 flex-shrink-0"
-                                                on:click={() => removeItem(instance.id)}
-                                                title="항목 삭제"
-                                            >
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
+                                            <div class="flex items-center gap-0.5 flex-shrink-0">
+                                                <!-- 자동 생성 버튼 -->
+                                                {#if generatingInstanceId === instance.id}
+                                                    <div class="p-0.5 text-purple-500 animate-spin" title="생성 중...">
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                    </div>
+                                                {:else}
+                                                    <button
+                                                        class="text-gray-400 hover:text-purple-500 transition-colors p-0.5"
+                                                        on:click={() => autoGenerate(instance)}
+                                                        title="LLM 자동 생성"
+                                                    >
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                        </svg>
+                                                    </button>
+                                                {/if}
+                                                <button
+                                                    class="text-gray-400 hover:text-red-500 transition-colors p-0.5"
+                                                    on:click={() => removeItem(instance.id)}
+                                                    title="항목 삭제"
+                                                >
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <!-- 1. 텍스트 영역 (항상 표시) -->

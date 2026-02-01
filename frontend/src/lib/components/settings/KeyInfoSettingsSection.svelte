@@ -268,6 +268,13 @@
         dragItemCategoryId = null;
     }
 
+    function updateCategoryPrompt(categoryId: string, field: 'systemPrompt' | 'userPrompt', value: string) {
+        keyInfoSettings.categories = keyInfoSettings.categories.map(c =>
+            c.id === categoryId ? { ...c, [field]: value } : c
+        );
+        emitUpdate();
+    }
+
     function handleCategoryKeydown(e: KeyboardEvent) {
         if (e.key === 'Enter') {
             saveEditingCategory();
@@ -526,6 +533,41 @@
                                         </div>
                                     {/each}
                                 {/if}
+
+                                <!-- LLM 프롬프트 설정 -->
+                                <div class="mt-4 pt-4 border-t border-gray-200">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                        <span class="text-sm font-medium text-gray-700">LLM 자동 생성 프롬프트</span>
+                                    </div>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">System Prompt</label>
+                                            <textarea
+                                                value={category.systemPrompt || ''}
+                                                on:input={(e) => updateCategoryPrompt(category.id, 'systemPrompt', e.currentTarget.value)}
+                                                placeholder="예: 당신은 PPT 프레젠테이션을 분석하는 전문가입니다."
+                                                class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white"
+                                                rows="2"
+                                            ></textarea>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 mb-1">User Prompt</label>
+                                            <textarea
+                                                value={category.userPrompt || ''}
+                                                on:input={(e) => updateCategoryPrompt(category.id, 'userPrompt', e.currentTarget.value)}
+                                                placeholder="예: 슬라이드에서 {{key_info_title}}에 해당하는 내용을 찾아 설명해주세요."
+                                                class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-white"
+                                                rows="3"
+                                            ></textarea>
+                                            <p class="text-[10px] text-gray-400 mt-1">
+                                                사용 가능한 변수: <code class="bg-gray-100 px-1 rounded">{'{{key_info_title}}'}</code> (항목 제목), <code class="bg-gray-100 px-1 rounded">{'{{key_info_description}}'}</code> (항목 설명)
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 <!-- Add Item Button -->
                                 {#if addingItemToCategoryId === category.id}
