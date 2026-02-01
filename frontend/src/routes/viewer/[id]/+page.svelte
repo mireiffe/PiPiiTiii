@@ -176,6 +176,12 @@
             leftPaneExpanded = savedLeftPaneState === "true";
         }
 
+        // Load capture overlay visibility state from localStorage
+        const savedOverlayState = localStorage.getItem("viewer-capture-overlays-visible");
+        if (savedOverlayState !== null) {
+            showCaptureOverlays = savedOverlayState === "true";
+        }
+
         // Set rightPane width to 35% of window width (min 600px, max 800px)
         const calculatedWidth = Math.min(
             800,
@@ -353,6 +359,23 @@
         saveKeyInfo(newData);
         // Update key info capture overlays
         updateKeyInfoCaptureOverlays();
+    }
+
+    async function handleKeyInfoSettingsChange(event: CustomEvent) {
+        const { keyInfoSettings: newSettings } = event.detail;
+
+        // Update settings object
+        settings = {
+            ...settings,
+            key_info_settings: newSettings
+        };
+
+        // Save to API
+        try {
+            await updateSettings(settings);
+        } catch (e) {
+            console.error("Failed to save key info settings", e);
+        }
     }
 
     function handleKeyInfoToggleCaptureMode(event: CustomEvent) {
@@ -939,7 +962,10 @@
                 on:saveState={handleSaveState}
                 on:reset={handleReset}
                 on:toggleThumbnailView={toggleThumbnailView}
-                on:toggleOverlays={() => (showCaptureOverlays = !showCaptureOverlays)}
+                on:toggleOverlays={() => {
+                    showCaptureOverlays = !showCaptureOverlays;
+                    localStorage.setItem("viewer-capture-overlays-visible", String(showCaptureOverlays));
+                }}
                 on:reparseAll={handleReparseAll}
                 on:reparseSlide={handleReparseSlide}
                 on:download={handleDownload}
@@ -1023,6 +1049,7 @@
         slideWidth={project?.slide_width || 960}
         slideHeight={project?.slide_height || 540}
         on:keyInfoChange={handleKeyInfoChange}
+        on:keyInfoSettingsChange={handleKeyInfoSettingsChange}
         on:toggleKeyInfoCaptureMode={handleKeyInfoToggleCaptureMode}
         on:generateAllSummaries={generateAllSummaries}
         on:toggleSlideSelection={(e) =>

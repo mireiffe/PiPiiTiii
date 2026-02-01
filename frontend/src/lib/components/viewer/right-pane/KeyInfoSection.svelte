@@ -13,6 +13,7 @@
     import {
         createEmptyKeyInfoData,
         createKeyInfoInstance,
+        createKeyInfoItem,
         generateKeyInfoCaptureId,
     } from "$lib/types/keyInfo";
     import {
@@ -35,9 +36,17 @@
     const dispatch = createEventDispatcher();
 
     // State
-    let addingItemToCategoryId: string | null = null;
     let editingTextInstanceId: string | null = null;
     let textInputValue: string = "";
+
+    // Empty Ticket 상태
+    let editingEmptyCategoryId: string | null = null;
+    let emptyTicketSearchText: string = "";
+
+    // 새 항목 추가 모드 상태
+    let addingNewItemToCategoryId: string | null = null;
+    let newItemTitle: string = "";
+    let newItemDescription: string = "";
 
     // Image viewer modal state
     let viewingImageId: string | null = null;
@@ -85,10 +94,110 @@
         return category.items.filter(item => !categoryInstances.has(item.id));
     }
 
+    // Get filtered items based on search text
+    function getFilteredItems(category: KeyInfoCategoryDefinition): KeyInfoItemDefinition[] {
+        const available = getAvailableItems(category);
+        if (!emptyTicketSearchText.trim()) return available;
+
+        const search = emptyTicketSearchText.toLowerCase();
+        return available.filter(item =>
+            item.title.toLowerCase().includes(search)
+        );
+    }
+
+    // Check if search text matches any existing item (for showing "add new" option)
+    function hasExactMatch(category: KeyInfoCategoryDefinition): boolean {
+        if (!emptyTicketSearchText.trim()) return false;
+        const search = emptyTicketSearchText.trim().toLowerCase();
+        return category.items.some(item => item.title.toLowerCase() === search);
+    }
+
+    // Start editing empty ticket
+    function startEmptyTicketEdit(categoryId: string) {
+        editingEmptyCategoryId = categoryId;
+        emptyTicketSearchText = "";
+    }
+
+    // Cancel empty ticket edit
+    function cancelEmptyTicketEdit() {
+        editingEmptyCategoryId = null;
+        emptyTicketSearchText = "";
+    }
+
+    // Start add new item mode
+    function startAddNewItem(categoryId: string, title: string) {
+        addingNewItemToCategoryId = categoryId;
+        newItemTitle = title;
+        newItemDescription = "";
+        editingEmptyCategoryId = null;
+        emptyTicketSearchText = "";
+    }
+
+    // Cancel add new item
+    function cancelAddNewItem() {
+        addingNewItemToCategoryId = null;
+        newItemTitle = "";
+        newItemDescription = "";
+    }
+
+    // Confirm add new item
+    async function confirmAddNewItem() {
+        if (!addingNewItemToCategoryId || !newItemTitle.trim()) return;
+
+        const category = keyInfoSettings.categories.find(c => c.id === addingNewItemToCategoryId);
+        if (!category) return;
+
+        // 1. Create new item definition
+        const newItem = createKeyInfoItem(
+            newItemTitle.trim(),
+            newItemDescription.trim(),
+            category.items.length
+        );
+
+        // 2. Update settings
+        const updatedSettings = {
+            ...keyInfoSettings,
+            categories: keyInfoSettings.categories.map(c =>
+                c.id === addingNewItemToCategoryId
+                    ? { ...c, items: [...c.items, newItem] }
+                    : c
+            )
+        };
+
+        // 3. Notify parent about settings change
+        dispatch("keyInfoSettingsChange", { keyInfoSettings: updatedSettings });
+
+        // 4. Create new instance
+        const categoryId = addingNewItemToCategoryId;
+        cancelAddNewItem();
+        await addItemToCategory(categoryId, newItem.id);
+    }
+
+    // Handle empty ticket keydown
+    function handleEmptyTicketKeydown(e: KeyboardEvent, categoryId: string) {
+        if (e.key === "Escape") {
+            cancelEmptyTicketEdit();
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            const category = keyInfoSettings.categories.find(c => c.id === categoryId);
+            if (!category) return;
+
+            const filtered = getFilteredItems(category);
+            if (filtered.length === 1) {
+                // Select the only matching item
+                addItemToCategory(categoryId, filtered[0].id);
+                cancelEmptyTicketEdit();
+            } else if (filtered.length === 0 && emptyTicketSearchText.trim() && !hasExactMatch(category)) {
+                // Start adding new item
+                startAddNewItem(categoryId, emptyTicketSearchText.trim());
+            }
+        }
+    }
+
     // Add item to category (create instance)
     async function addItemToCategory(categoryId: string, itemId: string) {
-        // Close dropdown first to prevent race conditions
-        addingItemToCategoryId = null;
+        // Close empty ticket edit first
+        cancelEmptyTicketEdit();
 
         // Wait for Svelte to process the state change
         await tick();
@@ -377,22 +486,24 @@
         }
     }
 
-    // Close dropdown when clicking outside (with delay to allow item click to process)
+    // Close empty ticket edit when clicking outside
     function handleClickOutside(event: MouseEvent) {
         const target = event.target as HTMLElement;
-        // Don't close if clicking inside dropdown area
-        if (target.closest('.item-dropdown')) {
+        // Don't close if clicking inside empty ticket or new item form
+        if (target.closest('.empty-ticket-area')) {
             return;
         }
-        // Use setTimeout to ensure any dropdown item click handlers complete first
+        // Use setTimeout to ensure any click handlers complete first
         setTimeout(() => {
-            addingItemToCategoryId = null;
+            if (editingEmptyCategoryId) {
+                cancelEmptyTicketEdit();
+            }
         }, 10);
     }
 
     // Calculate thumbnail cropping styles for capture preview
     function getCaptureThumbStyle(capture: { x: number; y: number; width: number; height: number; slideIndex: number }): string {
-        const thumbUrl = `/api/results/${projectId}/thumbnails/slide_${String(capture.slideIndex).padStart(3, '0')}_thumb.png`;
+        const thumbUrl = `/api/results/${projectId}/thumbnails/slide_${String(capture.slideIndex + 1).padStart(3, '0')}_thumb.png`;
 
         // Guard against zero-size captures
         if (capture.width <= 0 || capture.height <= 0) {
@@ -411,11 +522,11 @@
         const thumbH = capture.height * thumbScale;
 
         // Container size
-        const containerW = 60;
-        const containerH = 45;
+        const containerW = 80;
+        const containerH = 60;
 
-        // Calculate scale to fit capture region into container
-        const displayScale = Math.max(containerW / thumbW, containerH / thumbH);
+        // Calculate scale to fit capture region into container (use Math.min for contain behavior)
+        const displayScale = Math.min(containerW / thumbW, containerH / thumbH);
 
         // Calculate background size
         const bgWidth = thumbMaxWidth * displayScale;
@@ -529,61 +640,11 @@
                                     {addedItems.length}
                                 </span>
                             {/if}
-
-                            <!-- "+" 추가 버튼 - 더 크고 눈에 띄게 -->
-                            <div class="relative item-dropdown">
-                                <button
-                                    class="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors
-                                        {availableItems.length === 0
-                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                            : 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm'}"
-                                    on:click|stopPropagation={() => {
-                                        if (availableItems.length > 0) {
-                                            addingItemToCategoryId = addingItemToCategoryId === category.id ? null : category.id;
-                                        }
-                                    }}
-                                    disabled={availableItems.length === 0}
-                                    title={availableItems.length === 0 ? "추가할 수 있는 항목이 없습니다" : "항목 추가"}
-                                >
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    <span>추가</span>
-                                </button>
-
-                                <!-- 항목 선택 드롭다운 -->
-                                {#if addingItemToCategoryId === category.id}
-                                    <div
-                                        class="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[200px] py-1"
-                                        transition:slide={{ duration: 100 }}
-                                    >
-                                        <div class="px-3 py-1.5 text-xs text-gray-500 font-medium border-b border-gray-100">
-                                            추가할 항목 선택
-                                        </div>
-                                        {#each availableItems as item (item.id)}
-                                            <button
-                                                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                                                on:click|stopPropagation={() => addItemToCategory(category.id, item.id)}
-                                            >
-                                                <div class="font-medium">{item.title}</div>
-                                                {#if item.description}
-                                                    <div class="text-xs text-gray-400 mt-0.5">{item.description}</div>
-                                                {/if}
-                                            </button>
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </div>
                         </div>
 
                         <!-- Category Content -->
                         <div class="p-2 space-y-2">
-                            {#if addedItems.length === 0}
-                                <div class="text-center text-gray-400 py-3 text-xs border border-dashed border-gray-200 rounded">
-                                    항목 없음 - 위 '추가' 버튼을 클릭하세요
-                                </div>
-                            {:else}
-                                {#each addedItems as { item, instance } (instance.id)}
+                            {#each addedItems as { item, instance } (instance.id)}
                                     {@const captures = instance.captureValues || (instance.captureValue ? [instance.captureValue] : [])}
                                     {@const images = instance.imageIds || (instance.imageId ? [instance.imageId] : [])}
                                     <div class="border rounded p-2 bg-gray-50">
@@ -663,7 +724,7 @@
                                             <div class="flex gap-1.5 overflow-x-auto pb-1" style="scrollbar-width: thin;">
                                                 <!-- 캡처 썸네일들 -->
                                                 {#each captures as capture (capture.id)}
-                                                    <div class="relative flex-shrink-0 w-[60px] h-[45px] bg-gray-200 rounded overflow-hidden border border-gray-200 group">
+                                                    <div class="relative flex-shrink-0 w-[80px] h-[60px] bg-gray-200 rounded overflow-hidden border border-gray-200 group">
                                                         <div
                                                             class="absolute inset-0"
                                                             style={getCaptureThumbStyle(capture)}
@@ -688,7 +749,7 @@
                                                     <!-- svelte-ignore a11y-click-events-have-key-events -->
                                                     <!-- svelte-ignore a11y-no-static-element-interactions -->
                                                     <div
-                                                        class="relative flex-shrink-0 w-[60px] h-[45px] rounded overflow-hidden border border-gray-200 group cursor-pointer hover:ring-2 hover:ring-blue-400"
+                                                        class="relative flex-shrink-0 w-[80px] h-[60px] rounded overflow-hidden border border-gray-200 group cursor-pointer hover:ring-2 hover:ring-blue-400"
                                                         on:click={() => openImageViewer(instance.id, imageId)}
                                                         title="클릭하여 이미지 보기"
                                                     >
@@ -717,7 +778,7 @@
 
                                                 <!-- 추가 버튼 -->
                                                 <button
-                                                    class="flex-shrink-0 w-[60px] h-[45px] border border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors
+                                                    class="flex-shrink-0 w-[80px] h-[60px] border border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors
                                                         {captureTargetInstanceId === instance.id ? 'bg-blue-50 border-blue-400 text-blue-600' : ''}"
                                                     on:click={() => startCapture(instance.id)}
                                                     title="캡처 추가"
@@ -745,7 +806,133 @@
                                         {/if}
                                     </div>
                                 {/each}
-                            {/if}
+
+                                <!-- Empty Ticket: 새 항목 추가를 위한 빈 티켓 -->
+                                {#if addingNewItemToCategoryId === category.id}
+                                    <!-- 새 항목 추가 폼 (제목 + 설명) -->
+                                    <div class="empty-ticket-area border-2 border-blue-400 rounded p-3 bg-blue-50">
+                                        <div class="flex items-center gap-2 mb-3">
+                                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            <span class="text-sm font-medium text-blue-700">새 항목 추가</span>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <div>
+                                                <input
+                                                    type="text"
+                                                    bind:value={newItemTitle}
+                                                    class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    placeholder="제목"
+                                                />
+                                            </div>
+                                            <div>
+                                                <input
+                                                    type="text"
+                                                    bind:value={newItemDescription}
+                                                    class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    placeholder="설명 (선택)"
+                                                />
+                                            </div>
+                                            <div class="flex gap-2 justify-end pt-1">
+                                                <button
+                                                    class="px-3 py-1 text-xs text-gray-500 hover:text-gray-700"
+                                                    on:click={cancelAddNewItem}
+                                                >
+                                                    취소
+                                                </button>
+                                                <button
+                                                    class="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                                    on:click={confirmAddNewItem}
+                                                    disabled={!newItemTitle.trim()}
+                                                >
+                                                    추가
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {:else if editingEmptyCategoryId === category.id}
+                                    <!-- Autocomplete 입력 모드 -->
+                                    {@const filteredItems = getFilteredItems(category)}
+                                    {@const showAddNew = emptyTicketSearchText.trim() && !hasExactMatch(category)}
+                                    <div class="empty-ticket-area border-2 border-blue-400 rounded p-2 bg-white relative">
+                                        <div class="flex items-center gap-2">
+                                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                bind:value={emptyTicketSearchText}
+                                                on:keydown={(e) => handleEmptyTicketKeydown(e, category.id)}
+                                                class="flex-1 border-none outline-none text-xs bg-transparent"
+                                                placeholder="항목 검색 또는 새로 입력..."
+                                                autofocus
+                                            />
+                                            <button
+                                                class="text-gray-400 hover:text-gray-600"
+                                                on:click={cancelEmptyTicketEdit}
+                                                title="닫기"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+
+                                        <!-- 드롭다운 목록 -->
+                                        <div class="mt-2 border-t border-gray-100 pt-2 max-h-[200px] overflow-y-auto">
+                                            {#if filteredItems.length > 0}
+                                                <div class="text-[10px] text-gray-400 px-1 mb-1">사용 가능한 항목</div>
+                                                {#each filteredItems as item (item.id)}
+                                                    <button
+                                                        class="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                                                        on:click={() => {
+                                                            addItemToCategory(category.id, item.id);
+                                                            cancelEmptyTicketEdit();
+                                                        }}
+                                                    >
+                                                        <div class="font-medium">{item.title}</div>
+                                                        {#if item.description}
+                                                            <div class="text-[10px] text-gray-400 mt-0.5">{item.description}</div>
+                                                        {/if}
+                                                    </button>
+                                                {/each}
+                                            {:else if emptyTicketSearchText.trim()}
+                                                <div class="text-[10px] text-gray-400 px-1 mb-1">매칭되는 항목 없음</div>
+                                            {/if}
+
+                                            <!-- 새 항목 추가 옵션 -->
+                                            {#if showAddNew}
+                                                <div class="border-t border-gray-100 mt-1 pt-1">
+                                                    <button
+                                                        class="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-green-50 hover:text-green-700 transition-colors flex items-center gap-1.5"
+                                                        on:click={() => startAddNewItem(category.id, emptyTicketSearchText.trim())}
+                                                    >
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                        </svg>
+                                                        <span>"{emptyTicketSearchText.trim()}" 새 항목으로 추가</span>
+                                                    </button>
+                                                </div>
+                                            {/if}
+                                        </div>
+                                    </div>
+                                {:else if availableItems.length > 0 || category.items.length === 0}
+                                    <!-- 빈 티켓 (클릭하여 항목 추가) -->
+                                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                    <div
+                                        class="empty-ticket-area border border-dashed border-gray-300 rounded p-2 bg-gray-50/50 cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors"
+                                        on:click={() => startEmptyTicketEdit(category.id)}
+                                    >
+                                        <div class="flex items-center gap-2 text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            <span class="text-xs">항목을 선택하거나 새로 입력...</span>
+                                        </div>
+                                    </div>
+                                {/if}
                         </div>
                     </div>
                 {/each}

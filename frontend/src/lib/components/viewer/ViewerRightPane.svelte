@@ -105,6 +105,7 @@
             bind:this={keyInfoSectionRef}
             on:toggleExpand={() => toggleSection("keyinfo")}
             on:keyInfoChange
+            on:keyInfoSettingsChange
             on:toggleCaptureMode={(e) => dispatch("toggleKeyInfoCaptureMode", e.detail)}
         />
 
