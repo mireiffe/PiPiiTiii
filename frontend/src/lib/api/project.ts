@@ -244,12 +244,11 @@ export async function removeInvalidWorkflowSteps(
 }
 
 /**
- * Fetch workflow confirmation status for all projects
- * Returns: { pending_project_ids: string[] }
- * Projects with started but unconfirmed workflows
+ * Fetch keyinfo status for all projects
+ * Returns: { not_started_project_ids: string[], in_progress_project_ids: string[] }
  */
-export async function fetchWorkflowConfirmationStatus(): Promise<Response> {
-    return apiFetch('/api/projects/workflow-confirmation-status');
+export async function fetchKeyinfoStatus(): Promise<Response> {
+    return apiFetch('/api/projects/keyinfo-status');
 }
 
 // ========== Workflow API (Step-based, Multi-workflow) ==========
