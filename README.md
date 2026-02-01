@@ -6,10 +6,13 @@ PiPiiTiii is a presentation rebuilder and parser that automates Microsoft PowerP
 - **PowerPoint-native parsing**: Uses `pywin32` (`win32com`) to drive Microsoft PowerPoint for high-fidelity reads of presentations.
 - **Project dashboard**: Upload PowerPoint files, monitor parsing progress, and browse slide data from the backend API.
 - **Web viewer & reconstruction**: SvelteKit UI for visualizing parsed slides and iterating on rebuilt presentations.
+- **KeyInfo (핵심정보)**: Category/Item 기반의 핵심 정보 관리 시스템으로 슬라이드 캡처, 이미지, 텍스트 지원.
+- **Project archiving**: 프로젝트 보관(keep) 기능으로 완료된 프로젝트를 별도 관리.
 
 ## Tech Stack
-- **Backend**: Python, FastAPI, PowerPoint COM automation
-- **Frontend**: SvelteKit, TailwindCSS, TypeScript
+- **Backend**: Python 3.14, FastAPI, PowerPoint COM automation
+- **Frontend**: SvelteKit 2.48, Svelte 5, TailwindCSS, TypeScript
+- **Testing**: Vitest (Frontend), Pytest (Backend)
 
 ## Prerequisites
 - Windows environment with Microsoft PowerPoint installed (required for COM automation).
@@ -54,3 +57,16 @@ The repo includes helper scripts that start both services after dependencies are
 1. Open the frontend (default `http://localhost:5173`).
 2. Upload a `.pptx` file. The backend drives Microsoft PowerPoint to parse slides and stores results in `results/`.
 3. Monitor progress, review parsed slide data, and iterate on reconstructions through the web UI.
+
+## Testing
+```bash
+# Backend tests
+uv run pytest tests/
+
+# Frontend tests
+cd frontend && npm run test -- --run
+
+# Lint
+cd frontend && npm run lint
+uv run ruff check .
+```

@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Backend: Python 3.14, FastAPI 0.122, pywin32 311, Pillow 12.0
 - Frontend: Svelte 5.43, SvelteKit 2.48, TailwindCSS 3.4, TypeScript 5.9
-- Workflow: D3.js 7.9 (custom workflow graph visualization)
+- Testing: Vitest (Frontend), Pytest (Backend)
 - Platform: **Windows only** (requires PowerPoint COM automation)
 
 ## Development Commands
@@ -48,7 +48,8 @@ Upload PPT → Background Task → COM Parser → JSON + Images → Frontend
 **Key Modules:**
 - `backend/main.py` - FastAPI server, endpoints, file upload
 - `backend/ppt_parser/` - PowerPoint COM parsing (slides, shapes, styles, images, tables)
-- `backend/llm_service.py` - LLM integration for workflow analysis
+- `backend/database.py` - SQLite database operations
+- `backend/llm_service.py` - LLM integration for summary generation
 
 **Storage:**
 ```
@@ -64,19 +65,13 @@ results/
 **Routes:**
 - `/` - Project list
 - `/upload` - Upload interface
-- `/viewer/[id]` - Slide viewer with workflow editor
+- `/viewer/[id]` - Slide viewer with KeyInfo editor
+- `/settings` - Application settings
 
 **Key Components:**
 - `ViewerCanvas.svelte` - Main slide canvas with shape rendering
-- `WorkflowSection.svelte` - Workflow tree UI container
-- `workflow/D3WorkflowGraph.svelte` - Workflow graph editor using D3.js
-
-**Node Types:**
-- Phenomenon (red) - Root node with slide captures
-- Sequence (blue) - Sequential child execution
-- Selector (green) - First-success child selection
-- Condition (yellow) - Branch logic
-- Action (purple) - Executable operations
+- `KeyInfoSection.svelte` - KeyInfo (핵심정보) management UI
+- `KeyInfoSettingsSection.svelte` - KeyInfo category/item definition settings
 
 ## Important Patterns
 
@@ -107,17 +102,42 @@ Individual shape failures don't stop parsing - log warnings and continue.
 
 ### Backend-Frontend Type Sync (IMPORTANT)
 
-When adding new fields to frontend TypeScript types (e.g., in `workflow.ts`), **always check and update the corresponding Pydantic models in the backend**. Otherwise, the backend will silently drop unknown fields during validation, causing data to not be saved.
+When adding new fields to frontend TypeScript types (e.g., in `keyInfo.ts`), **always check and update the corresponding Pydantic models in the backend**. Otherwise, the backend will silently drop unknown fields during validation, causing data to not be saved.
 
-Example: Adding `requiresKeyStepLinking` to `CoreStepDefinition` in TypeScript requires also adding it to the Pydantic model in `backend/main.py`.
+Example: Adding `imageCaptions` to `KeyInfoInstance` in TypeScript requires also adding it to the Pydantic model in `backend/main.py`.
 
-### Step Display Number (Single Source of Truth)
+### KeyInfo System (핵심정보)
 
-Step display numbers (1-based index shown in the UI and overlays) must come from `buildUnifiedDisplayMap()` in `workflow.ts`. This function takes `sortedUnifiedSteps` and returns a `Map<string, number>` mapping step ID to display number.
+프로젝트별 핵심 정보를 관리하는 시스템:
+- **Category**: 핵심정보 분류 (예: "현상", "원인", "대책")
+- **Item**: 각 카테고리 내 항목 정의
+- **Instance**: 프로젝트별 실제 데이터 (텍스트, 캡처, 이미지)
 
-- **WorkflowSection.svelte** derives `$: unifiedDisplayMap = buildUnifiedDisplayMap(sortedUnifiedSteps)` and passes it to child components.
-- **Never compute display numbers independently** (e.g., `rowIndex + 1` from `layoutRows` or `idx + 1` inline). Always read from the shared `unifiedDisplayMap`.
-- Components that need display numbers: `UnifiedStepList`, `D3WorkflowGraph`, `KeyStepLinkingWizard`, `getCaptureOverlays()`.
+**핵심 파일:**
+- `frontend/src/lib/types/keyInfo.ts` - 타입 정의
+- `frontend/src/lib/stores/keyInfo.ts` - 상태 관리
+- `frontend/src/lib/components/viewer/right-pane/KeyInfoSection.svelte` - 메인 UI
+
+**다중 캡처/이미지 지원:**
+```typescript
+interface KeyInfoInstance {
+    categoryId: string;
+    itemId: string;
+    textValue?: string;
+    captureValues?: KeyInfoCaptureValue[];  // 다중 캡처
+    imageIds?: string[];                     // 다중 이미지
+}
+```
+
+### Testing Infrastructure
+
+**Frontend (Vitest):**
+- 설정: `frontend/vitest.config.ts`
+- 셋업: `frontend/src/setupTest.ts`
+- SvelteKit 모킹: `frontend/src/mocks/app/`
+
+**Backend (Pytest):**
+- 테스트: `tests/backend/`
 
 ## API Endpoints
 
@@ -125,3 +145,6 @@ Step display numbers (1-based index shown in the UI and overlays) must come from
 - `GET /api/projects` - List all projects
 - `GET /api/project/{id}` - Get project JSON
 - `POST /api/project/{id}/slides/{slide_index}/reparse` - Re-parse single slide
+- `GET /api/project/{id}/keyinfo` - Get KeyInfo data
+- `POST /api/project/{id}/keyinfo` - Update KeyInfo data
+- `POST /api/project/{id}/keep` - Archive/unarchive project
