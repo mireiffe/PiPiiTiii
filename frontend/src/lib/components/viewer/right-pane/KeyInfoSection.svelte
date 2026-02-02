@@ -696,8 +696,8 @@
                     {@const availableItems = getAvailableItems(category)}
                     <div class="border rounded-lg bg-white shadow-sm">
                         <!-- Category Header -->
-                        <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
-                            <span class="flex-1 font-semibold text-gray-800 text-sm">{category.name}</span>
+                        <div class="flex items-center gap-2 px-3 py-2 bg-blue-50/70 border-b border-blue-100 rounded-t-lg">
+                            <span class="flex-1 font-semibold text-blue-900 text-sm">{category.name}</span>
 
                             <!-- 추가된 항목 수 표시 -->
                             {#if addedItems.length > 0}
