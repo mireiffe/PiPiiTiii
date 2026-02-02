@@ -694,10 +694,10 @@
                 {#each keyInfoSettings.categories.sort((a, b) => a.order - b.order) as category (category.id)}
                     {@const addedItems = getAddedItems(category)}
                     {@const availableItems = getAvailableItems(category)}
-                    <div class="border rounded-lg bg-white">
+                    <div class="border rounded-lg bg-white shadow-sm">
                         <!-- Category Header -->
-                        <div class="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 border-b border-gray-100">
-                            <span class="flex-1 font-medium text-gray-800 text-sm">{category.name}</span>
+                        <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <span class="flex-1 font-semibold text-gray-800 text-sm">{category.name}</span>
 
                             <!-- 추가된 항목 수 표시 -->
                             {#if addedItems.length > 0}
@@ -708,17 +708,17 @@
                         </div>
 
                         <!-- Category Content -->
-                        <div class="p-2 space-y-2">
+                        <div class="p-2.5 space-y-2.5">
                             {#each addedItems as { item, instance } (instance.id)}
                                     {@const captures = instance.captureValues || (instance.captureValue ? [instance.captureValue] : [])}
                                     {@const images = instance.imageIds || (instance.imageId ? [instance.imageId] : [])}
-                                    <div class="border rounded p-2 bg-gray-50">
+                                    <div class="border border-gray-200 rounded-lg p-2.5 bg-gray-50/80">
                                         <!-- Item Header -->
-                                        <div class="flex items-start justify-between mb-2">
+                                        <div class="flex items-start justify-between mb-2.5">
                                             <div class="flex-1 min-w-0">
-                                                <div class="font-medium text-gray-800 text-xs">{item.title}</div>
+                                                <div class="font-bold text-gray-900 text-xs">{item.title}</div>
                                                 {#if item.description}
-                                                    <div class="text-[10px] text-gray-500 mt-0.5 truncate">{item.description}</div>
+                                                    <div class="text-[10px] text-gray-500 mt-0.5 leading-relaxed">{item.description}</div>
                                                 {/if}
                                             </div>
                                             <div class="flex items-center gap-0.5 flex-shrink-0">
@@ -863,14 +863,15 @@
 
                                                 <!-- 추가 버튼 -->
                                                 <button
-                                                    class="flex-shrink-0 w-[80px] h-[60px] border border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors
+                                                    class="flex-shrink-0 w-[80px] h-[60px] border border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors gap-0.5
                                                         {captureTargetInstanceId === instance.id ? 'bg-blue-50 border-blue-400 text-blue-600' : ''}"
                                                     on:click={() => startCapture(instance.id)}
                                                     title="캡처 추가"
                                                 >
-                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v16m8-8H4" />
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" />
                                                     </svg>
+                                                    <span class="text-[8px]">{captureTargetInstanceId === instance.id ? "선택 중..." : "캡처"}</span>
                                                 </button>
                                             </div>
                                         {:else}
