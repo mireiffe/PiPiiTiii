@@ -27,6 +27,7 @@
     // Key Info data
     export let keyInfoData = { instances: [] };
     export let savingKeyInfo = false;
+    export let keyInfoCompleted = false;
     export let keyInfoCaptureMode = false;
     /** @type {string | null} */
     export let keyInfoCaptureTargetInstanceId = null;
@@ -101,6 +102,7 @@
             bind:keyInfoData
             keyInfoSettings={settings?.key_info_settings || { categories: [] }}
             {savingKeyInfo}
+            bind:keyInfoCompleted
             captureMode={keyInfoCaptureMode}
             captureTargetInstanceId={keyInfoCaptureTargetInstanceId}
             bind:this={keyInfoSectionRef}

@@ -21,6 +21,7 @@
         deleteAttachmentImage,
         getAttachmentImageUrl,
         generateTextStream,
+        updateProjectKeyInfoCompleted,
     } from "$lib/api/project";
     import { generateAttachmentId } from "$lib/types/workflow";
 
@@ -34,6 +35,7 @@
     export let slideWidth: number = 960;
     export let slideHeight: number = 540;
     export let selectedSlideIndices: number[] = [];
+    export let keyInfoCompleted: boolean = false;
 
     const dispatch = createEventDispatcher();
 
@@ -518,6 +520,24 @@
             alert('자동 생성에 실패했습니다.');
         } finally {
             generatingInstanceId = null;
+        }
+    }
+
+    // Toggle completed status
+    let togglingCompleted = false;
+    async function toggleCompleted() {
+        togglingCompleted = true;
+        try {
+            const newValue = !keyInfoCompleted;
+            const res = await updateProjectKeyInfoCompleted(projectId, newValue);
+            if (res.ok) {
+                keyInfoCompleted = newValue;
+                dispatch("keyInfoCompletedChange", { completed: newValue });
+            }
+        } catch (e) {
+            console.error("Failed to toggle completed status", e);
+        } finally {
+            togglingCompleted = false;
         }
     }
 
@@ -1029,6 +1049,37 @@
             {#if savingKeyInfo}
                 <div class="text-center text-xs text-blue-600 py-1">
                     저장 중...
+                </div>
+            {/if}
+
+            <!-- 완료 버튼 -->
+            {#if keyInfoSettings.categories.length > 0}
+                <div class="pt-2 pb-1">
+                    <button
+                        class="w-full py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-2
+                               {keyInfoCompleted
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-300 hover:bg-white hover:text-gray-600 hover:border-gray-300'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm hover:shadow-md'}"
+                        on:click={toggleCompleted}
+                        disabled={togglingCompleted}
+                    >
+                        {#if togglingCompleted}
+                            <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        {:else if keyInfoCompleted}
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            </svg>
+                            완료됨 (클릭하여 해제)
+                        {:else}
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            완료
+                        {/if}
+                    </button>
                 </div>
             {/if}
         </div>

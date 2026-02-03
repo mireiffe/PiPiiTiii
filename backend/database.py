@@ -59,6 +59,11 @@ class Database:
             cursor.execute("ALTER TABLE projects ADD COLUMN key_info_data TEXT")
             print("Added key_info_data column to projects table")
 
+        # Migration: Add key_info_completed column for 핵심정보 완료 상태
+        if "key_info_completed" not in columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN key_info_completed INTEGER DEFAULT 0")
+            print("Added key_info_completed column to projects table")
+
         # Migration: Remove phenomenon_data column (deprecated, data moved to workflow_data)
         if "phenomenon_data" in columns:
             try:
@@ -514,6 +519,17 @@ class Database:
         conn.commit()
         conn.close()
 
+    def update_project_key_info_completed(self, project_id: str, completed: bool):
+        """Update the key_info_completed status of a project."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET key_info_completed = ? WHERE id = ?",
+            (1 if completed else 0, project_id),
+        )
+        conn.commit()
+        conn.close()
+
     def get_all_keyinfo_status(self) -> List[Dict[str, Any]]:
         """Get keyinfo instance status for all projects.
 
@@ -521,7 +537,7 @@ class Database:
         """
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, key_info_data FROM projects")
+        cursor.execute("SELECT id, key_info_data, key_info_completed FROM projects")
         rows = cursor.fetchall()
         conn.close()
         result = []
@@ -534,5 +550,9 @@ class Database:
                     has_instances = len(instances) > 0
                 except (json.JSONDecodeError, AttributeError):
                     pass
-            result.append({"id": row[0], "has_instances": has_instances})
+            result.append({
+                "id": row[0],
+                "has_instances": has_instances,
+                "completed": bool(row[2]) if row[2] is not None else False,
+            })
         return result
