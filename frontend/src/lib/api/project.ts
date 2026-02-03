@@ -372,3 +372,17 @@ export async function updateProjectKeyInfo(
         body: JSON.stringify({ data }),
     });
 }
+
+/**
+ * Update key info completed status for a project
+ */
+export async function updateProjectKeyInfoCompleted(
+    id: string,
+    completed: boolean,
+): Promise<Response> {
+    return apiFetch(`/api/project/${id}/keyinfo/completed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed }),
+    });
+}

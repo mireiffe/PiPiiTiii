@@ -101,6 +101,7 @@
     let keyInfoCaptureTargetInstanceId: string | null = null;
     let keyInfoSectionRef: any = null;
     let keyInfoCaptureOverlays: any[] = [];
+    let keyInfoCompleted = false;
 
     // Accordion state for right pane sections
     let expandedSection = "keyinfo"; // 'keyinfo' | 'summary' | 'objects' - default is keyinfo
@@ -331,6 +332,7 @@
             if (res.ok) {
                 const data = await res.json();
                 keyInfoData = data || createEmptyKeyInfoData();
+                keyInfoCompleted = data?.completed || false;
             }
         } catch (e) {
             console.error("Failed to load key info", e);
@@ -1030,6 +1032,7 @@
         {expandedSection}
         bind:keyInfoData
         {savingKeyInfo}
+        bind:keyInfoCompleted
         {keyInfoCaptureMode}
         keyInfoCaptureTargetInstanceId={keyInfoCaptureTargetInstanceId}
         {settings}

@@ -102,6 +102,8 @@
   let keyinfoNotStartedProjects = new Set();
   /** @type {Set<string>} */
   let keyinfoInProgressProjects = new Set();
+  /** @type {Set<string>} */
+  let keyinfoCompletedProjects = new Set();
 
   // Keep (archive) viewing mode
   let showKeptOnly = false;
@@ -271,7 +273,9 @@
           (activeKeyinfoFilters.has("not_started") &&
             keyinfoNotStartedProjects.has(p.id)) ||
           (activeKeyinfoFilters.has("in_progress") &&
-            keyinfoInProgressProjects.has(p.id));
+            keyinfoInProgressProjects.has(p.id)) ||
+          (activeKeyinfoFilters.has("completed") &&
+            keyinfoCompletedProjects.has(p.id));
         if (!matchesAny) return false;
       }
 
@@ -283,6 +287,14 @@
       const bPinned = pinnedProjectIds.has(b.id);
       if (aPinned && !bPinned) return -1;
       if (!aPinned && bPinned) return 1;
+
+      // Completed projects go to the bottom (unless filtering by completed only)
+      if (!activeKeyinfoFilters.has("completed") || activeKeyinfoFilters.size > 1) {
+        const aCompleted = keyinfoCompletedProjects.has(a.id);
+        const bCompleted = keyinfoCompletedProjects.has(b.id);
+        if (aCompleted && !bCompleted) return 1;
+        if (!aCompleted && bCompleted) return -1;
+      }
 
       let valA, valB;
 
@@ -418,6 +430,7 @@
         const data = await res.json();
         keyinfoNotStartedProjects = new Set(data.not_started_project_ids || []);
         keyinfoInProgressProjects = new Set(data.in_progress_project_ids || []);
+        keyinfoCompletedProjects = new Set(data.completed_project_ids || []);
       }
     } catch (e) {
       console.error("Failed to load keyinfo status", e);
@@ -877,6 +890,15 @@
         >
           작업중
         </button>
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
+                 {!showKeptOnly && activeKeyinfoFilters.has('completed')
+            ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+            : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'}"
+          on:click={() => { showKeptOnly = false; toggleKeyinfoFilter("completed"); }}
+        >
+          완료
+        </button>
 
         <div class="w-px h-5 bg-gray-300 mx-1"></div>
 
@@ -995,6 +1017,7 @@
               {@const hasWorkflowWarning = workflowWarningProjects.has(
                 project.id,
               )}
+              {@const isKeyInfoCompleted = keyinfoCompletedProjects.has(project.id)}
               {@const isPinned = pinnedProjectIds.has(project.id)}
 
               <div class="relative group">
@@ -1147,6 +1170,29 @@
                             >
                           </div>
                         {/if}
+                      {/if}
+                      <!-- KeyInfo Completed Badge -->
+                      {#if isKeyInfoCompleted}
+                        <div
+                          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200"
+                          title="핵심정보 입력 완료"
+                        >
+                          <svg
+                            class="w-3 h-3 text-emerald-500"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fill-rule="evenodd"
+                              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                              clip-rule="evenodd"
+                            />
+                          </svg>
+                          <span
+                            class="text-[10px] font-medium text-emerald-600"
+                            >완료</span
+                          >
+                        </div>
                       {/if}
                       <!-- Workflow Warning -->
                       {#if hasWorkflowWarning}

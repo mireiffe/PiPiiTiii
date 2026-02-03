@@ -1095,14 +1095,18 @@ def get_keyinfo_status():
         all_status = db.get_all_keyinfo_status()
         not_started = []
         in_progress = []
+        completed = []
         for item in all_status:
-            if item["has_instances"]:
+            if item.get("completed"):
+                completed.append(item["id"])
+            elif item["has_instances"]:
                 in_progress.append(item["id"])
             else:
                 not_started.append(item["id"])
         return {
             "not_started_project_ids": not_started,
             "in_progress_project_ids": in_progress,
+            "completed_project_ids": completed,
         }
     except Exception as e:
         raise HTTPException(
@@ -1119,6 +1123,9 @@ def get_project_key_info(project_id: str):
     """Get key info data for a project (핵심정보 데이터 조회)."""
     try:
         data = db.get_project_key_info(project_id)
+        # Include completed status
+        project = db.get_project(project_id)
+        data["completed"] = bool(project.get("key_info_completed", 0)) if project else False
         return data
     except Exception as e:
         raise HTTPException(
@@ -1135,6 +1142,22 @@ def update_project_key_info(project_id: str, request: KeyInfoUpdateRequest):
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to save key info: {str(e)}"
+        )
+
+
+class ProjectKeyInfoCompletedUpdate(BaseModel):
+    completed: bool
+
+
+@app.post("/api/project/{project_id}/keyinfo/completed")
+def update_project_key_info_completed(project_id: str, update: ProjectKeyInfoCompletedUpdate):
+    """Update the key_info_completed status of a project (핵심정보 완료 상태 변경)."""
+    try:
+        db.update_project_key_info_completed(project_id, update.completed)
+        return {"status": "success", "completed": update.completed}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update key info completed status: {str(e)}"
         )
 
 
