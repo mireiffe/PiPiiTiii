@@ -1115,6 +1115,23 @@ def get_keyinfo_status():
         )
 
 
+@app.get("/api/keyinfo/usage-counts")
+def get_keyinfo_usage_counts():
+    """Get usage counts for each keyinfo item across all projects.
+
+    Returns a dict mapping "categoryId_itemId" to the number of projects
+    that have an instance for that item.
+    """
+    try:
+        counts = db.get_keyinfo_item_usage_counts()
+        return {"counts": counts}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get keyinfo usage counts: {str(e)}",
+        )
+
+
 # ========== Key Info API (핵심정보) ==========
 
 

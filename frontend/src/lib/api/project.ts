@@ -251,6 +251,14 @@ export async function fetchKeyinfoStatus(): Promise<Response> {
     return apiFetch('/api/projects/keyinfo-status');
 }
 
+/**
+ * Fetch usage counts for each keyinfo item across all projects
+ * Returns: { counts: { "categoryId_itemId": number, ... } }
+ */
+export async function fetchKeyinfoUsageCounts(): Promise<Response> {
+    return apiFetch('/api/keyinfo/usage-counts');
+}
+
 // ========== Workflow API (Step-based, Multi-workflow) ==========
 
 /**

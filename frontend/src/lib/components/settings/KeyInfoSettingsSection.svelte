@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { createEventDispatcher } from 'svelte';
+    import { createEventDispatcher, onMount } from 'svelte';
     import type { KeyInfoCategoryDefinition, KeyInfoItemDefinition, KeyInfoSettings } from '$lib/types/keyInfo';
     import {
         generateKeyInfoCategoryId,
@@ -7,6 +7,7 @@
         createKeyInfoCategory,
         createKeyInfoItem
     } from '$lib/types/keyInfo';
+    import { fetchKeyinfoUsageCounts } from '$lib/api/project';
 
     export let keyInfoSettings: KeyInfoSettings = { categories: [] };
     export let expandedCategoryId: string | null = null;
@@ -21,6 +22,37 @@
     let addingItemToCategoryId: string | null = null;
     let newItemTitle = '';
     let newItemDescription = '';
+
+    // Usage counts: how many projects use each keyinfo item
+    let usageCounts: Record<string, number> = {};
+
+    async function loadUsageCounts() {
+        try {
+            const res = await fetchKeyinfoUsageCounts();
+            if (res.ok) {
+                const data = await res.json();
+                usageCounts = data.counts || {};
+            }
+        } catch (e) {
+            console.error("Failed to load keyinfo usage counts", e);
+        }
+    }
+
+    onMount(() => {
+        loadUsageCounts();
+    });
+
+    function getItemUsageCount(categoryId: string, itemId: string): number {
+        return usageCounts[`${categoryId}_${itemId}`] || 0;
+    }
+
+    function getCategoryUsageCount(category: KeyInfoCategoryDefinition): number {
+        let total = 0;
+        for (const item of category.items) {
+            total += getItemUsageCount(category.id, item.id);
+        }
+        return total;
+    }
 
     // Drag state for categories
     let draggedCategoryIndex: number | null = null;
@@ -402,6 +434,11 @@
                         <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                             {category.items.length}개 항목
                         </span>
+                        {#if getCategoryUsageCount(category) > 0}
+                            <span class="text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded" title="이 카테고리의 항목들이 총 {getCategoryUsageCount(category)}개 프로젝트에서 사용 중">
+                                {getCategoryUsageCount(category)}개 사용
+                            </span>
+                        {/if}
 
                         <!-- Action Buttons -->
                         {#if editingCategoryId === category.id}
@@ -501,7 +538,12 @@
 
                                                     <!-- Item Content -->
                                                     <div class="flex-1 min-w-0">
-                                                        <div class="text-sm font-medium text-gray-800">{item.title}</div>
+                                                        <div class="flex items-center gap-1.5">
+                                                            <span class="text-sm font-medium text-gray-800">{item.title}</span>
+                                                            {#if getItemUsageCount(category.id, item.id) > 0}
+                                                                <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title="{getItemUsageCount(category.id, item.id)}개 프로젝트에서 사용 중">{getItemUsageCount(category.id, item.id)}개 사용</span>
+                                                            {/if}
+                                                        </div>
                                                         {#if item.description}
                                                             <div class="text-xs text-gray-500 mt-1">{item.description}</div>
                                                         {/if}

@@ -8,6 +8,9 @@ vi.mock('$lib/api/project', () => ({
     uploadAttachmentImage: vi.fn().mockResolvedValue({ ok: true }),
     deleteAttachmentImage: vi.fn().mockResolvedValue({ ok: true }),
     getAttachmentImageUrl: vi.fn((imageId: string) => `/api/attachments/image/${imageId}`),
+    updateProjectKeyInfoCompleted: vi.fn().mockResolvedValue({ ok: true }),
+    generateTextStream: vi.fn().mockResolvedValue(null),
+    fetchKeyinfoUsageCounts: vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ counts: {} }) }),
 }));
 
 vi.mock('$lib/types/workflow', () => ({

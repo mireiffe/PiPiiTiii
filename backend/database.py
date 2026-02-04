@@ -556,3 +556,40 @@ class Database:
                 "completed": bool(row[2]) if row[2] is not None else False,
             })
         return result
+
+    def get_keyinfo_item_usage_counts(self) -> Dict[str, int]:
+        """Count how many projects use each keyinfo item.
+
+        Scans all projects' key_info_data and counts distinct projects
+        per (categoryId, itemId) pair.
+
+        Returns:
+            Dict mapping "categoryId_itemId" -> project count
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, key_info_data FROM projects")
+        rows = cursor.fetchall()
+        conn.close()
+
+        usage_counts: Dict[str, int] = {}
+        for row in rows:
+            if not row[1]:
+                continue
+            try:
+                data = json.loads(row[1])
+                instances = data.get("instances", [])
+                # Track unique items per project to avoid double-counting
+                seen_keys: set = set()
+                for inst in instances:
+                    cat_id = inst.get("categoryId", "")
+                    item_id = inst.get("itemId", "")
+                    if cat_id and item_id:
+                        key = f"{cat_id}_{item_id}"
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            usage_counts[key] = usage_counts.get(key, 0) + 1
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        return usage_counts
