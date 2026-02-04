@@ -763,7 +763,7 @@
                                                 <div class="flex items-center gap-1.5">
                                                     <span class="font-bold text-gray-900 text-xs">{item.title}</span>
                                                     {#if getItemUsageCount(instance.categoryId, instance.itemId) > 0}
-                                                        <span class="text-[9px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded" title="{getItemUsageCount(instance.categoryId, instance.itemId)}개 프로젝트에서 사용">{getItemUsageCount(instance.categoryId, instance.itemId)}번 사용됨</span>
+                                                        <span class="text-[9px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded" title="{getItemUsageCount(instance.categoryId, instance.itemId)}개 프로젝트에서 사용">총 {getItemUsageCount(instance.categoryId, instance.itemId)}번 사용됨</span>
                                                     {/if}
                                                 </div>
                                                 {#if item.description}
@@ -1029,7 +1029,7 @@
                                                         <div class="flex items-center gap-1.5">
                                                             <span class="font-medium">{item.title}</span>
                                                             {#if getItemUsageCount(category.id, item.id) > 0}
-                                                                <span class="text-[9px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded">{getItemUsageCount(category.id, item.id)}번 사용됨</span>
+                                                                <span class="text-[9px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded">총 {getItemUsageCount(category.id, item.id)}번 사용됨</span>
                                                             {/if}
                                                         </div>
                                                         {#if item.description}
