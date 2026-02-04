@@ -1,6 +1,6 @@
 <script lang="ts">
     import { slide } from "svelte/transition";
-    import { createEventDispatcher, tick } from "svelte";
+    import { createEventDispatcher, tick, onMount } from "svelte";
     import AccordionHeader from "./AccordionHeader.svelte";
     import Modal from "$lib/components/ui/Modal.svelte";
     import type {
@@ -22,6 +22,7 @@
         getAttachmentImageUrl,
         generateTextStream,
         updateProjectKeyInfoCompleted,
+        fetchKeyinfoUsageCounts,
     } from "$lib/api/project";
     import { generateAttachmentId } from "$lib/types/workflow";
 
@@ -57,6 +58,29 @@
     let viewingInstanceId: string | null = null;
     let editingImageCaption: string = "";
     let isEditingCaption = false;
+
+    // Usage counts: how many projects use each keyinfo item
+    let usageCounts: Record<string, number> = {};
+
+    async function loadUsageCounts() {
+        try {
+            const res = await fetchKeyinfoUsageCounts();
+            if (res.ok) {
+                const data = await res.json();
+                usageCounts = data.counts || {};
+            }
+        } catch (e) {
+            console.error("Failed to load keyinfo usage counts", e);
+        }
+    }
+
+    onMount(() => {
+        loadUsageCounts();
+    });
+
+    function getItemUsageCount(categoryId: string, itemId: string): number {
+        return usageCounts[`${categoryId}_${itemId}`] || 0;
+    }
 
     // Reactive: precompute instance lookup for each category
     // Svelte 5에서 IIFE 패턴은 의존성 추적이 안될 수 있으므로 명시적 체인 사용
@@ -736,7 +760,12 @@
                                         <!-- Item Header -->
                                         <div class="flex items-start justify-between mb-2.5">
                                             <div class="flex-1 min-w-0">
-                                                <div class="font-bold text-gray-900 text-xs">{item.title}</div>
+                                                <div class="flex items-center gap-1.5">
+                                                    <span class="font-bold text-gray-900 text-xs">{item.title}</span>
+                                                    {#if getItemUsageCount(instance.categoryId, instance.itemId) > 0}
+                                                        <span class="text-[9px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded" title="{getItemUsageCount(instance.categoryId, instance.itemId)}개 프로젝트에서 사용">{getItemUsageCount(instance.categoryId, instance.itemId)}</span>
+                                                    {/if}
+                                                </div>
                                                 {#if item.description}
                                                     <div class="text-[10px] text-gray-500 mt-0.5 leading-relaxed">{item.description}</div>
                                                 {/if}
@@ -997,7 +1026,12 @@
                                                             cancelEmptyTicketEdit();
                                                         }}
                                                     >
-                                                        <div class="font-medium">{item.title}</div>
+                                                        <div class="flex items-center gap-1.5">
+                                                            <span class="font-medium">{item.title}</span>
+                                                            {#if getItemUsageCount(category.id, item.id) > 0}
+                                                                <span class="text-[9px] text-gray-400 bg-gray-100 px-1 py-0.5 rounded">{getItemUsageCount(category.id, item.id)}</span>
+                                                            {/if}
+                                                        </div>
                                                         {#if item.description}
                                                             <div class="text-[10px] text-gray-400 mt-0.5">{item.description}</div>
                                                         {/if}
