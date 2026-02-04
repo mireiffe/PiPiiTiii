@@ -436,7 +436,7 @@
                         </span>
                         {#if getCategoryUsageCount(category) > 0}
                             <span class="text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded" title="이 카테고리의 항목들이 총 {getCategoryUsageCount(category)}개 프로젝트에서 사용 중">
-                                {getCategoryUsageCount(category)}번 사용됨
+                                총 {getCategoryUsageCount(category)}번 사용됨
                             </span>
                         {/if}
 
@@ -541,7 +541,7 @@
                                                         <div class="flex items-center gap-1.5">
                                                             <span class="text-sm font-medium text-gray-800">{item.title}</span>
                                                             {#if getItemUsageCount(category.id, item.id) > 0}
-                                                                <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title="{getItemUsageCount(category.id, item.id)}개 프로젝트에서 사용 중">{getItemUsageCount(category.id, item.id)}번 사용됨</span>
+                                                                <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded" title="{getItemUsageCount(category.id, item.id)}개 프로젝트에서 사용 중">총 {getItemUsageCount(category.id, item.id)}번 사용됨</span>
                                                             {/if}
                                                         </div>
                                                         {#if item.description}
