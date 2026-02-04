@@ -209,64 +209,74 @@
   $: thumbnailScale = thumbnailWidth ? thumbnailWidth / baseSlideWidth : 0;
   $: thumbnailHeight = baseSlideHeight * thumbnailScale;
 
-  $: filteredProjects = projects
-    .filter((p) => {
-      // Keep filter: when showKeptOnly, show only kept; otherwise, hide kept
-      if (showKeptOnly) {
-        if (!p.kept) return false;
-      } else {
-        if (p.kept) return false;
-      }
+  // Base filtered projects: apply kept/search/dynamic filters (before keyinfo status)
+  $: baseFilteredProjects = projects.filter((p) => {
+    // Keep filter: when showKeptOnly, show only kept; otherwise, hide kept
+    if (showKeptOnly) {
+      if (!p.kept) return false;
+    } else {
+      if (p.kept) return false;
+    }
 
-      const term = searchTerm.toLowerCase();
-      const matchesSearch =
-        p.name.toLowerCase().includes(term) ||
-        (p.author && p.author.toLowerCase().includes(term)) ||
-        (p.title && p.title.toLowerCase().includes(term)) ||
-        (p.subject && p.subject.toLowerCase().includes(term));
+    const term = searchTerm.toLowerCase();
+    const matchesSearch =
+      p.name.toLowerCase().includes(term) ||
+      (p.author && p.author.toLowerCase().includes(term)) ||
+      (p.title && p.title.toLowerCase().includes(term)) ||
+      (p.subject && p.subject.toLowerCase().includes(term));
 
-      if (!matchesSearch) return false;
+    if (!matchesSearch) return false;
 
-      // Check dynamic filters
-      for (const filter of filters) {
-        const variant = getVariant(filter);
-        const selectedValue = selectedFilters[filter.key];
-        const projectValue = p[filter.key];
+    // Check dynamic filters
+    for (const filter of filters) {
+      const variant = getVariant(filter);
+      const selectedValue = selectedFilters[filter.key];
+      const projectValue = p[filter.key];
 
-        if (variant === "multi_select") {
-          if (Array.isArray(selectedValue) && selectedValue.length > 0) {
-            if (!selectedValue.includes(projectValue)) {
-              return false;
-            }
-          }
-        } else if (variant === "range") {
-          const min = selectedValue?.min;
-          const max = selectedValue?.max;
-          const numericValue = Number(projectValue);
-          if (min !== "" && min !== undefined && min !== null) {
-            if (Number.isNaN(numericValue) || numericValue < Number(min)) {
-              return false;
-            }
-          }
-          if (max !== "" && max !== undefined && max !== null) {
-            if (Number.isNaN(numericValue) || numericValue > Number(max)) {
-              return false;
-            }
-          }
-        } else if (variant === "toggle") {
-          if (selectedValue === "on" && !normalizeBool(projectValue)) {
-            return false;
-          }
-          if (selectedValue === "off" && normalizeBool(projectValue)) {
-            return false;
-          }
-        } else if (selectedValue && selectedValue !== "") {
-          if (projectValue != selectedValue) {
+      if (variant === "multi_select") {
+        if (Array.isArray(selectedValue) && selectedValue.length > 0) {
+          if (!selectedValue.includes(projectValue)) {
             return false;
           }
         }
+      } else if (variant === "range") {
+        const min = selectedValue?.min;
+        const max = selectedValue?.max;
+        const numericValue = Number(projectValue);
+        if (min !== "" && min !== undefined && min !== null) {
+          if (Number.isNaN(numericValue) || numericValue < Number(min)) {
+            return false;
+          }
+        }
+        if (max !== "" && max !== undefined && max !== null) {
+          if (Number.isNaN(numericValue) || numericValue > Number(max)) {
+            return false;
+          }
+        }
+      } else if (variant === "toggle") {
+        if (selectedValue === "on" && !normalizeBool(projectValue)) {
+          return false;
+        }
+        if (selectedValue === "off" && normalizeBool(projectValue)) {
+          return false;
+        }
+      } else if (selectedValue && selectedValue !== "") {
+        if (projectValue != selectedValue) {
+          return false;
+        }
       }
+    }
 
+    return true;
+  });
+
+  // Counts per keyinfo status (from base filtered, before keyinfo filter applied)
+  $: notStartedCount = baseFilteredProjects.filter((p) => keyinfoNotStartedProjects.has(p.id)).length;
+  $: inProgressCount = baseFilteredProjects.filter((p) => keyinfoInProgressProjects.has(p.id)).length;
+  $: completedCount = baseFilteredProjects.filter((p) => keyinfoCompletedProjects.has(p.id)).length;
+
+  $: filteredProjects = baseFilteredProjects
+    .filter((p) => {
       // KeyInfo status filter (only apply when not in kept mode)
       if (!showKeptOnly && activeKeyinfoFilters.size > 0) {
         const matchesAny =
@@ -879,7 +889,7 @@
             : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400 hover:text-gray-700 hover:bg-gray-50'}"
           on:click={() => { showKeptOnly = false; toggleKeyinfoFilter("not_started"); }}
         >
-          시작전
+          시작전{notStartedCount > 0 ? ` ${notStartedCount}` : ''}
         </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
@@ -888,7 +898,7 @@
             : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50'}"
           on:click={() => { showKeptOnly = false; toggleKeyinfoFilter("in_progress"); }}
         >
-          작업중
+          작업중{inProgressCount > 0 ? ` ${inProgressCount}` : ''}
         </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded-full border transition-all duration-150
@@ -897,7 +907,7 @@
             : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50'}"
           on:click={() => { showKeptOnly = false; toggleKeyinfoFilter("completed"); }}
         >
-          완료
+          완료{completedCount > 0 ? ` ${completedCount}` : ''}
         </button>
 
         <div class="w-px h-5 bg-gray-300 mx-1"></div>
