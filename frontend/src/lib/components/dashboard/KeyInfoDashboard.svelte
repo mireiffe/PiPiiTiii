@@ -11,13 +11,22 @@
         KeyInfoCaptureValue,
     } from '$lib/types/keyInfo';
 
+    // Props
+    type ModalTitleConfigItem = string | { key: string; prefix?: string; suffix?: string };
+    export let modalTitleConfig: ModalTitleConfigItem[] = ["title"];
+
     // Dashboard data structure
+    interface ProjectAttributes {
+        [key: string]: string | number | boolean | null | undefined;
+    }
+
     interface DashboardItem {
         item: KeyInfoItemDefinition;
         usageCount: number;
         instances: Array<{
             projectId: string;
             projectTitle: string;
+            projectAttributes?: ProjectAttributes;
             textValue?: string;
             captureValues?: KeyInfoCaptureValue[];
             imageIds?: string[];
@@ -111,10 +120,11 @@
             // Process all instances
             let totalCount = 0;
             for (const project of projects) {
-                const { projectId, projectTitle, instances } = project as {
+                const { projectId, projectTitle, instances, ...projectAttributes } = project as {
                     projectId: string;
                     projectTitle: string;
                     instances: KeyInfoInstance[];
+                    [key: string]: unknown;
                 };
 
                 // Track which items this project uses (to count unique projects per item)
@@ -135,10 +145,11 @@
                         totalCount++;
                     }
 
-                    // Add instance data
+                    // Add instance data with all project attributes
                     itemData.instances.push({
                         projectId,
                         projectTitle,
+                        projectAttributes: projectAttributes as ProjectAttributes,
                         textValue: instance.textValue,
                         captureValues: instance.captureValues,
                         imageIds: instance.imageIds,
@@ -361,5 +372,6 @@
     itemDescription={selectedItem?.item.description ?? ''}
     usageCount={selectedItem?.usageCount ?? 0}
     instances={selectedItem?.instances ?? []}
+    {modalTitleConfig}
     on:close={closeDetailModal}
 />

@@ -46,6 +46,15 @@
     },
   };
 
+  // Dashboard modal에서 프로젝트 제목 표시 방식 설정
+  // 여러 attribute들을 조합하여 표시 (예: "name" 또는 ["db_no", "title"])
+  // - string: 단일 attribute key
+  // - Array<string | { key, prefix?, suffix? }>: 여러 attribute 조합 (공백으로 구분)
+  const DASHBOARD_MODAL_TITLE_CONFIG = [
+    { key: "db_no", prefix: "[", suffix: "]" },
+    "title",
+  ];
+
   const BUILT_IN_DISPLAY_NAMES = {
     name: "Name",
     title: "Title",
@@ -1308,7 +1317,7 @@
 
     <div class="flex-1 bg-gray-50 flex flex-col overflow-hidden relative">
       {#if !selectedProjectId}
-        <KeyInfoDashboard />
+        <KeyInfoDashboard modalTitleConfig={DASHBOARD_MODAL_TITLE_CONFIG} />
       {:else if loadingDetails}
         <div class="flex-1 flex items-center justify-center text-gray-500">
           <div
