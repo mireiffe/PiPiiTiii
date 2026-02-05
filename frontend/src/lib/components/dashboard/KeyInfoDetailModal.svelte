@@ -1,7 +1,11 @@
 <script lang="ts">
+    import { createEventDispatcher } from 'svelte';
     import Modal from '$lib/components/ui/Modal.svelte';
     import { getAttachmentImageUrl } from '$lib/api/project';
+    import { BASE_URL } from '$lib/api/client';
     import type { KeyInfoCaptureValue } from '$lib/types/keyInfo';
+
+    const dispatch = createEventDispatcher();
 
     export let isOpen = false;
     export let itemTitle = '';
@@ -19,7 +23,6 @@
         imageId?: string;
         imageCaption?: string;
     }> = [];
-    export let slideThumbnails: Record<string, Record<number, string>> = {}; // projectId -> slideIndex -> thumbnailUrl
 
     // Expanded image state
     let expandedImageUrl: string | null = null;
@@ -42,13 +45,14 @@
         return undefined;
     }
 
-    function getThumbnailUrl(projectId: string, slideIndex: number): string | undefined {
-        return slideThumbnails[projectId]?.[slideIndex];
+    // Generate slide thumbnail URL from project results
+    function getSlideImageUrl(projectId: string, slideIndex: number): string {
+        return `${BASE_URL}/results/${projectId}/images/slide_${slideIndex + 1}.png`;
     }
 
     function handleClose() {
-        isOpen = false;
         expandedImageUrl = null;
+        dispatch('close');
     }
 </script>
 
@@ -115,44 +119,38 @@
                             <div class="text-xs text-gray-500 mb-2">캡처 ({captures.length}개)</div>
                             <div class="flex flex-wrap gap-2">
                                 {#each captures as capture}
-                                    {@const thumbnailUrl = getThumbnailUrl(instance.projectId, capture.slideIndex)}
+                                    {@const slideImageUrl = getSlideImageUrl(instance.projectId, capture.slideIndex)}
                                     <div class="relative group">
                                         <div
-                                            class="w-24 h-18 bg-gray-100 rounded border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 transition-colors"
-                                            on:click={() => {
-                                                if (thumbnailUrl) expandedImageUrl = thumbnailUrl;
-                                            }}
+                                            class="w-24 h-[68px] bg-gray-100 rounded border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 transition-colors"
+                                            on:click={() => expandedImageUrl = slideImageUrl}
                                             on:keydown={(e) => {
-                                                if (e.key === 'Enter' && thumbnailUrl) expandedImageUrl = thumbnailUrl;
+                                                if (e.key === 'Enter') expandedImageUrl = slideImageUrl;
                                             }}
                                             role="button"
                                             tabindex="0"
                                         >
-                                            {#if thumbnailUrl}
-                                                <div class="relative w-full h-full">
-                                                    <img
-                                                        src={thumbnailUrl}
-                                                        alt="슬라이드 {capture.slideIndex + 1}"
-                                                        class="w-full h-full object-cover"
-                                                    />
-                                                    <!-- Capture region overlay (simplified) -->
-                                                    <div
-                                                        class="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-none"
-                                                        style="
-                                                            left: {(capture.x / 960) * 100}%;
-                                                            top: {(capture.y / 540) * 100}%;
-                                                            width: {(capture.width / 960) * 100}%;
-                                                            height: {(capture.height / 540) * 100}%;
-                                                        "
-                                                    ></div>
-                                                </div>
-                                            {:else}
-                                                <div class="w-full h-full flex items-center justify-center">
-                                                    <svg class="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
-                                                </div>
-                                            {/if}
+                                            <div class="relative w-full h-full">
+                                                <img
+                                                    src={slideImageUrl}
+                                                    alt="슬라이드 {capture.slideIndex + 1}"
+                                                    class="w-full h-full object-cover"
+                                                    on:error={(e) => {
+                                                        // Hide image on error
+                                                        e.currentTarget.style.display = 'none';
+                                                    }}
+                                                />
+                                                <!-- Capture region overlay -->
+                                                <div
+                                                    class="absolute border-2 border-blue-500 bg-blue-500/20 pointer-events-none"
+                                                    style="
+                                                        left: {(capture.x / 960) * 100}%;
+                                                        top: {(capture.y / 540) * 100}%;
+                                                        width: {(capture.width / 960) * 100}%;
+                                                        height: {(capture.height / 540) * 100}%;
+                                                    "
+                                                ></div>
+                                            </div>
                                         </div>
                                         <span class="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">
                                             S{capture.slideIndex + 1}

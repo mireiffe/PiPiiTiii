@@ -46,7 +46,6 @@
     let selectedCategoryId: string | null = null;
     let modalOpen = false;
     let selectedItem: DashboardItem | null = null;
-    let slideThumbnails: Record<string, Record<number, string>> = {};
 
     // Category colors
     const categoryColors = [
@@ -356,14 +355,11 @@
 </div>
 
 <!-- Detail Modal -->
-{#if selectedItem}
-    <KeyInfoDetailModal
-        isOpen={modalOpen}
-        itemTitle={selectedItem.item.title}
-        itemDescription={selectedItem.item.description}
-        usageCount={selectedItem.usageCount}
-        instances={selectedItem.instances}
-        {slideThumbnails}
-        on:close={closeDetailModal}
-    />
-{/if}
+<KeyInfoDetailModal
+    isOpen={modalOpen}
+    itemTitle={selectedItem?.item.title ?? ''}
+    itemDescription={selectedItem?.item.description ?? ''}
+    usageCount={selectedItem?.usageCount ?? 0}
+    instances={selectedItem?.instances ?? []}
+    on:close={closeDetailModal}
+/>
