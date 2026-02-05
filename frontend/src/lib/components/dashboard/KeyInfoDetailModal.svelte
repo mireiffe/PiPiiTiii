@@ -68,8 +68,12 @@
         return parts.join(' ') || instance.projectTitle || 'Untitled';
     }
 
-    // Expanded image state
-    let expandedImageUrl: string | null = null;
+    // Expanded image state - now includes capture info for overlay
+    interface ExpandedInfo {
+        imageUrl: string;
+        capture?: KeyInfoCaptureValue;  // capture info for overlay (undefined for regular images)
+    }
+    let expandedInfo: ExpandedInfo | null = null;
 
     function getCaptures(instance: typeof instances[0]): KeyInfoCaptureValue[] {
         return instance.captureValues || (instance.captureValue ? [instance.captureValue] : []);
@@ -117,33 +121,34 @@
             return `background-image: url('${thumbUrl}'); background-size: cover; background-position: center;`;
         }
 
-        // Thumbnail is rendered at max 1920px width
-        const thumbMaxWidth = 1920;
-        const thumbScale = thumbMaxWidth / DEFAULT_SLIDE_WIDTH;
-        const thumbHeight = DEFAULT_SLIDE_HEIGHT * thumbScale;
+        // Calculate scale to fit capture region into container (contain behavior)
+        // Use slide coordinates directly (960x540 basis)
+        const fitScale = Math.min(
+            containerW / capture.width,
+            containerH / capture.height
+        );
 
-        // Scale capture coordinates to thumbnail space
-        const thumbX = capture.x * thumbScale;
-        const thumbY = capture.y * thumbScale;
-        const thumbW = capture.width * thumbScale;
-        const thumbH = capture.height * thumbScale;
+        // Background image size (entire slide scaled to fit capture in container)
+        const bgWidth = DEFAULT_SLIDE_WIDTH * fitScale;
+        const bgHeight = DEFAULT_SLIDE_HEIGHT * fitScale;
 
-        // Calculate scale to fit capture region into container (use Math.min for contain behavior)
-        const displayScale = Math.min(containerW / thumbW, containerH / thumbH);
+        // Capture region rendered size
+        const captureRenderW = capture.width * fitScale;
+        const captureRenderH = capture.height * fitScale;
 
-        // Calculate background size
-        const bgWidth = thumbMaxWidth * displayScale;
-        const bgHeight = thumbHeight * displayScale;
+        // Center offset to place capture region in container center
+        const centerOffsetX = (containerW - captureRenderW) / 2;
+        const centerOffsetY = (containerH - captureRenderH) / 2;
 
-        // Calculate background position (negative values to offset)
-        const offsetX = -thumbX * displayScale + (containerW - thumbW * displayScale) / 2;
-        const offsetY = -thumbY * displayScale + (containerH - thumbH * displayScale) / 2;
+        // Background position (move so capture's top-left aligns with centerOffset)
+        const bgPosX = -capture.x * fitScale + centerOffsetX;
+        const bgPosY = -capture.y * fitScale + centerOffsetY;
 
-        return `background-image: url('${thumbUrl}'); background-size: ${bgWidth}px ${bgHeight}px; background-position: ${offsetX}px ${offsetY}px;`;
+        return `background-image: url('${thumbUrl}'); background-size: ${bgWidth}px ${bgHeight}px; background-position: ${bgPosX}px ${bgPosY}px;`;
     }
 
     function handleClose() {
-        expandedImageUrl = null;
+        expandedInfo = null;
         dispatch('close');
     }
 </script>
@@ -216,9 +221,9 @@
                                         <div
                                             class="w-40 h-[112px] bg-gray-200 rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
                                             style={getCaptureThumbStyle(instance.projectId, capture, 160, 112)}
-                                            on:click={() => expandedImageUrl = slideImageUrl}
+                                            on:click={() => expandedInfo = { imageUrl: slideImageUrl, capture }}
                                             on:keydown={(e) => {
-                                                if (e.key === 'Enter') expandedImageUrl = slideImageUrl;
+                                                if (e.key === 'Enter') expandedInfo = { imageUrl: slideImageUrl, capture };
                                             }}
                                             role="button"
                                             tabindex="0"
@@ -250,9 +255,9 @@
                                     <div class="relative group">
                                         <div
                                             class="w-40 h-[112px] bg-gray-100 rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
-                                            on:click={() => expandedImageUrl = imageUrl}
+                                            on:click={() => expandedInfo = { imageUrl }}
                                             on:keydown={(e) => {
-                                                if (e.key === 'Enter') expandedImageUrl = imageUrl;
+                                                if (e.key === 'Enter') expandedInfo = { imageUrl };
                                             }}
                                             role="button"
                                             tabindex="0"
@@ -284,26 +289,48 @@
     </div>
 </Modal>
 
-<!-- Expanded Image Modal -->
-{#if expandedImageUrl}
+<!-- Expanded Image Modal with Capture Overlay -->
+{#if expandedInfo}
     <div
         class="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-8"
-        on:click={() => expandedImageUrl = null}
+        on:click={() => expandedInfo = null}
         on:keydown={(e) => {
-            if (e.key === 'Escape') expandedImageUrl = null;
+            if (e.key === 'Escape') expandedInfo = null;
         }}
         role="button"
         tabindex="0"
     >
-        <img
-            src={expandedImageUrl}
-            alt="확대 이미지"
-            class="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-            on:click|stopPropagation
-        />
+        <!-- Container for image + overlay -->
+        <div class="relative inline-block max-w-full max-h-full" on:click|stopPropagation>
+            <img
+                src={expandedInfo.imageUrl}
+                alt="확대 이미지"
+                class="max-w-full max-h-[calc(100vh-4rem)] object-contain rounded-lg shadow-2xl"
+            />
+            <!-- Capture overlay (percentage-based positioning) -->
+            {#if expandedInfo.capture}
+                {@const c = expandedInfo.capture}
+                <div
+                    class="absolute border-2 border-blue-500 bg-blue-500/25 pointer-events-none rounded-sm"
+                    style="
+                        left: {c.x / DEFAULT_SLIDE_WIDTH * 100}%;
+                        top: {c.y / DEFAULT_SLIDE_HEIGHT * 100}%;
+                        width: {c.width / DEFAULT_SLIDE_WIDTH * 100}%;
+                        height: {c.height / DEFAULT_SLIDE_HEIGHT * 100}%;
+                    "
+                >
+                    <!-- Label badge -->
+                    {#if c.label}
+                        <div class="absolute -top-5 left-0 px-1.5 py-0.5 text-xs font-bold text-white bg-blue-600 rounded-t whitespace-nowrap">
+                            {c.label}
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+        </div>
         <button
             class="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
-            on:click={() => expandedImageUrl = null}
+            on:click={() => expandedInfo = null}
         >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
