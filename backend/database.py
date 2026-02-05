@@ -602,6 +602,7 @@ class Database:
             {
                 projectId: str,
                 projectTitle: str,
+                <other project attributes>,
                 instances: List[KeyInfoInstance]
             }
         """
@@ -609,7 +610,7 @@ class Database:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, title, key_info_data FROM projects WHERE key_info_completed = 1"
+            "SELECT * FROM projects WHERE key_info_completed = 1"
         )
         rows = cursor.fetchall()
         conn.close()
@@ -622,11 +623,17 @@ class Database:
                 data = json.loads(row["key_info_data"])
                 instances = data.get("instances", [])
                 if instances:
-                    result.append({
+                    # Build project data with all attributes
+                    project_data = {
                         "projectId": row["id"],
                         "projectTitle": row["title"] or row["id"],
                         "instances": instances,
-                    })
+                    }
+                    # Add all other columns as attributes
+                    for key in row.keys():
+                        if key not in ("id", "key_info_data", "key_info_completed"):
+                            project_data[key] = row[key]
+                    result.append(project_data)
             except (json.JSONDecodeError, AttributeError):
                 pass
 
