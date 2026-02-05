@@ -20,6 +20,20 @@
     let expandedCategories: Set<string> = new Set();
     let selectedItem: { category: KeyInfoCategoryDefinition; item: KeyInfoItemDefinition } | null = null;
 
+    // Chart colors for categories
+    const CHART_COLORS = [
+        { bg: 'bg-blue-500', light: 'bg-blue-100', text: 'text-blue-600' },
+        { bg: 'bg-emerald-500', light: 'bg-emerald-100', text: 'text-emerald-600' },
+        { bg: 'bg-amber-500', light: 'bg-amber-100', text: 'text-amber-600' },
+        { bg: 'bg-purple-500', light: 'bg-purple-100', text: 'text-purple-600' },
+        { bg: 'bg-rose-500', light: 'bg-rose-100', text: 'text-rose-600' },
+        { bg: 'bg-cyan-500', light: 'bg-cyan-100', text: 'text-cyan-600' },
+    ];
+
+    function getCategoryColor(index: number) {
+        return CHART_COLORS[index % CHART_COLORS.length];
+    }
+
     onMount(async () => {
         await loadData();
     });
@@ -100,6 +114,10 @@
     function closeDetailModal() {
         selectedItem = null;
     }
+
+    // Calculate max usage for chart scaling
+    $: maxCategoryUsage = Math.max(...categories.map(c => getCategoryTotalUsage(c)), 1);
+    $: totalUsage = categories.reduce((sum, c) => sum + getCategoryTotalUsage(c), 0);
 </script>
 
 <div class="h-full flex flex-col overflow-hidden">
@@ -144,11 +162,51 @@
                 <p class="text-xs mt-1">Settings에서 카테고리를 추가해주세요.</p>
             </div>
         {:else}
+            <!-- Category Overview Chart -->
+            <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+                <h3 class="text-sm font-medium text-gray-700 mb-3">카테고리별 사용 현황</h3>
+                <div class="space-y-2">
+                    {#each categories as category, index (category.id)}
+                        {@const usage = getCategoryTotalUsage(category)}
+                        {@const percentage = totalUsage > 0 ? (usage / totalUsage) * 100 : 0}
+                        {@const barWidth = maxCategoryUsage > 0 ? (usage / maxCategoryUsage) * 100 : 0}
+                        {@const color = getCategoryColor(index)}
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs text-gray-600 w-16 truncate" title={category.name}>
+                                {category.name}
+                            </span>
+                            <div class="flex-1 h-5 {color.light} rounded-full overflow-hidden">
+                                <div
+                                    class="h-full {color.bg} rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                                    style="width: {barWidth}%"
+                                >
+                                    {#if barWidth > 15}
+                                        <span class="text-xs text-white font-medium">{usage}</span>
+                                    {/if}
+                                </div>
+                            </div>
+                            {#if barWidth <= 15}
+                                <span class="text-xs {color.text} font-medium w-8">{usage}</span>
+                            {:else}
+                                <span class="text-xs text-gray-400 w-8">{percentage.toFixed(0)}%</span>
+                            {/if}
+                        </div>
+                    {/each}
+                </div>
+                <div class="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
+                    <span>{categories.length}개 카테고리</span>
+                    <span>총 {totalUsage}회 사용</span>
+                </div>
+            </div>
+
+            <!-- Categories Detail -->
             <div class="space-y-3">
-                {#each categories as category (category.id)}
+                {#each categories as category, categoryIndex (category.id)}
                     {@const isExpanded = expandedCategories.has(category.id)}
                     {@const totalUsage = getCategoryTotalUsage(category)}
                     {@const sortedItems = getSortedItems(category)}
+                    {@const color = getCategoryColor(categoryIndex)}
+                    {@const maxItemUsage = Math.max(...sortedItems.map(item => getItemUsageCount(category.id, item.id)), 1)}
 
                     <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
                         <!-- Category Header -->
@@ -163,17 +221,18 @@
                                 >
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                                 </svg>
+                                <span class="w-2 h-2 rounded-full {color.bg}"></span>
                                 <span class="font-medium text-gray-800">{category.name}</span>
                                 <span class="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
                                     {category.items.length}개 항목
                                 </span>
                             </div>
-                            <span class="text-sm text-blue-600 font-medium">
+                            <span class="text-sm {color.text} font-medium">
                                 {totalUsage}회 사용
                             </span>
                         </button>
 
-                        <!-- Items List -->
+                        <!-- Items List with mini charts -->
                         {#if isExpanded}
                             <div class="border-t border-gray-100">
                                 {#if sortedItems.length === 0}
@@ -183,29 +242,34 @@
                                 {:else}
                                     {#each sortedItems as item (item.id)}
                                         {@const usageCount = getItemUsageCount(category.id, item.id)}
+                                        {@const itemBarWidth = maxItemUsage > 0 ? (usageCount / maxItemUsage) * 100 : 0}
                                         <button
-                                            class="w-full px-4 py-2.5 flex items-center justify-between hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-b-0"
+                                            class="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-b-0"
                                             on:click={() => openDetailModal(category, item)}
                                             disabled={usageCount === 0}
                                             class:cursor-not-allowed={usageCount === 0}
                                             class:opacity-50={usageCount === 0}
                                         >
-                                            <div class="flex items-center gap-2 pl-7">
-                                                <span class="text-sm text-gray-700">{item.title}</span>
-                                                {#if item.description}
-                                                    <span class="text-xs text-gray-400 truncate max-w-[200px]" title={item.description}>
-                                                        - {item.description}
-                                                    </span>
-                                                {/if}
+                                            <div class="flex items-center gap-2 pl-7 min-w-0 flex-1">
+                                                <span class="text-sm text-gray-700 truncate">{item.title}</span>
                                             </div>
-                                            <div class="flex items-center gap-2">
-                                                <span class="text-sm {usageCount > 0 ? 'text-blue-600 font-medium' : 'text-gray-400'}">
-                                                    {usageCount}회
+                                            <!-- Mini bar chart -->
+                                            <div class="w-24 h-2 bg-gray-100 rounded-full overflow-hidden flex-shrink-0">
+                                                <div
+                                                    class="h-full {color.bg} rounded-full transition-all duration-300"
+                                                    style="width: {itemBarWidth}%"
+                                                ></div>
+                                            </div>
+                                            <div class="flex items-center gap-2 flex-shrink-0">
+                                                <span class="text-sm w-8 text-right {usageCount > 0 ? color.text + ' font-medium' : 'text-gray-400'}">
+                                                    {usageCount}
                                                 </span>
                                                 {#if usageCount > 0}
                                                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                                                     </svg>
+                                                {:else}
+                                                    <div class="w-4"></div>
                                                 {/if}
                                             </div>
                                         </button>

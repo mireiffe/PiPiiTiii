@@ -1,11 +1,12 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
     import Modal from '$lib/components/ui/Modal.svelte';
-    import { getAttachmentImageUrl } from '$lib/api/project';
+    import { getAttachmentImageUrl, API_BASE_URL } from '$lib/api/project';
     import type {
         KeyInfoCategoryDefinition,
         KeyInfoItemDefinition,
         KeyInfoUsageDetail,
+        KeyInfoCaptureValue,
     } from '$lib/types/keyInfo';
 
     export let category: KeyInfoCategoryDefinition;
@@ -24,9 +25,14 @@
         const hasImages = detail.imageIds && detail.imageIds.length > 0;
         return hasText || hasCaptures || hasImages;
     }
+
+    function getSlideThumbnailUrl(projectId: string, slideIndex: number): string {
+        const paddedIndex = slideIndex.toString().padStart(3, '0');
+        return `${API_BASE_URL}/api/results/${projectId}/thumbnails/slide_${paddedIndex}_thumb.png`;
+    }
 </script>
 
-<Modal isOpen={true} size="lg" on:close={handleClose}>
+<Modal isOpen={true} size="full" on:close={handleClose}>
     <svelte:fragment slot="header">
         <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
@@ -83,7 +89,7 @@
                                 </div>
                             {/if}
 
-                            <!-- Captures -->
+                            <!-- Captures with cropped thumbnails -->
                             {#if detail.captureValues && detail.captureValues.length > 0}
                                 <div class="flex items-start gap-2">
                                     <svg class="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,19 +99,40 @@
                                             d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                     </svg>
                                     <div class="flex-1">
-                                        <p class="text-xs text-gray-500 mb-1">
+                                        <p class="text-xs text-gray-500 mb-2">
                                             슬라이드 캡처 ({detail.captureValues.length}개)
                                         </p>
-                                        <div class="flex flex-wrap gap-2">
+                                        <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
                                             {#each detail.captureValues as capture (capture.id)}
-                                                <div class="bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-600">
-                                                    <span class="font-medium">Slide {capture.slideIndex + 1}</span>
-                                                    {#if capture.label}
-                                                        <span class="text-gray-400 ml-1">- {capture.label}</span>
-                                                    {/if}
-                                                    {#if capture.caption}
-                                                        <p class="text-gray-500 mt-0.5 italic">"{capture.caption}"</p>
-                                                    {/if}
+                                                {@const scaleX = 100 / capture.width}
+                                                {@const scaleY = 100 / capture.height}
+                                                {@const scale = Math.min(scaleX, scaleY)}
+                                                {@const translateX = -capture.x * scale}
+                                                {@const translateY = -capture.y * scale}
+                                                <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                                    <!-- Cropped capture region -->
+                                                    <div class="relative aspect-video bg-gray-100 overflow-hidden">
+                                                        <img
+                                                            src={getSlideThumbnailUrl(detail.projectId, capture.slideIndex)}
+                                                            alt="Slide {capture.slideIndex + 1} capture"
+                                                            class="absolute origin-top-left"
+                                                            style="transform: translate({translateX}%, {translateY}%) scale({scale}); width: 100%; height: auto;"
+                                                        />
+                                                    </div>
+                                                    <!-- Capture info -->
+                                                    <div class="p-2 text-xs">
+                                                        <div class="flex items-center gap-1 text-gray-600">
+                                                            <span class="font-medium">Slide {capture.slideIndex + 1}</span>
+                                                            {#if capture.label}
+                                                                <span class="text-gray-400">- {capture.label}</span>
+                                                            {/if}
+                                                        </div>
+                                                        {#if capture.caption}
+                                                            <p class="text-gray-500 mt-1 italic truncate" title={capture.caption}>
+                                                                "{capture.caption}"
+                                                            </p>
+                                                        {/if}
+                                                    </div>
                                                 </div>
                                             {/each}
                                         </div>
@@ -121,19 +148,21 @@
                                             d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>
                                     <div class="flex-1">
-                                        <p class="text-xs text-gray-500 mb-1">
+                                        <p class="text-xs text-gray-500 mb-2">
                                             이미지 ({detail.imageIds.length}개)
                                         </p>
-                                        <div class="grid grid-cols-3 gap-2">
+                                        <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
                                             {#each detail.imageIds as imageId (imageId)}
-                                                <div class="relative group">
-                                                    <img
-                                                        src={getAttachmentImageUrl(imageId)}
-                                                        alt="첨부 파일"
-                                                        class="w-full h-20 object-cover rounded border border-gray-200"
-                                                    />
+                                                <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                                    <div class="aspect-video bg-gray-100">
+                                                        <img
+                                                            src={getAttachmentImageUrl(imageId)}
+                                                            alt="첨부 파일"
+                                                            class="w-full h-full object-contain"
+                                                        />
+                                                    </div>
                                                     {#if detail.imageCaptions && detail.imageCaptions[imageId]}
-                                                        <div class="absolute inset-x-0 bottom-0 bg-black/60 text-white text-xs p-1 truncate rounded-b">
+                                                        <div class="p-2 text-xs text-gray-600 truncate" title={detail.imageCaptions[imageId]}>
                                                             {detail.imageCaptions[imageId]}
                                                         </div>
                                                     {/if}
