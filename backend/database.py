@@ -593,3 +593,41 @@ class Database:
                 pass
 
         return usage_counts
+
+    def get_all_keyinfo_instances_for_dashboard(self) -> List[Dict[str, Any]]:
+        """Get all keyinfo instances from completed projects for dashboard.
+
+        Returns:
+            List of dicts with project info and keyinfo instances:
+            {
+                projectId: str,
+                projectTitle: str,
+                instances: List[KeyInfoInstance]
+            }
+        """
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, title, key_info_data FROM projects WHERE key_info_completed = 1"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for row in rows:
+            if not row["key_info_data"]:
+                continue
+            try:
+                data = json.loads(row["key_info_data"])
+                instances = data.get("instances", [])
+                if instances:
+                    result.append({
+                        "projectId": row["id"],
+                        "projectTitle": row["title"] or row["id"],
+                        "instances": instances,
+                    })
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        return result

@@ -259,6 +259,14 @@ export async function fetchKeyinfoUsageCounts(): Promise<Response> {
     return apiFetch('/api/keyinfo/usage-counts');
 }
 
+/**
+ * Fetch all keyinfo instances from completed projects for dashboard
+ * Returns: { projects: [{ projectId, projectTitle, instances: [...] }, ...] }
+ */
+export async function fetchAllKeyInfoInstances(): Promise<Response> {
+    return apiFetch('/api/keyinfo/all-instances');
+}
+
 // ========== Workflow API (Step-based, Multi-workflow) ==========
 
 /**
