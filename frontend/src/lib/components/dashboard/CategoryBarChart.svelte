@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import * as d3 from 'd3';
+    import { browser } from '$app/environment';
 
     export let data: { name: string; count: number; color?: string }[] = [];
     export let height: number = 200;
@@ -27,6 +27,7 @@
     $: maxCount = Math.max(...data.map(d => d.count), 1);
 
     onMount(() => {
+        if (!browser || !container) return;
         const resizeObserver = new ResizeObserver(entries => {
             for (const entry of entries) {
                 width = entry.contentRect.width;
