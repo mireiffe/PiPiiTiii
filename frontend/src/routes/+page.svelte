@@ -6,6 +6,7 @@
   import RangeFilter from "$lib/components/filters/RangeFilter.svelte";
   import ToggleFilter from "$lib/components/filters/ToggleFilter.svelte";
   import SortToggleFilter from "$lib/components/filters/SortToggleFilter.svelte";
+  import KeyInfoDashboard from "$lib/components/dashboard/KeyInfoDashboard.svelte";
   import {
     fetchProjects,
     fetchProject,
@@ -1307,24 +1308,7 @@
 
     <div class="flex-1 bg-gray-50 flex flex-col overflow-hidden relative">
       {#if !selectedProjectId}
-        <div
-          class="flex-1 flex flex-col items-center justify-center text-gray-400"
-        >
-          <svg
-            class="w-20 h-20 mb-4 opacity-10"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          <p class="text-lg font-medium text-gray-500">
-            Select a project to preview
-          </p>
-        </div>
+        <KeyInfoDashboard />
       {:else if loadingDetails}
         <div class="flex-1 flex items-center justify-center text-gray-500">
           <div

@@ -1132,6 +1132,23 @@ def get_keyinfo_usage_counts():
         )
 
 
+@app.get("/api/keyinfo/all-instances")
+def get_all_keyinfo_instances():
+    """Get all keyinfo instances from completed projects for dashboard.
+
+    Returns a list of projects with their keyinfo instances:
+    [{ projectId, projectTitle, instances: [...] }, ...]
+    """
+    try:
+        data = db.get_all_keyinfo_instances_for_dashboard()
+        return {"projects": data}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get all keyinfo instances: {str(e)}",
+        )
+
+
 # ========== Key Info API (핵심정보) ==========
 
 
