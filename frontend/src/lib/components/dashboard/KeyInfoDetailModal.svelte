@@ -7,13 +7,23 @@
 
     const dispatch = createEventDispatcher();
 
+    // Type for modal title config
+    type ModalTitleConfigItem = string | { key: string; prefix?: string; suffix?: string };
+
     export let isOpen = false;
     export let itemTitle = '';
     export let itemDescription = '';
     export let usageCount = 0;
+    export let modalTitleConfig: ModalTitleConfigItem[] = ["title"];
+
+    interface ProjectAttributes {
+        [key: string]: string | number | boolean | null | undefined;
+    }
+
     export let instances: Array<{
         projectId: string;
         projectTitle: string;
+        projectAttributes?: ProjectAttributes;
         textValue?: string;
         captureValues?: KeyInfoCaptureValue[];
         imageIds?: string[];
@@ -23,6 +33,40 @@
         imageId?: string;
         imageCaption?: string;
     }> = [];
+
+    // Generate display title from config and project attributes
+    function getDisplayTitle(instance: typeof instances[0]): string {
+        const parts: string[] = [];
+        const attrs = instance.projectAttributes || {};
+
+        for (const configItem of modalTitleConfig) {
+            let key: string;
+            let prefix = '';
+            let suffix = '';
+
+            if (typeof configItem === 'string') {
+                key = configItem;
+            } else {
+                key = configItem.key;
+                prefix = configItem.prefix || '';
+                suffix = configItem.suffix || '';
+            }
+
+            // Check in projectAttributes first, then fallback to instance properties
+            let value: string | undefined;
+            if (key === 'title') {
+                value = attrs.title as string || instance.projectTitle;
+            } else if (key in attrs && attrs[key] != null) {
+                value = String(attrs[key]);
+            }
+
+            if (value) {
+                parts.push(`${prefix}${value}${suffix}`);
+            }
+        }
+
+        return parts.join(' ') || instance.projectTitle || 'Untitled';
+    }
 
     // Expanded image state
     let expandedImageUrl: string | null = null;
@@ -50,13 +94,61 @@
         return `${BASE_URL}/results/${projectId}/images/slide_${slideIndex + 1}.png`;
     }
 
+    // Get thumbnail URL for capture
+    function getCaptureThumbUrl(projectId: string, slideIndex: number): string {
+        return `/api/results/${projectId}/thumbnails/slide_${String(slideIndex + 1).padStart(3, '0')}_thumb.png`;
+    }
+
+    // Calculate thumbnail cropping styles for capture preview (snippet mode)
+    // Default slide dimensions: 960x540
+    const DEFAULT_SLIDE_WIDTH = 960;
+    const DEFAULT_SLIDE_HEIGHT = 540;
+
+    function getCaptureThumbStyle(
+        projectId: string,
+        capture: { x: number; y: number; width: number; height: number; slideIndex: number },
+        containerW: number = 96,
+        containerH: number = 68
+    ): string {
+        const thumbUrl = getCaptureThumbUrl(projectId, capture.slideIndex);
+
+        // Guard against zero-size captures
+        if (capture.width <= 0 || capture.height <= 0) {
+            return `background-image: url('${thumbUrl}'); background-size: cover; background-position: center;`;
+        }
+
+        // Thumbnail is rendered at max 1920px width
+        const thumbMaxWidth = 1920;
+        const thumbScale = thumbMaxWidth / DEFAULT_SLIDE_WIDTH;
+        const thumbHeight = DEFAULT_SLIDE_HEIGHT * thumbScale;
+
+        // Scale capture coordinates to thumbnail space
+        const thumbX = capture.x * thumbScale;
+        const thumbY = capture.y * thumbScale;
+        const thumbW = capture.width * thumbScale;
+        const thumbH = capture.height * thumbScale;
+
+        // Calculate scale to fit capture region into container (use Math.min for contain behavior)
+        const displayScale = Math.min(containerW / thumbW, containerH / thumbH);
+
+        // Calculate background size
+        const bgWidth = thumbMaxWidth * displayScale;
+        const bgHeight = thumbHeight * displayScale;
+
+        // Calculate background position (negative values to offset)
+        const offsetX = -thumbX * displayScale + (containerW - thumbW * displayScale) / 2;
+        const offsetY = -thumbY * displayScale + (containerH - thumbH * displayScale) / 2;
+
+        return `background-image: url('${thumbUrl}'); background-size: ${bgWidth}px ${bgHeight}px; background-position: ${offsetX}px ${offsetY}px;`;
+    }
+
     function handleClose() {
         expandedImageUrl = null;
         dispatch('close');
     }
 </script>
 
-<Modal {isOpen} title="" size="full" on:close={handleClose}>
+<Modal {isOpen} title="" size="2xl" on:close={handleClose}>
     <svelte:fragment slot="header">
         <div class="flex items-center gap-3">
             <div class="p-2 bg-blue-100 rounded-lg">
@@ -93,7 +185,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                         </div>
-                        <span class="font-medium text-gray-900">{instance.projectTitle}</span>
+                        <span class="font-medium text-gray-900">{getDisplayTitle(instance)}</span>
                         <a
                             href="/viewer/{instance.projectId}"
                             class="ml-auto text-xs text-blue-600 hover:text-blue-800 hover:underline"
@@ -113,7 +205,7 @@
                         </div>
                     {/if}
 
-                    <!-- Captures -->
+                    <!-- Captures (snippet mode - shows cropped region) -->
                     {#if captures.length > 0}
                         <div class="mb-3">
                             <div class="text-xs text-gray-500 mb-2">캡처 ({captures.length}개)</div>
@@ -122,35 +214,16 @@
                                     {@const slideImageUrl = getSlideImageUrl(instance.projectId, capture.slideIndex)}
                                     <div class="relative group">
                                         <div
-                                            class="w-24 h-[68px] bg-gray-100 rounded border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 transition-colors"
+                                            class="w-24 h-[68px] bg-gray-200 rounded border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 transition-colors"
+                                            style={getCaptureThumbStyle(instance.projectId, capture, 96, 68)}
                                             on:click={() => expandedImageUrl = slideImageUrl}
                                             on:keydown={(e) => {
                                                 if (e.key === 'Enter') expandedImageUrl = slideImageUrl;
                                             }}
                                             role="button"
                                             tabindex="0"
+                                            title="클릭하여 전체 슬라이드 보기"
                                         >
-                                            <div class="relative w-full h-full">
-                                                <img
-                                                    src={slideImageUrl}
-                                                    alt="슬라이드 {capture.slideIndex + 1}"
-                                                    class="w-full h-full object-cover"
-                                                    on:error={(e) => {
-                                                        // Hide image on error
-                                                        e.currentTarget.style.display = 'none';
-                                                    }}
-                                                />
-                                                <!-- Capture region overlay -->
-                                                <div
-                                                    class="absolute border-2 border-blue-500 bg-blue-500/20 pointer-events-none"
-                                                    style="
-                                                        left: {(capture.x / 960) * 100}%;
-                                                        top: {(capture.y / 540) * 100}%;
-                                                        width: {(capture.width / 960) * 100}%;
-                                                        height: {(capture.height / 540) * 100}%;
-                                                    "
-                                                ></div>
-                                            </div>
                                         </div>
                                         <span class="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">
                                             S{capture.slideIndex + 1}
