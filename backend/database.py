@@ -593,3 +593,57 @@ class Database:
                 pass
 
         return usage_counts
+
+    def get_keyinfo_usage_details(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Get detailed usage information for each keyinfo item.
+
+        Returns detailed instances for each (categoryId, itemId) pair across all projects.
+
+        Returns:
+            Dict mapping "categoryId_itemId" -> list of usage details
+            Each detail contains: projectId, projectName, textValue, captureValues, imageIds, imageCaptions
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, original_filename, key_info_data FROM projects")
+        rows = cursor.fetchall()
+        conn.close()
+
+        usage_details: Dict[str, List[Dict[str, Any]]] = {}
+        for row in rows:
+            project_id = row[0]
+            project_name = row[1] or "Unknown"
+            key_info_data = row[2]
+
+            if not key_info_data:
+                continue
+
+            try:
+                data = json.loads(key_info_data)
+                instances = data.get("instances", [])
+
+                for inst in instances:
+                    cat_id = inst.get("categoryId", "")
+                    item_id = inst.get("itemId", "")
+                    if not cat_id or not item_id:
+                        continue
+
+                    key = f"{cat_id}_{item_id}"
+                    if key not in usage_details:
+                        usage_details[key] = []
+
+                    # Extract relevant data from instance
+                    detail = {
+                        "projectId": project_id,
+                        "projectName": project_name,
+                        "textValue": inst.get("textValue"),
+                        "captureValues": inst.get("captureValues", []),
+                        "imageIds": inst.get("imageIds", []),
+                        "imageCaptions": inst.get("imageCaptions", {}),
+                    }
+                    usage_details[key].append(detail)
+
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        return usage_details

@@ -1132,6 +1132,23 @@ def get_keyinfo_usage_counts():
         )
 
 
+@app.get("/api/keyinfo/usage-details")
+def get_keyinfo_usage_details():
+    """Get detailed usage information for each keyinfo item across all projects.
+
+    Returns detailed instances for each (categoryId, itemId) pair.
+    Each detail contains: projectId, projectName, textValue, captureValues, imageIds, imageCaptions
+    """
+    try:
+        details = db.get_keyinfo_usage_details()
+        return {"details": details}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get keyinfo usage details: {str(e)}",
+        )
+
+
 # ========== Key Info API (핵심정보) ==========
 
 

@@ -278,3 +278,31 @@ export function areAllCategoriesComplete(
 ): boolean {
     return categories.every(cat => isCategoryComplete(cat, instances));
 }
+
+// ========== Dashboard Types (대시보드용) ==========
+
+/**
+ * KeyInfo 항목의 사용 상세 정보 (프로젝트별)
+ */
+export interface KeyInfoUsageDetail {
+    projectId: string;
+    projectName: string;
+    textValue?: string;
+    captureValues: KeyInfoCaptureValue[];
+    imageIds: string[];
+    imageCaptions: Record<string, string>;
+}
+
+/**
+ * KeyInfo 사용 상세 응답
+ */
+export interface KeyInfoUsageDetailsResponse {
+    details: Record<string, KeyInfoUsageDetail[]>;  // "categoryId_itemId" -> details[]
+}
+
+/**
+ * KeyInfo 사용 횟수 응답
+ */
+export interface KeyInfoUsageCountsResponse {
+    counts: Record<string, number>;  // "categoryId_itemId" -> count
+}
