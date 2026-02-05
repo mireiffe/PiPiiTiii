@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import CategoryBarChart from './CategoryBarChart.svelte';
     import KeyInfoDetailModal from './KeyInfoDetailModal.svelte';
     import { fetchAllKeyInfoInstances, fetchSettings } from '$lib/api/project';
     import type {
@@ -196,11 +195,6 @@
     }
 
     $: selectedCategory = dashboardData.find(d => d.category.id === selectedCategoryId);
-    $: chartData = dashboardData.map((d, i) => ({
-        name: d.category.name,
-        count: d.totalUsage,
-        color: getCategoryColor(i),
-    }));
 
     onMount(() => {
         loadDashboardData();
@@ -262,14 +256,10 @@
             </div>
 
             <!-- Stats -->
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-2 gap-4">
                 <div class="bg-blue-50 rounded-lg p-3">
                     <div class="text-2xl font-bold text-blue-600">{totalCompletedProjects}</div>
                     <div class="text-xs text-blue-600/70">확정 PPT</div>
-                </div>
-                <div class="bg-green-50 rounded-lg p-3">
-                    <div class="text-2xl font-bold text-green-600">{totalUsageCount}</div>
-                    <div class="text-xs text-green-600/70">총 항목 사용</div>
                 </div>
                 <div class="bg-purple-50 rounded-lg p-3">
                     <div class="text-2xl font-bold text-purple-600">{dashboardData.length}</div>
@@ -280,10 +270,51 @@
 
         <!-- Content -->
         <div class="flex-1 overflow-hidden flex flex-col p-4 gap-4">
-            <!-- Chart Section -->
+            <!-- Category Top3 Charts (horizontal layout) -->
             <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                <h3 class="text-sm font-semibold text-gray-700 mb-3">카테고리별 사용 현황</h3>
-                <CategoryBarChart data={chartData} height={Math.max(dashboardData.length * 32, 120)} />
+                <h3 class="text-sm font-semibold text-gray-700 mb-3">카테고리별 TOP 3</h3>
+                <div class="grid gap-4" style="grid-template-columns: repeat({Math.min(dashboardData.length, 4)}, 1fr);">
+                    {#each dashboardData as catData, catIndex}
+                        {@const top3Items = catData.items.slice(0, 3)}
+                        {@const maxCount = Math.max(...top3Items.map(i => i.usageCount), 1)}
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 mb-2">
+                                <div class="w-2 h-2 rounded-full" style="background-color: {getCategoryColor(catIndex)};"></div>
+                                <span class="text-xs font-semibold text-gray-700 truncate">{catData.category.name}</span>
+                            </div>
+                            <div class="space-y-1.5">
+                                {#each top3Items as itemData, itemIndex}
+                                    <button
+                                        class="w-full text-left group"
+                                        on:click={() => openDetailModal(itemData)}
+                                    >
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-gray-400 w-3">{itemIndex + 1}</span>
+                                            <div class="flex-1 min-w-0">
+                                                <div class="flex items-center gap-1.5">
+                                                    <span class="text-xs text-gray-700 truncate group-hover:text-blue-600 transition-colors">
+                                                        {itemData.item.title}
+                                                    </span>
+                                                    <span class="text-[10px] text-gray-400 flex-shrink-0">
+                                                        {itemData.usageCount}
+                                                    </span>
+                                                </div>
+                                                <div class="h-1.5 bg-gray-100 rounded-full mt-0.5 overflow-hidden">
+                                                    <div
+                                                        class="h-full rounded-full transition-all group-hover:opacity-80"
+                                                        style="width: {(itemData.usageCount / maxCount) * 100}%; background-color: {getCategoryColor(catIndex)};"
+                                                    ></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                {:else}
+                                    <div class="text-[10px] text-gray-400 italic pl-5">항목 없음</div>
+                                {/each}
+                            </div>
+                        </div>
+                    {/each}
+                </div>
             </div>
 
             <!-- Category Tabs + Items -->
