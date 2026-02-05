@@ -6,27 +6,32 @@ Reads projects.db, attachments.db, settings.json and produces a single
 consolidated SQLite database with a normalized, PostgreSQL-ready schema.
 
 Usage:
-    python scripts/consolidate_data.py                  # dry-run (default)
-    python scripts/consolidate_data.py --execute        # actually create DB
-    python scripts/consolidate_data.py --execute --remove-unused-attrs
+    python scripts/consolidate_data.py                    # dry-run (default)
+    python scripts/consolidate_data.py --execute          # actually create DB
+    python scripts/consolidate_data.py --execute --remove-undefined-attrs
     python scripts/consolidate_data.py --execute --output-dir ./export
 """
 
 import argparse
+import importlib.util
+import inspect
 import json
 import os
-import shutil
 import sqlite3
 import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
 
 # Source paths
 PROJECTS_DB_PATH = os.path.join(BASE_DIR, "backend", "data", "projects.db")
 ATTACHMENTS_DB_PATH = os.path.join(BASE_DIR, "backend", "data", "attachments.db")
 SETTINGS_FILE_PATH = os.path.join(BASE_DIR, "backend", "data", "settings.json")
+
+# Attribute definitions directory
+ATTR_DEFINITIONS_DIR = os.path.join(BASE_DIR, "backend", "attributes", "definitions")
 
 # Default output directory
 DEFAULT_OUTPUT_DIR = os.path.join(BASE_DIR, "scripts", "output")
@@ -176,39 +181,49 @@ def detect_dynamic_attr_columns(db_path: str) -> List[str]:
     return [c for c in all_cols if c not in CORE_PROJECT_COLUMNS]
 
 
-def detect_unused_attr_columns(db_path: str, attr_cols: List[str]) -> List[str]:
-    """Return attribute columns where ALL values are NULL."""
-    if not attr_cols:
-        return []
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    unused = []
-    for col in attr_cols:
-        cursor.execute(
-            f"SELECT COUNT(*) FROM projects WHERE [{col}] IS NOT NULL AND [{col}] != ''"
-        )
-        count = cursor.fetchone()[0]
-        if count == 0:
-            unused.append(col)
-    conn.close()
-    return unused
+def load_defined_attr_keys() -> Set[str]:
+    """Load attribute keys from backend/attributes/definitions/ Python files.
+
+    Mirrors the logic in AttributeManager.load_attributes(): scans .py files
+    in the definitions directory, instantiates BaseAttribute subclasses, and
+    collects their ``key`` values.
+    """
+    from attributes.base import BaseAttribute
+
+    keys: Set[str] = set()
+
+    if not os.path.isdir(ATTR_DEFINITIONS_DIR):
+        return keys
+
+    for filename in os.listdir(ATTR_DEFINITIONS_DIR):
+        if not filename.endswith(".py") or filename.startswith("_"):
+            continue
+        filepath = os.path.join(ATTR_DEFINITIONS_DIR, filename)
+        try:
+            module_name = os.path.splitext(filename)[0]
+            spec = importlib.util.spec_from_file_location(module_name, filepath)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                for _name, obj in inspect.getmembers(module):
+                    if (
+                        inspect.isclass(obj)
+                        and issubclass(obj, BaseAttribute)
+                        and obj is not BaseAttribute
+                    ):
+                        instance = obj()
+                        keys.add(instance.key)
+        except Exception as e:
+            print(f"  [WARN] Failed to load attribute from {filepath}: {e}")
+
+    return keys
 
 
-def get_active_attributes(db_path: str) -> List[Dict[str, Any]]:
-    """Read the attributes metadata table."""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT key, display_name, attr_type FROM attributes")
-        rows = cursor.fetchall()
-        return [
-            {"key": r[0], "display_name": r[1], "attr_type": r[2]}
-            for r in rows
-        ]
-    except sqlite3.OperationalError:
-        return []
-    finally:
-        conn.close()
+def detect_undefined_attr_columns(
+    dynamic_cols: List[str], defined_keys: Set[str]
+) -> List[str]:
+    """Return dynamic attribute columns NOT defined in backend/attributes/definitions/."""
+    return [c for c in dynamic_cols if c not in defined_keys]
 
 
 def parse_key_info_instances(key_info_json: Optional[str]) -> Tuple[
@@ -337,14 +352,16 @@ def analyze(remove_unused_attrs: bool) -> Dict[str, Any]:
     # --- Dynamic attributes ---
     attr_cols = detect_dynamic_attr_columns(PROJECTS_DB_PATH)
     report["dynamic_attr_columns"] = attr_cols
-    report["active_attributes"] = get_active_attributes(PROJECTS_DB_PATH)
 
-    unused_attrs = detect_unused_attr_columns(PROJECTS_DB_PATH, attr_cols)
-    report["unused_attr_columns"] = unused_attrs
-    report["remove_unused_attrs"] = remove_unused_attrs
+    defined_keys = load_defined_attr_keys()
+    report["defined_attr_keys"] = sorted(defined_keys)
+
+    undefined_attrs = detect_undefined_attr_columns(attr_cols, defined_keys)
+    report["undefined_attr_columns"] = undefined_attrs
+    report["remove_undefined_attrs"] = remove_unused_attrs
 
     if remove_unused_attrs:
-        report["kept_attr_columns"] = [c for c in attr_cols if c not in unused_attrs]
+        report["kept_attr_columns"] = [c for c in attr_cols if c not in undefined_attrs]
     else:
         report["kept_attr_columns"] = attr_cols
 
@@ -415,15 +432,30 @@ def print_report(report: Dict[str, Any]):
     print(f"\n  Projects:                {report['project_count']}")
 
     # Dynamic attributes
-    print(f"\n  Dynamic Attribute Columns ({len(report['dynamic_attr_columns'])}):")
+    defined_keys = set(report.get("defined_attr_keys", []))
+    undefined = report.get("undefined_attr_columns", [])
+    will_remove = report.get("remove_undefined_attrs", False)
+
+    print(f"\n  Defined Attribute Keys (from backend/attributes/definitions/):")
+    if defined_keys:
+        for k in sorted(defined_keys):
+            print(f"    - {k}")
+    else:
+        print("    (none)")
+
+    print(f"\n  Dynamic Columns in projects table ({len(report['dynamic_attr_columns'])}):")
     for col in report["dynamic_attr_columns"]:
-        is_unused = col in report.get("unused_attr_columns", [])
-        marker = " [UNUSED — will remove]" if is_unused and report["remove_unused_attrs"] else ""
-        marker = " [UNUSED]" if is_unused and not report["remove_unused_attrs"] else marker
+        is_undefined = col in undefined
+        if is_undefined and will_remove:
+            marker = " [UNDEFINED — will remove]"
+        elif is_undefined:
+            marker = " [UNDEFINED]"
+        else:
+            marker = ""
         print(f"    - {col}{marker}")
 
-    if report["remove_unused_attrs"] and report["unused_attr_columns"]:
-        print(f"    → {len(report['unused_attr_columns'])} column(s) will be removed")
+    if will_remove and undefined:
+        print(f"    → {len(undefined)} undefined column(s) will be removed")
 
     # KeyInfo
     print(f"\n  KeyInfo Definitions:     {report['key_info_definitions']} items in {report['key_info_categories']} categories")
@@ -695,9 +727,9 @@ def main():
         help="Actually create the consolidated DB (default is dry-run).",
     )
     parser.add_argument(
-        "--remove-unused-attrs",
+        "--remove-undefined-attrs",
         action="store_true",
-        help="Remove dynamic attribute columns that have no data.",
+        help="Remove attribute columns not defined in backend/attributes/definitions/.",
     )
     parser.add_argument(
         "--output-dir",
@@ -713,7 +745,7 @@ def main():
     print("=" * 60)
 
     # Analyze
-    report = analyze(args.remove_unused_attrs)
+    report = analyze(args.remove_undefined_attrs)
 
     if report.get("errors"):
         print_report(report)
@@ -725,7 +757,7 @@ def main():
 
     # Execute
     print(f"\n  Mode: EXECUTE")
-    print(f"  Remove unused attrs: {args.remove_unused_attrs}")
+    print(f"  Remove undefined attrs: {args.remove_undefined_attrs}")
     execute(report, args.output_dir)
 
     print()
