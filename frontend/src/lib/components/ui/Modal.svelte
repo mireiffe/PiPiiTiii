@@ -1,6 +1,7 @@
 <script lang="ts">
     import { createEventDispatcher, onMount, onDestroy } from 'svelte';
     import { fade, scale } from 'svelte/transition';
+    import { browser } from '$app/environment';
 
     export let isOpen: boolean = false;
     export let title: string = '';
@@ -43,11 +44,13 @@
     });
 
     onDestroy(() => {
-        window.removeEventListener('keydown', handleKeyDown);
+        if (browser) {
+            window.removeEventListener('keydown', handleKeyDown);
+        }
     });
 
     // Prevent body scroll when modal is open
-    $: if (typeof document !== 'undefined') {
+    $: if (browser) {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
         } else {
