@@ -89,9 +89,9 @@
         return undefined;
     }
 
-    // Generate slide thumbnail URL from project results
+    // Generate slide thumbnail URL from project results (use thumbnail for expanded view too)
     function getSlideImageUrl(projectId: string, slideIndex: number): string {
-        return `${BASE_URL}/results/${projectId}/images/slide_${slideIndex + 1}.png`;
+        return `/api/results/${projectId}/thumbnails/slide_${String(slideIndex + 1).padStart(3, '0')}_thumb.png`;
     }
 
     // Get thumbnail URL for capture
@@ -209,13 +209,13 @@
                     {#if captures.length > 0}
                         <div class="mb-3">
                             <div class="text-xs text-gray-500 mb-2">캡처 ({captures.length}개)</div>
-                            <div class="flex flex-wrap gap-2">
+                            <div class="flex flex-wrap gap-3">
                                 {#each captures as capture}
                                     {@const slideImageUrl = getSlideImageUrl(instance.projectId, capture.slideIndex)}
                                     <div class="relative group">
                                         <div
-                                            class="w-24 h-[68px] bg-gray-200 rounded border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 transition-colors"
-                                            style={getCaptureThumbStyle(instance.projectId, capture, 96, 68)}
+                                            class="w-40 h-[112px] bg-gray-200 rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+                                            style={getCaptureThumbStyle(instance.projectId, capture, 160, 112)}
                                             on:click={() => expandedImageUrl = slideImageUrl}
                                             on:keydown={(e) => {
                                                 if (e.key === 'Enter') expandedImageUrl = slideImageUrl;
@@ -225,11 +225,11 @@
                                             title="클릭하여 전체 슬라이드 보기"
                                         >
                                         </div>
-                                        <span class="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">
+                                        <span class="absolute -top-1.5 -right-1.5 bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-medium shadow-sm">
                                             S{capture.slideIndex + 1}
                                         </span>
                                         {#if capture.caption}
-                                            <div class="mt-1 text-[10px] text-gray-500 max-w-24 truncate" title={capture.caption}>
+                                            <div class="mt-1.5 text-[11px] text-gray-500 max-w-40 truncate" title={capture.caption}>
                                                 {capture.caption}
                                             </div>
                                         {/if}
@@ -243,13 +243,13 @@
                     {#if images.length > 0}
                         <div>
                             <div class="text-xs text-gray-500 mb-2">이미지 ({images.length}개)</div>
-                            <div class="flex flex-wrap gap-2">
+                            <div class="flex flex-wrap gap-3">
                                 {#each images as imageId}
                                     {@const imageUrl = getAttachmentImageUrl(imageId)}
                                     {@const caption = getImageCaption(instance, imageId)}
                                     <div class="relative group">
                                         <div
-                                            class="w-24 h-18 bg-gray-100 rounded border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 transition-colors"
+                                            class="w-40 h-[112px] bg-gray-100 rounded-lg border border-gray-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
                                             on:click={() => expandedImageUrl = imageUrl}
                                             on:keydown={(e) => {
                                                 if (e.key === 'Enter') expandedImageUrl = imageUrl;
@@ -264,7 +264,7 @@
                                             />
                                         </div>
                                         {#if caption}
-                                            <div class="mt-1 text-[10px] text-gray-500 max-w-24 truncate" title={caption}>
+                                            <div class="mt-1.5 text-[11px] text-gray-500 max-w-40 truncate" title={caption}>
                                                 {caption}
                                             </div>
                                         {/if}
