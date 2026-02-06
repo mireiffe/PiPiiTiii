@@ -195,6 +195,53 @@
                                     {/if}
                                 </div>
                                 <p class="text-sm text-gray-700 mt-0.5">{log.summary}</p>
+
+                                <!-- Details -->
+                                {#if log.details}
+                                    {@const details = log.details}
+                                    <div class="mt-1.5 text-xs text-gray-500 space-y-0.5">
+                                        {#if log.action_type === 'settings_update' && details.changes}
+                                            <ul class="list-none space-y-0.5">
+                                                {#each details.changes as change}
+                                                    <li class="flex items-start gap-1.5">
+                                                        <span class="text-purple-400 mt-px shrink-0">•</span>
+                                                        <span>{change}</span>
+                                                    </li>
+                                                {/each}
+                                            </ul>
+                                        {:else if log.action_type === 'keyinfo_update' && details.changedItems}
+                                            <ul class="list-none space-y-0.5">
+                                                {#each details.changedItems as item}
+                                                    <li class="flex items-start gap-1.5">
+                                                        <span class="text-indigo-400 mt-px shrink-0">•</span>
+                                                        <span>
+                                                            <span class="font-medium text-gray-600">[{item.categoryName}]</span>
+                                                            {item.itemName}
+                                                            <span class="text-gray-400">({item.changes.join(', ')})</span>
+                                                        </span>
+                                                    </li>
+                                                {/each}
+                                            </ul>
+                                        {:else if log.action_type === 'keyinfo_add' && details.categoryName}
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="text-blue-400 shrink-0">•</span>
+                                                <span>
+                                                    <span class="font-medium text-gray-600">[{details.categoryName}]</span>
+                                                    {details.itemName}
+                                                </span>
+                                            </div>
+                                        {:else if log.action_type === 'keyinfo_delete' && details.removedItems}
+                                            <ul class="list-none space-y-0.5">
+                                                {#each details.removedItems as item}
+                                                    <li class="flex items-start gap-1.5">
+                                                        <span class="text-red-400 mt-px shrink-0">•</span>
+                                                        <span>{item}</span>
+                                                    </li>
+                                                {/each}
+                                            </ul>
+                                        {/if}
+                                    </div>
+                                {/if}
                             </div>
 
                             <!-- Time -->
