@@ -1324,7 +1324,7 @@
 
     <div class="flex-1 bg-gray-50 flex flex-col overflow-hidden relative">
       {#if !selectedProjectId}
-        <KeyInfoDashboard modalTitleConfig={DASHBOARD_MODAL_TITLE_CONFIG} />
+        <KeyInfoDashboard modalTitleConfig={DASHBOARD_MODAL_TITLE_CONFIG} {projects} />
       {:else if loadingDetails}
         <div class="flex-1 flex items-center justify-center text-gray-500">
           <div

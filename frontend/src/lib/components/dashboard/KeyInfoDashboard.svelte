@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import KeyInfoDetailModal from './KeyInfoDetailModal.svelte';
+    import ActivityLogPanel from './ActivityLogPanel.svelte';
     import { fetchAllKeyInfoInstances, fetchSettings } from '$lib/api/project';
     import type {
         KeyInfoSettings,
@@ -13,6 +14,10 @@
     // Props
     type ModalTitleConfigItem = string | { key: string; prefix?: string; suffix?: string };
     export let modalTitleConfig: ModalTitleConfigItem[] = ["title"];
+    export let projects: Array<{ id: string; name?: string; title?: string }> = [];
+
+    // Top-level tab: 'dashboard' | 'logs'
+    let activeTab: 'dashboard' | 'logs' = 'dashboard';
 
     // Dashboard data structure
     interface ProjectAttributes {
@@ -202,7 +207,41 @@
 </script>
 
 <div class="h-full flex flex-col bg-gray-50 overflow-hidden">
-    {#if loading}
+    <!-- Top-level Tabs -->
+    <div class="bg-white border-b border-gray-200 px-6 pt-3 shrink-0 flex items-center gap-1">
+        <button
+            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                {activeTab === 'dashboard'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
+            on:click={() => activeTab = 'dashboard'}
+        >
+            <span class="flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Dashboard
+            </span>
+        </button>
+        <button
+            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                {activeTab === 'logs'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
+            on:click={() => activeTab = 'logs'}
+        >
+            <span class="flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                활동 로그
+            </span>
+        </button>
+    </div>
+
+    {#if activeTab === 'logs'}
+        <ActivityLogPanel {projects} />
+    {:else if loading}
         <div class="flex-1 flex items-center justify-center">
             <div class="flex flex-col items-center gap-3">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>

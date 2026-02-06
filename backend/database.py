@@ -73,6 +73,18 @@ class Database:
                 print("WARNING: Could not remove phenomenon_data column (SQLite version < 3.35.0)")
                 print("The column is unused and can be safely ignored.")
 
+        # Create activity_logs table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS activity_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action_type TEXT NOT NULL,
+                project_id TEXT,
+                summary TEXT NOT NULL,
+                details TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+
         conn.commit()
         conn.close()
 
@@ -638,3 +650,100 @@ class Database:
                 pass
 
         return result
+
+    # ========== Activity Logs Methods ==========
+
+    def add_activity_log(
+        self,
+        action_type: str,
+        summary: str,
+        project_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        """Add an activity log entry."""
+        from datetime import datetime
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO activity_logs (action_type, project_id, summary, details, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                action_type,
+                project_id,
+                summary,
+                json.dumps(details, ensure_ascii=False) if details else None,
+                datetime.now().isoformat(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_activity_logs(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        action_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get activity logs with optional filtering.
+
+        Args:
+            limit: Maximum number of logs to return
+            offset: Number of logs to skip
+            action_type: Optional filter by action type (comma-separated for multiple)
+
+        Returns:
+            List of activity log dicts
+        """
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        if action_type:
+            types = [t.strip() for t in action_type.split(",")]
+            placeholders = ",".join("?" for _ in types)
+            cursor.execute(
+                f"SELECT * FROM activity_logs WHERE action_type IN ({placeholders}) "
+                f"ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (*types, limit, offset),
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            )
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for row in rows:
+            entry = dict(row)
+            if entry.get("details"):
+                try:
+                    entry["details"] = json.loads(entry["details"])
+                except json.JSONDecodeError:
+                    pass
+            result.append(entry)
+        return result
+
+    def get_activity_log_count(self, action_type: Optional[str] = None) -> int:
+        """Get total count of activity logs (for pagination)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        if action_type:
+            types = [t.strip() for t in action_type.split(",")]
+            placeholders = ",".join("?" for _ in types)
+            cursor.execute(
+                f"SELECT COUNT(*) FROM activity_logs WHERE action_type IN ({placeholders})",
+                tuple(types),
+            )
+        else:
+            cursor.execute("SELECT COUNT(*) FROM activity_logs")
+
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
