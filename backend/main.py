@@ -885,6 +885,78 @@ def load_settings() -> dict:
         }
 
 
+def _diff_settings(old: dict, new: dict) -> List[str]:
+    """Compare old and new settings, return human-readable change descriptions."""
+    changes = []
+
+    # LLM config
+    old_llm = old.get("llm", {})
+    new_llm = new.get("llm", {})
+    if old_llm.get("model_name") != new_llm.get("model_name"):
+        changes.append(f"LLM 모델 변경 ({new_llm.get('model_name', '')})")
+    if old_llm.get("api_endpoint") != new_llm.get("api_endpoint"):
+        changes.append("LLM API 엔드포인트 변경")
+
+    # Summary fields
+    old_sf = old.get("summary_fields", [])
+    new_sf = new.get("summary_fields", [])
+    if len(old_sf) != len(new_sf):
+        changes.append(f"요약 필드 수 변경 ({len(old_sf)} → {len(new_sf)})")
+    elif old_sf != new_sf:
+        changes.append("요약 필드 수정")
+
+    # Key info categories
+    old_ki = old.get("key_info_settings", {}).get("categories", [])
+    new_ki = new.get("key_info_settings", {}).get("categories", [])
+    old_cat_ids = {c.get("id") for c in old_ki}
+    new_cat_ids = {c.get("id") for c in new_ki}
+    added_cats = new_cat_ids - old_cat_ids
+    removed_cats = old_cat_ids - new_cat_ids
+    new_cat_map = {c.get("id"): c for c in new_ki}
+    old_cat_map = {c.get("id"): c for c in old_ki}
+    if added_cats:
+        for cid in added_cats:
+            cat = new_cat_map.get(cid, {})
+            changes.append(f"핵심정보 카테고리 추가: {cat.get('name', cid)}")
+    if removed_cats:
+        for cid in removed_cats:
+            cat = old_cat_map.get(cid, {})
+            changes.append(f"핵심정보 카테고리 삭제: {cat.get('name', cid)}")
+    # Check item changes in existing categories
+    for cid in new_cat_ids & old_cat_ids:
+        old_cat = old_cat_map.get(cid, {})
+        new_cat = new_cat_map.get(cid, {})
+        old_items = {i.get("id") for i in old_cat.get("items", [])}
+        new_items = {i.get("id") for i in new_cat.get("items", [])}
+        new_item_map = {i.get("id"): i for i in new_cat.get("items", [])}
+        added_items = new_items - old_items
+        removed_items = old_items - new_items
+        cat_name = new_cat.get("name", cid)
+        for iid in added_items:
+            item = new_item_map.get(iid, {})
+            changes.append(f"[{cat_name}] 항목 추가: {item.get('title', iid)}")
+        if removed_items:
+            old_item_map = {i.get("id"): i for i in old_cat.get("items", [])}
+            for iid in removed_items:
+                item = old_item_map.get(iid, {})
+                changes.append(f"[{cat_name}] 항목 삭제: {item.get('title', iid)}")
+        # Check for name/prompt edits in shared items
+        if old_cat.get("name") != new_cat.get("name"):
+            changes.append(f"카테고리 이름 변경: {old_cat.get('name')} → {new_cat.get('name')}")
+        if old_cat.get("systemPrompt") != new_cat.get("systemPrompt") or old_cat.get("userPrompt") != new_cat.get("userPrompt"):
+            changes.append(f"[{cat_name}] 프롬프트 수정")
+
+    # Thumbnail toggle
+    if old.get("use_thumbnails") != new.get("use_thumbnails"):
+        changes.append(f"썸네일 보기 {'활성화' if new.get('use_thumbnails') else '비활성화'}")
+
+    # Tutorial project
+    if old.get("tutorial_project_id") != new.get("tutorial_project_id"):
+        changes.append("튜토리얼 프로젝트 변경")
+
+    return changes
+
+
 @app.get("/api/settings")
 def get_settings():
     """Get application settings."""
@@ -900,14 +972,31 @@ def get_settings():
 def update_settings(settings: Settings):
     """Update application settings."""
     try:
+        # Load old settings for diff
+        old_settings = load_settings() if os.path.exists(SETTINGS_FILE) else {}
+        new_dict = settings.dict()
+
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
+            json.dump(new_dict, f, ensure_ascii=False, indent=2)
+
+        # Compute what changed
+        changes = _diff_settings(old_settings, new_dict)
 
         # Log activity
-        db.add_activity_log(
-            action_type="settings_update",
-            summary="설정 변경",
-        )
+        if changes:
+            summary = ", ".join(changes[:3])
+            if len(changes) > 3:
+                summary += f" 외 {len(changes) - 3}건"
+            db.add_activity_log(
+                action_type="settings_update",
+                summary=f"설정 변경: {summary}",
+                details={"changes": changes},
+            )
+        else:
+            db.add_activity_log(
+                action_type="settings_update",
+                summary="설정 저장",
+            )
 
         return {"status": "success", "message": "Settings updated successfully"}
     except Exception as e:
@@ -1186,10 +1275,26 @@ def get_project_key_info(project_id: str):
 def update_project_key_info(project_id: str, request: KeyInfoUpdateRequest):
     """Update key info data for a project (핵심정보 데이터 저장)."""
     try:
+        # Load settings for resolving names
+        settings_data = load_settings()
+        ki_settings = settings_data.get("key_info_settings", {})
+        categories = ki_settings.get("categories", [])
+        cat_map = {c["id"]: c for c in categories}
+        item_map = {}
+        for c in categories:
+            for item in c.get("items", []):
+                item_map[item["id"]] = item
+
+        # Get project name for log
+        project = db.get_project(project_id)
+        project_name = (project.get("title") or project.get("original_filename") or project_id) if project else project_id
+
         # Get previous data for comparison
         prev_data = db.get_project_key_info(project_id)
-        prev_ids = {inst.get("id") for inst in prev_data.get("instances", [])}
-        new_ids = {inst.id for inst in request.data.instances}
+        prev_instances = {inst.get("id"): inst for inst in prev_data.get("instances", [])}
+        prev_ids = set(prev_instances.keys())
+        new_instances = {inst.id: inst for inst in request.data.instances}
+        new_ids = set(new_instances.keys())
 
         added_ids = new_ids - prev_ids
         removed_ids = prev_ids - new_ids
@@ -1199,29 +1304,81 @@ def update_project_key_info(project_id: str, request: KeyInfoUpdateRequest):
         # Log additions
         for inst in request.data.instances:
             if inst.id in added_ids:
+                cat_name = cat_map.get(inst.categoryId, {}).get("name", inst.categoryId)
+                item_name = item_map.get(inst.itemId, {}).get("title", inst.itemId)
                 db.add_activity_log(
                     action_type="keyinfo_add",
-                    summary=f"핵심정보 추가",
+                    summary=f"[{cat_name}] {item_name} 추가",
                     project_id=project_id,
-                    details={"categoryId": inst.categoryId, "itemId": inst.itemId},
+                    details={
+                        "categoryId": inst.categoryId,
+                        "categoryName": cat_name,
+                        "itemId": inst.itemId,
+                        "itemName": item_name,
+                        "projectName": project_name,
+                    },
                 )
 
-        # Log removals
+        # Log removals with names
         if removed_ids:
+            removed_names = []
+            for rid in removed_ids:
+                prev_inst = prev_instances.get(rid, {})
+                cat_name = cat_map.get(prev_inst.get("categoryId", ""), {}).get("name", "")
+                item_name = item_map.get(prev_inst.get("itemId", ""), {}).get("title", "")
+                if cat_name and item_name:
+                    removed_names.append(f"[{cat_name}] {item_name}")
+            summary_parts = ", ".join(removed_names) if removed_names else f"{len(removed_ids)}건"
             db.add_activity_log(
                 action_type="keyinfo_delete",
-                summary=f"핵심정보 삭제 ({len(removed_ids)}건)",
+                summary=f"핵심정보 삭제: {summary_parts}",
                 project_id=project_id,
+                details={"projectName": project_name, "removedItems": removed_names},
             )
 
         # Log updates (existing instances that were modified)
         updated_ids = new_ids & prev_ids
         if updated_ids and not added_ids and not removed_ids:
-            db.add_activity_log(
-                action_type="keyinfo_update",
-                summary=f"핵심정보 수정",
-                project_id=project_id,
-            )
+            # Find what actually changed
+            changed_items = []
+            for uid in updated_ids:
+                prev_inst = prev_instances.get(uid, {})
+                new_inst = new_instances[uid]
+                changes = []
+                # Check text change
+                old_text = prev_inst.get("textValue") or ""
+                new_text = new_inst.textValue or ""
+                if old_text != new_text:
+                    changes.append("텍스트")
+                # Check capture change
+                old_cap = prev_inst.get("captureValues") or prev_inst.get("captureValue")
+                new_cap = new_inst.captureValues or (new_inst.captureValue if hasattr(new_inst, 'captureValue') else None)
+                if str(old_cap) != str(new_cap):
+                    changes.append("캡처")
+                # Check image change
+                old_imgs = prev_inst.get("imageIds") or ([prev_inst.get("imageId")] if prev_inst.get("imageId") else [])
+                new_imgs = new_inst.imageIds or ([new_inst.imageId] if hasattr(new_inst, 'imageId') and new_inst.imageId else [])
+                if old_imgs != new_imgs:
+                    changes.append("이미지")
+                if changes:
+                    cat_name = cat_map.get(new_inst.categoryId, {}).get("name", "")
+                    item_name = item_map.get(new_inst.itemId, {}).get("title", "")
+                    changed_items.append({
+                        "categoryName": cat_name,
+                        "itemName": item_name,
+                        "changes": changes,
+                    })
+            if changed_items:
+                first = changed_items[0]
+                summary = f"[{first['categoryName']}] {first['itemName']} 수정 ({', '.join(first['changes'])})"
+                if len(changed_items) > 1:
+                    summary += f" 외 {len(changed_items) - 1}건"
+                db.add_activity_log(
+                    action_type="keyinfo_update",
+                    summary=summary,
+                    project_id=project_id,
+                    details={"projectName": project_name, "changedItems": changed_items},
+                )
 
         return {"status": "success", "message": "Key info updated successfully"}
     except Exception as e:
@@ -1238,13 +1395,17 @@ class ProjectKeyInfoCompletedUpdate(BaseModel):
 def update_project_key_info_completed(project_id: str, update: ProjectKeyInfoCompletedUpdate):
     """Update the key_info_completed status of a project (핵심정보 완료 상태 변경)."""
     try:
+        project = db.get_project(project_id)
+        project_name = (project.get("title") or project.get("original_filename") or project_id) if project else project_id
+
         db.update_project_key_info_completed(project_id, update.completed)
 
         # Log activity
         db.add_activity_log(
             action_type="keyinfo_complete" if update.completed else "keyinfo_uncomplete",
-            summary=f"핵심정보 {'완료 확정' if update.completed else '완료 해제'}",
+            summary=f"핵심정보 {'완료 확정' if update.completed else '완료 해제'}: {project_name}",
             project_id=project_id,
+            details={"projectName": project_name},
         )
 
         return {"status": "success", "completed": update.completed}
@@ -1471,13 +1632,17 @@ class ProjectKeptUpdate(BaseModel):
 def update_project_kept(project_id: str, update: ProjectKeptUpdate):
     """Update the kept (archived) status of a project."""
     try:
+        project = db.get_project(project_id)
+        project_name = (project.get("title") or project.get("original_filename") or project_id) if project else project_id
+
         db.update_project_kept(project_id, update.kept)
 
         # Log activity
         db.add_activity_log(
             action_type="project_archive" if update.kept else "project_unarchive",
-            summary=f"프로젝트 {'보관' if update.kept else '보관 해제'}",
+            summary=f"프로젝트 {'보관' if update.kept else '보관 해제'}: {project_name}",
             project_id=project_id,
+            details={"projectName": project_name},
         )
 
         return {"status": "success", "kept": update.kept}
