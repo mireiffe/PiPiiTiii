@@ -365,6 +365,23 @@ export async function deleteAttachmentImage(imageId: string): Promise<Response> 
     });
 }
 
+// ========== Activity Logs API ==========
+
+/**
+ * Fetch activity logs with optional filtering and pagination
+ */
+export async function fetchActivityLogs(
+    limit: number = 50,
+    offset: number = 0,
+    actionType?: string,
+): Promise<Response> {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (actionType) {
+        params.set('action_type', actionType);
+    }
+    return apiFetch(`/api/activity-logs?${params.toString()}`);
+}
+
 // ========== Key Info API (핵심정보) ==========
 
 /**

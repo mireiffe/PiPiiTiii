@@ -595,6 +595,14 @@ async def upload_ppt(background_tasks: BackgroundTasks, file: UploadFile = File(
     except Exception as e:
         print(f"[ERROR] Failed to calculate attributes for {project_id}: {e}")
 
+    # Log activity
+    db.add_activity_log(
+        action_type="project_upload",
+        summary=f"프로젝트 업로드: {filename}",
+        project_id=project_id,
+        details={"filename": filename, "slide_count": slide_count, "title": title},
+    )
+
     # Run parsing in background
     background_tasks.add_task(run_parsing_task, file_path, project_dir, project_id)
 
@@ -894,6 +902,13 @@ def update_settings(settings: Settings):
     try:
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
+
+        # Log activity
+        db.add_activity_log(
+            action_type="settings_update",
+            summary="설정 변경",
+        )
+
         return {"status": "success", "message": "Settings updated successfully"}
     except Exception as e:
         raise HTTPException(
@@ -1171,7 +1186,43 @@ def get_project_key_info(project_id: str):
 def update_project_key_info(project_id: str, request: KeyInfoUpdateRequest):
     """Update key info data for a project (핵심정보 데이터 저장)."""
     try:
+        # Get previous data for comparison
+        prev_data = db.get_project_key_info(project_id)
+        prev_ids = {inst.get("id") for inst in prev_data.get("instances", [])}
+        new_ids = {inst.id for inst in request.data.instances}
+
+        added_ids = new_ids - prev_ids
+        removed_ids = prev_ids - new_ids
+
         db.update_project_key_info(project_id, request.data.dict())
+
+        # Log additions
+        for inst in request.data.instances:
+            if inst.id in added_ids:
+                db.add_activity_log(
+                    action_type="keyinfo_add",
+                    summary=f"핵심정보 추가",
+                    project_id=project_id,
+                    details={"categoryId": inst.categoryId, "itemId": inst.itemId},
+                )
+
+        # Log removals
+        if removed_ids:
+            db.add_activity_log(
+                action_type="keyinfo_delete",
+                summary=f"핵심정보 삭제 ({len(removed_ids)}건)",
+                project_id=project_id,
+            )
+
+        # Log updates (existing instances that were modified)
+        updated_ids = new_ids & prev_ids
+        if updated_ids and not added_ids and not removed_ids:
+            db.add_activity_log(
+                action_type="keyinfo_update",
+                summary=f"핵심정보 수정",
+                project_id=project_id,
+            )
+
         return {"status": "success", "message": "Key info updated successfully"}
     except Exception as e:
         raise HTTPException(
@@ -1188,6 +1239,14 @@ def update_project_key_info_completed(project_id: str, update: ProjectKeyInfoCom
     """Update the key_info_completed status of a project (핵심정보 완료 상태 변경)."""
     try:
         db.update_project_key_info_completed(project_id, update.completed)
+
+        # Log activity
+        db.add_activity_log(
+            action_type="keyinfo_complete" if update.completed else "keyinfo_uncomplete",
+            summary=f"핵심정보 {'완료 확정' if update.completed else '완료 해제'}",
+            project_id=project_id,
+        )
+
         return {"status": "success", "completed": update.completed}
     except Exception as e:
         raise HTTPException(
@@ -1413,6 +1472,14 @@ def update_project_kept(project_id: str, update: ProjectKeptUpdate):
     """Update the kept (archived) status of a project."""
     try:
         db.update_project_kept(project_id, update.kept)
+
+        # Log activity
+        db.add_activity_log(
+            action_type="project_archive" if update.kept else "project_unarchive",
+            summary=f"프로젝트 {'보관' if update.kept else '보관 해제'}",
+            project_id=project_id,
+        )
+
         return {"status": "success", "kept": update.kept}
     except Exception as e:
         raise HTTPException(
@@ -1633,6 +1700,32 @@ def delete_attachment_image(image_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(e)}")
+
+
+# ========== Activity Logs API ==========
+
+
+@app.get("/api/activity-logs")
+def get_activity_logs(
+    limit: int = 50,
+    offset: int = 0,
+    action_type: Optional[str] = None,
+):
+    """Get activity logs with optional filtering.
+
+    Query params:
+        limit: Max number of logs (default 50)
+        offset: Skip N logs (for pagination)
+        action_type: Filter by type (comma-separated, e.g. "keyinfo_add,keyinfo_update")
+    """
+    try:
+        logs = db.get_activity_logs(limit=limit, offset=offset, action_type=action_type)
+        total = db.get_activity_log_count(action_type=action_type)
+        return {"logs": logs, "total": total}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get activity logs: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
