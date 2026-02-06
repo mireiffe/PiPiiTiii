@@ -3,6 +3,7 @@
     import { createEventDispatcher, tick, onMount } from "svelte";
     import AccordionHeader from "./AccordionHeader.svelte";
     import Modal from "$lib/components/ui/Modal.svelte";
+    import ActivityLogModal from "./ActivityLogModal.svelte";
     import type {
         ProjectKeyInfoData,
         KeyInfoSettings,
@@ -58,6 +59,9 @@
     let viewingInstanceId: string | null = null;
     let editingImageCaption: string = "";
     let isEditingCaption = false;
+
+    // Activity log modal
+    let showActivityLog = false;
 
     // Usage counts: how many projects use each keyinfo item
     let usageCounts: Record<string, number> = {};
@@ -719,7 +723,18 @@
         title="핵심정보"
         {isExpanded}
         on:click={() => dispatch("toggleExpand")}
-    />
+    >
+        <button
+            slot="actions"
+            class="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            on:click|stopPropagation={() => (showActivityLog = true)}
+            title="활동 로그"
+        >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        </button>
+    </AccordionHeader>
 
     {#if isExpanded}
         <div class="p-2 space-y-2 overflow-y-auto flex-1 min-h-0" transition:slide={{ duration: 200 }}>
@@ -1119,6 +1134,14 @@
         </div>
     {/if}
 </div>
+
+<!-- Activity Log Modal -->
+<ActivityLogModal
+    isOpen={showActivityLog}
+    {keyInfoData}
+    {keyInfoSettings}
+    on:close={() => (showActivityLog = false)}
+/>
 
 <!-- Image Viewer Modal -->
 <Modal
