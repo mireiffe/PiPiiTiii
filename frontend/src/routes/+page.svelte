@@ -596,6 +596,13 @@
     }
   }
 
+  function deselectProject() {
+    selectedProjectId = null;
+    selectedProjectDetails = null;
+    // Refresh keyinfo status in case changes were made
+    loadKeyinfoStatus();
+  }
+
   async function toggleThumbnailView() {
     loadingSettings = true;
     try {
@@ -1328,23 +1335,36 @@
         <div
           class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm z-10"
         >
-          <div>
-            <h2 class="text-xl font-bold text-gray-800">
-              {selectedProjectDetails.name}
-            </h2>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="text-sm text-gray-500">
-                {selectedProjectDetails.slide_count} slides
-              </span>
-              <span class="text-gray-300">•</span>
-              <span class="text-sm text-gray-500">
-                Modified {new Date(
-                  selectedProjectDetails.created_at,
-                ).toLocaleDateString()}
-              </span>
+          <div class="flex items-center gap-3 min-w-0">
+            <button
+              class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-all shrink-0"
+              on:click={deselectProject}
+              title="Dashboard로 돌아가기"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Dashboard
+            </button>
+            <div class="w-px h-8 bg-gray-200 shrink-0"></div>
+            <div class="min-w-0">
+              <h2 class="text-xl font-bold text-gray-800 truncate">
+                {selectedProjectDetails.name}
+              </h2>
+              <div class="flex items-center gap-2 mt-1">
+                <span class="text-sm text-gray-500">
+                  {selectedProjectDetails.slide_count} slides
+                </span>
+                <span class="text-gray-300">•</span>
+                <span class="text-sm text-gray-500">
+                  Modified {new Date(
+                    selectedProjectDetails.created_at,
+                  ).toLocaleDateString()}
+                </span>
+              </div>
             </div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 shrink-0">
             <Button
               href={`/viewer/${selectedProjectId}?allowEdit=${allowEdit}`}
               variant="primary"
