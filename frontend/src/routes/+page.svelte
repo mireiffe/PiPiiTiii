@@ -308,14 +308,6 @@
       if (aPinned && !bPinned) return -1;
       if (!aPinned && bPinned) return 1;
 
-      // Completed projects go to the bottom (unless filtering by completed only)
-      if (!activeKeyinfoFilters.has("completed") || activeKeyinfoFilters.size > 1) {
-        const aCompleted = keyinfoCompletedProjects.has(a.id);
-        const bCompleted = keyinfoCompletedProjects.has(b.id);
-        if (aCompleted && !bCompleted) return 1;
-        if (!aCompleted && bCompleted) return -1;
-      }
-
       let valA, valB;
 
       if (sortBy === "date") {
