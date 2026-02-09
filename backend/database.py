@@ -137,6 +137,14 @@ class Database:
         conn.close()
         return [dict(row) for row in rows]
 
+    def delete_project(self, project_id: str):
+        """Delete a project from the database."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        conn.commit()
+        conn.close()
+
     def update_project_status(self, project_id: str, status: str):
         conn = self.get_connection()
         cursor = conn.cursor()
