@@ -202,21 +202,37 @@ def execute(
     """
     projects = report.get("_projects")  # original project list, set when use_llm path
 
+    active_attrs = report["active_attrs"]
+    llm_keys = {
+        a["key"]
+        for a in active_attrs
+        if manager.attributes.get(a["key"])
+        and manager.attributes[a["key"]].llm_extract_config is not None
+    }
+
     if use_llm and projects is not None:
-        print(f"\n  Recalculating with LLM for {len(projects)} projects...")
+        total = len(projects)
+        print(f"\n  Recalculating with LLM for {total} projects...")
         count = 0
-        for p_data in projects:
+        for idx, p_data in enumerate(projects, 1):
+            filename = p_data.get("original_filename", p_data["id"])
+            print(f"  [{idx}/{total}] {p_data['id']} ({filename})")
             attrs = manager.calculate_attributes(p_data, use_llm=True)
             if attrs:
+                for key, val in attrs.items():
+                    tag = " (LLM)" if key in llm_keys else ""
+                    print(f"         {key}: \"{val}\"{tag}")
                 db.update_project_attributes(p_data["id"], attrs)
                 count += 1
         print(f"  Done. Updated {count} projects (with LLM).")
     else:
         results = report["results_by_project"]
-        print(f"\n  Writing attributes for {len(results)} projects...")
+        total = len(results)
+        print(f"\n  Writing attributes for {total} projects...")
         count = 0
-        for project_id, attrs in results:
+        for idx, (project_id, attrs) in enumerate(results, 1):
             if attrs:
+                print(f"  [{idx}/{total}] {project_id}")
                 db.update_project_attributes(project_id, attrs)
                 count += 1
         print(f"  Done. Updated {count} projects.")

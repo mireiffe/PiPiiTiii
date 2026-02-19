@@ -93,6 +93,8 @@ class BaseAttribute(ABC):
                     base_url=config.base_url,
                     model_name=config.model_name,
                 )
+                if config.response_parser is not None:
+                    result = config.response_parser(result).strip()
                 last_result = result
 
                 if config.condition is None or config.condition(result):

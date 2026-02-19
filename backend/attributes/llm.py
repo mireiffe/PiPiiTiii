@@ -7,6 +7,7 @@ that calls OpenAI-compatible /chat/completions endpoints.
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -27,6 +28,7 @@ class LLMExtractConfig:
     system_prompt: str
     user_prompt_template: str  # {value} = extract() result; project_data keys also available
     condition: Optional[Callable[[str], bool]] = None  # validation function for LLM output
+    response_parser: Optional[Callable[[str], str]] = None  # parse LLM response before validation
     max_retries: int = 3
     base_url: Optional[str] = None  # per-attribute override (falls back to ATTR_LLM_BASE_URL env)
     model_name: Optional[str] = None  # per-attribute override (falls back to ATTR_LLM_MODEL env)
@@ -71,3 +73,19 @@ def llm_generate_text(
         response.raise_for_status()
         data = response.json()
         return data["choices"][0]["message"]["content"].strip()
+
+
+def xml_tag_parser(tag: str) -> Callable[[str], str]:
+    """Return a parser that extracts content from ``<tag>...</tag>``.
+
+    Falls back to the full response when the tag is not found.
+    """
+    pattern = re.compile(rf"<{re.escape(tag)}>(.*?)</{re.escape(tag)}>", re.DOTALL)
+
+    def _parse(response: str) -> str:
+        m = pattern.search(response)
+        if m:
+            return m.group(1).strip()
+        return response
+
+    return _parse
