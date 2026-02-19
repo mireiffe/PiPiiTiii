@@ -118,6 +118,58 @@
   // Keep (archive) viewing mode
   let showKeptOnly = false;
 
+  // Resizable left pane
+  const LEFT_PANE_WIDTH_KEY = "pipiiitiii_left_pane_width";
+  let leftPaneWidth = 800;
+  let isResizing = false;
+
+  function startResize(e) {
+    isResizing = true;
+    e.preventDefault();
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", handleResize);
+    window.addEventListener("mouseup", stopResize);
+  }
+
+  function handleResize(e) {
+    if (!isResizing) return;
+    const newWidth = e.clientX;
+    const maxWidth = window.innerWidth - 300;
+    if (newWidth >= 400 && newWidth <= maxWidth) {
+      leftPaneWidth = newWidth;
+    }
+  }
+
+  function stopResize() {
+    isResizing = false;
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    window.removeEventListener("mousemove", handleResize);
+    window.removeEventListener("mouseup", stopResize);
+    saveLeftPaneWidth();
+  }
+
+  function saveLeftPaneWidth() {
+    try {
+      localStorage.setItem(LEFT_PANE_WIDTH_KEY, String(leftPaneWidth));
+    } catch (_) {}
+  }
+
+  function loadLeftPaneWidth() {
+    try {
+      const stored = localStorage.getItem(LEFT_PANE_WIDTH_KEY);
+      if (stored) {
+        const val = Number(stored);
+        if (!isNaN(val) && val >= 400) {
+          leftPaneWidth = val;
+          return;
+        }
+      }
+    } catch (_) {}
+    leftPaneWidth = Math.round(window.innerWidth * 0.66);
+  }
+
   // Keyinfo filter toggles (persisted in sessionStorage)
   const KI_FILTER_STORAGE_KEY = "pipiiitiii_keyinfo_filters";
   /** @type {Set<string>} */
@@ -351,6 +403,9 @@
     });
 
   onMount(async () => {
+    // Load saved left pane width
+    loadLeftPaneWidth();
+
     // Load pinned projects from localStorage first
     loadPinnedProjects();
 
@@ -791,7 +846,8 @@
 
   <div class="flex-1 flex overflow-hidden">
     <div
-      class="w-2/3 min-w-[60vh] max-w-[120vh] flex flex-col border-r border-gray-200 bg-white"
+      class="shrink-0 flex flex-col border-r border-gray-200 bg-white"
+      style="width: {leftPaneWidth}px;"
     >
       <div
         class="p-5 border-b border-gray-100 bg-white z-10 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.02)]"
@@ -1311,6 +1367,31 @@
             {/each}
           </div>
         {/if}
+      </div>
+    </div>
+
+    <!-- Resize Handle -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+      class="w-4 -ml-2 z-20 flex items-center justify-center cursor-col-resize group shrink-0 relative"
+      on:mousedown={startResize}
+      title="드래그하여 패널 크기 조절"
+    >
+      <div
+        class="absolute inset-y-0 left-1/2 w-0.5 bg-gray-200 group-hover:bg-blue-400 transition-colors {isResizing ? 'bg-blue-400' : ''}"
+      ></div>
+      <div
+        class="w-4 h-8 bg-white border border-gray-300 rounded shadow-sm flex flex-col items-center justify-center gap-0.5 z-10 group-hover:border-blue-400 group-hover:text-blue-500 {isResizing ? 'border-blue-400 text-blue-500' : ''}"
+      >
+        <div
+          class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500 {isResizing ? 'bg-blue-500' : ''}"
+        ></div>
+        <div
+          class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500 {isResizing ? 'bg-blue-500' : ''}"
+        ></div>
+        <div
+          class="w-0.5 h-0.5 bg-gray-400 rounded-full group-hover:bg-blue-500 {isResizing ? 'bg-blue-500' : ''}"
+        ></div>
       </div>
     </div>
 
