@@ -10,6 +10,7 @@ Usage:
     python scripts/consolidate_data.py --execute          # actually create DB
     python scripts/consolidate_data.py --execute --remove-undefined-attrs
     python scripts/consolidate_data.py --execute --output-dir ./export
+    python scripts/consolidate_data.py --execute --merge-db ./other1.db ./other2.db
 """
 
 import argparse
@@ -150,6 +151,13 @@ CREATE TABLE IF NOT EXISTS images (
     created_at          TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_images_project ON images(project_id);
+
+-- Settings (full JSON blob, singleton row)
+CREATE TABLE IF NOT EXISTS settings (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    data        TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
 """
 
 
@@ -373,6 +381,9 @@ def analyze(remove_unused_attrs: bool) -> Dict[str, Any]:
     report["key_info_categories"] = len(categories)
     report["key_info_definitions"] = definition_count
 
+    # --- Settings top-level keys ---
+    report["settings_top_keys"] = sorted(settings.keys()) if settings else []
+
     # --- KeyInfo instances (from projects) ---
     conn = sqlite3.connect(PROJECTS_DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -466,6 +477,13 @@ def print_report(report: Dict[str, Any]):
     # Attachments
     print(f"\n  Attachment Images:       {report['attachment_count']}  ({report['attachment_blob_mb']:.2f} MB)")
 
+    # Settings
+    settings_keys = report.get("settings_top_keys", [])
+    print(f"\n  Settings:                {len(settings_keys)} top-level keys")
+    if settings_keys:
+        for k in settings_keys:
+            print(f"    - {k}")
+
     # Output tables
     print("\n  Output Tables:")
     print("    - projects              (core metadata + active attrs + used_key_info_ids)")
@@ -474,6 +492,19 @@ def print_report(report: Dict[str, Any]):
     print("    - key_info_captures     (capture regions per instance)")
     print("    - key_info_images       (image refs per instance)")
     print("    - images                (BLOB data from attachments.db)")
+    print("    - settings              (full settings.json as single JSON row)")
+
+    # Merge DBs info
+    merge_dbs = report.get("merge_dbs")
+    if merge_dbs:
+        print("\n  Merge DBs:")
+        for db_info in merge_dbs:
+            path = db_info["path"]
+            if db_info["exists"]:
+                print(f"    {path:40s}  EXISTS    {db_info['size_mb']:.2f} MB")
+            else:
+                print(f"    {path:40s}  MISSING")
+
     print()
     print("=" * 60)
     print("  This is a DRY RUN. Use --execute to create the consolidated DB.")
@@ -534,6 +565,13 @@ def execute(report: Dict[str, Any], output_dir: str):
             )
             def_count += 1
     print(f"    key_info_definitions:  {def_count} rows")
+
+    # --- 1b) settings table ---
+    out_conn.execute(
+        "INSERT INTO settings (id, data, created_at) VALUES (1, ?, ?)",
+        (json.dumps(settings, ensure_ascii=False), datetime.now().isoformat()),
+    )
+    print(f"    settings:              1 row")
 
     # --- 2) Determine which attribute columns to keep ---
     kept_attr_cols = report.get("kept_attr_columns", [])
@@ -700,6 +738,7 @@ def execute(report: Dict[str, Any], output_dir: str):
         "key_info_captures",
         "key_info_images",
         "images",
+        "settings",
     ]:
         out_cursor.execute(f"SELECT COUNT(*) FROM {table}")
         count = out_cursor.fetchone()[0]
@@ -708,6 +747,106 @@ def execute(report: Dict[str, Any], output_dir: str):
     out_conn.close()
 
     # Final size
+    output_size_mb = os.path.getsize(output_db_path) / (1024 * 1024)
+    print(f"\n  Output: {output_db_path}")
+    print(f"  Size:   {output_size_mb:.2f} MB")
+
+    return output_db_path
+
+
+# ---------------------------------------------------------------------------
+# Merge
+# ---------------------------------------------------------------------------
+
+def merge_databases(output_db_path: str, merge_paths: List[str]):
+    """Merge additional consolidated DB files into the output DB.
+
+    For each merge DB, copies rows from all known tables (except settings)
+    into the output DB using INSERT OR REPLACE.  For the projects table,
+    any extra dynamic-attribute columns present in the merge source but
+    missing in the output are added via ALTER TABLE ADD COLUMN first.
+    """
+    MERGE_TABLES = [
+        "projects",
+        "key_info_definitions",
+        "key_info_instances",
+        "key_info_captures",
+        "key_info_images",
+        "images",
+    ]
+
+    out_conn = sqlite3.connect(output_db_path)
+
+    for merge_path in merge_paths:
+        if not os.path.exists(merge_path):
+            print(f"\n  [WARN] Merge DB not found, skipping: {merge_path}")
+            continue
+
+        print(f"\n  Merging: {merge_path}")
+        merge_conn = sqlite3.connect(merge_path)
+        merge_cursor = merge_conn.cursor()
+
+        # Get list of tables in the merge DB
+        merge_cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        merge_tables_available = {row[0] for row in merge_cursor.fetchall()}
+
+        for table in MERGE_TABLES:
+            if table not in merge_tables_available:
+                continue
+
+            # Get column info for both sides
+            merge_cursor.execute(f"PRAGMA table_info({table})")
+            merge_cols = [row[1] for row in merge_cursor.fetchall()]
+
+            out_cursor = out_conn.cursor()
+            out_cursor.execute(f"PRAGMA table_info({table})")
+            out_cols = {row[1] for row in out_cursor.fetchall()}
+
+            # For projects table: add missing dynamic attribute columns
+            if table == "projects":
+                for col in merge_cols:
+                    if col not in out_cols:
+                        out_conn.execute(f"ALTER TABLE projects ADD COLUMN [{col}] TEXT")
+                        out_cols.add(col)
+                        print(f"    Added column [{col}] to projects")
+
+            # Use column intersection for copying
+            common_cols = [c for c in merge_cols if c in out_cols]
+            if not common_cols:
+                continue
+
+            col_clause = ", ".join([f"[{c}]" for c in common_cols])
+            placeholders = ", ".join(["?"] * len(common_cols))
+
+            merge_cursor.execute(f"SELECT {col_clause} FROM {table}")
+            row_count = 0
+            while True:
+                batch = merge_cursor.fetchmany(500)
+                if not batch:
+                    break
+                for row in batch:
+                    out_conn.execute(
+                        f"INSERT OR REPLACE INTO {table} ({col_clause}) VALUES ({placeholders})",
+                        row,
+                    )
+                    row_count += 1
+
+            print(f"    {table:30s}  {row_count:>6} rows merged")
+
+        merge_conn.close()
+
+    out_conn.commit()
+
+    # Final verification after merge
+    print("\n  Verification (after merge):")
+    out_cursor = out_conn.cursor()
+    for table in MERGE_TABLES + ["settings"]:
+        out_cursor.execute(f"SELECT COUNT(*) FROM {table}")
+        count = out_cursor.fetchone()[0]
+        print(f"    {table:30s}  {count:>6} rows")
+
+    out_conn.close()
+
     output_size_mb = os.path.getsize(output_db_path) / (1024 * 1024)
     print(f"\n  Output: {output_db_path}")
     print(f"  Size:   {output_size_mb:.2f} MB")
@@ -737,6 +876,12 @@ def main():
         default=DEFAULT_OUTPUT_DIR,
         help=f"Output directory (default: {DEFAULT_OUTPUT_DIR}).",
     )
+    parser.add_argument(
+        "--merge-db",
+        nargs="+",
+        metavar="DB_PATH",
+        help="Additional consolidated DB files to merge into the output.",
+    )
     args = parser.parse_args()
 
     print()
@@ -747,18 +892,37 @@ def main():
     # Analyze
     report = analyze(args.remove_undefined_attrs)
 
+    # Add merge DB info to report
+    if args.merge_db:
+        merge_dbs_info = []
+        for db_path in args.merge_db:
+            exists = os.path.exists(db_path)
+            size_mb = os.path.getsize(db_path) / (1024 * 1024) if exists else 0
+            merge_dbs_info.append({
+                "path": db_path,
+                "exists": exists,
+                "size_mb": round(size_mb, 2),
+            })
+        report["merge_dbs"] = merge_dbs_info
+
     if report.get("errors"):
         print_report(report)
         sys.exit(1)
 
     if not args.execute:
+        if args.merge_db:
+            print("\n  Note: --merge-db requires --execute to take effect.")
         print_report(report)
         return
 
     # Execute
     print(f"\n  Mode: EXECUTE")
     print(f"  Remove undefined attrs: {args.remove_undefined_attrs}")
-    execute(report, args.output_dir)
+    output_db_path = execute(report, args.output_dir)
+
+    # Merge
+    if args.merge_db:
+        merge_databases(output_db_path, args.merge_db)
 
     print()
     print("=" * 60)
