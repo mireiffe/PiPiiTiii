@@ -21,3 +21,4 @@ debug
 debug_log.txt
 
 backend/data
+logs/

@@ -11,6 +11,7 @@ import argparse
 import os
 import sys
 from collections import Counter
+from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
 # Add backend to path
@@ -194,11 +195,13 @@ def execute(
     manager: AttributeManager,
     *,
     use_llm: bool = False,
+    md_lines: list | None = None,
 ):
     """Write the calculated attributes to the database.
 
     When use_llm is True, attributes are recalculated with LLM extraction
     instead of using the dry-run results (which never call LLM).
+    When md_lines is provided, append markdown-formatted log entries.
     """
     projects = report.get("_projects")  # original project list, set when use_llm path
 
@@ -211,6 +214,11 @@ def execute(
     }
 
     if use_llm and projects is not None:
+        # Build raw extract lookup (non-LLM results) for "was" comparison
+        raw_by_project: Dict[str, Dict[str, Any]] = {
+            pid: attrs for pid, attrs in report["results_by_project"]
+        }
+
         total = len(projects)
         print(f"\n  Recalculating with LLM for {total} projects...")
         count = 0
@@ -219,18 +227,30 @@ def execute(
             print(f"  [{idx}/{total}] {p_data['id']} ({filename})")
             attrs = manager.calculate_attributes(p_data, use_llm=True)
             if attrs:
+                md_rows: list[tuple[str, str, str]] = []
+                raw_attrs = raw_by_project.get(p_data["id"], {})
                 for key, val in attrs.items():
-                    old_val = p_data.get(key)
                     if key in llm_keys:
-                        old_is_empty = old_val is None or old_val == ""
-                        changed = old_is_empty or str(old_val) != str(val)
-                        if changed and not old_is_empty:
-                            tag = f" (LLM, was: \"{old_val}\")"
+                        raw_val = raw_attrs.get(key)
+                        raw_is_empty = raw_val is None or raw_val == ""
+                        if not raw_is_empty and str(raw_val) != str(val):
+                            tag = f" (LLM, was: \"{raw_val}\")"
+                            note = f"LLM, was: \"{raw_val}\""
                         else:
                             tag = " (LLM)"
+                            note = "LLM"
                     else:
                         tag = ""
+                        note = ""
                     print(f"         {key}: \"{val}\"{tag}")
+                    md_rows.append((key, str(val) if val is not None else "", note))
+                if md_lines is not None:
+                    md_lines.append(f"\n## {p_data['id']} ({filename})")
+                    md_lines.append("")
+                    md_lines.append("| Attribute | Value | Note |")
+                    md_lines.append("|-----------|-------|------|")
+                    for k, v, n in md_rows:
+                        md_lines.append(f"| {k} | {v} | {n} |")
                 db.update_project_attributes(p_data["id"], attrs)
                 count += 1
         print(f"  Done. Updated {count} projects (with LLM).")
@@ -265,10 +285,17 @@ def main():
         action="store_true",
         help="Use LLM extraction for attributes that support it (requires --execute).",
     )
+    parser.add_argument(
+        "--log-markdown",
+        action="store_true",
+        help="Save LLM execution log as a markdown file (requires --execute --use-llm).",
+    )
     args = parser.parse_args()
 
     if args.use_llm and not args.execute:
         parser.error("--use-llm requires --execute (LLM calls are not made during dry-run).")
+    if args.log_markdown and not (args.execute and args.use_llm):
+        parser.error("--log-markdown requires --execute --use-llm.")
 
     print()
     print("=" * 60)
@@ -286,7 +313,35 @@ def main():
 
     # Show summary then execute
     print_report(report, is_execute=True)
-    execute(report, db, manager, use_llm=args.use_llm)
+
+    md_lines: list[str] | None = None
+    if args.log_markdown:
+        now = datetime.now()
+        llm_attr_names = [
+            a["key"]
+            for a in report["active_attrs"]
+            if manager.attributes.get(a["key"])
+            and manager.attributes[a["key"]].llm_extract_config is not None
+        ]
+        md_lines = [
+            "# Attribute Recalculation Log",
+            f"- Date: {now.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"- Projects: {report['project_count']}",
+            f"- LLM Attributes: {', '.join(llm_attr_names)}",
+        ]
+
+    execute(report, db, manager, use_llm=args.use_llm, md_lines=md_lines)
+
+    if md_lines is not None:
+        now = datetime.now()
+        log_dir = os.path.join(BASE_DIR, "logs", "recalculate")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(
+            log_dir, f"recalculate_{now.strftime('%Y%m%d_%H%M%S')}.md"
+        )
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(md_lines) + "\n")
+        print(f"  Log saved: {log_path}")
 
     print()
     print("=" * 60)
