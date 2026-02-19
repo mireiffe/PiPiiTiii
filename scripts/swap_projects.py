@@ -10,7 +10,6 @@ Usage:
 """
 
 import argparse
-import json
 import os
 import shutil
 import sqlite3
@@ -22,8 +21,6 @@ sys.path.append(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend")
 )
 
-from database import Database
-from attachments_db import AttachmentsDatabase
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULT_DIR = os.path.join(BASE_DIR, "results")
@@ -127,7 +124,7 @@ def swap_result_dirs(id1, id2, dry_run):
         return
 
     if dry_run:
-        print(f"\n[DRY-RUN] Would swap result directories:")
+        print("\n[DRY-RUN] Would swap result directories:")
         print(f"    {dir1} (exists={dir1_exists})")
         print(f"    {dir2} (exists={dir2_exists})")
         return
@@ -185,7 +182,7 @@ def swap_attachment_project_ids(id1, id2, dry_run):
         return
 
     if dry_run:
-        print(f"\n[DRY-RUN] Would swap attachment project_ids:")
+        print("\n[DRY-RUN] Would swap attachment project_ids:")
         print(f"    Project {id1}: {len(imgs_1)} image(s) -> will become {id2}")
         print(f"    Project {id2}: {len(imgs_2)} image(s) -> will become {id1}")
         conn.close()

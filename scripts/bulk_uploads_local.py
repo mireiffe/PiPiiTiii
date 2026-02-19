@@ -15,9 +15,9 @@ BACKEND_DIR = os.path.join(BASE_DIR, "backend")
 sys.path.append(BASE_DIR)
 sys.path.append(BACKEND_DIR)
 
-from backend import ppt_parser as parsing
-from backend.attributes.manager import AttributeManager
-from backend.database import Database
+from backend import ppt_parser as parsing  # noqa: E402
+from backend.attributes.manager import AttributeManager  # noqa: E402
+from backend.database import Database  # noqa: E402
 
 DB_PATH = os.path.join(BASE_DIR, "backend", "data", "projects.db")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")

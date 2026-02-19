@@ -19,19 +19,19 @@
     let expanded = false;
 
     // Local state
-    let localMin;
-    let localMax;
+    /** @type {number} */
+    let localMin = min;
+    /** @type {number} */
+    let localMax = max;
 
     // Initialize local state
     $: {
         localMin =
-            selectedMin !== "" &&
             selectedMin !== undefined &&
             selectedMin !== null
                 ? Number(selectedMin)
                 : min;
         localMax =
-            selectedMax !== "" &&
             selectedMax !== undefined &&
             selectedMax !== null
                 ? Number(selectedMax)
@@ -48,8 +48,9 @@
         Math.min(100, ((localMax - min) / (max - min)) * 100),
     );
 
+    /** @param {Event & { currentTarget: HTMLInputElement }} e */
     function handleMinChange(e) {
-        const val = Number(e.target.value);
+        const val = Number(e.currentTarget.value);
         // Prevent crossing
         if (val > localMax) {
             localMin = localMax;
@@ -59,8 +60,9 @@
         onChange({ min: localMin, max: localMax });
     }
 
+    /** @param {Event & { currentTarget: HTMLInputElement }} e */
     function handleMaxChange(e) {
-        const val = Number(e.target.value);
+        const val = Number(e.currentTarget.value);
         // Prevent crossing
         if (val < localMin) {
             localMax = localMin;
@@ -86,7 +88,7 @@
             <span
                 class="text-[10px] text-gray-500 truncate bg-gray-100 px-1.5 py-0.5 rounded"
             >
-                {#if (selectedMin !== undefined && selectedMin !== "" && selectedMin !== null) || (selectedMax !== undefined && selectedMax !== "" && selectedMax !== null)}
+                {#if (selectedMin !== undefined && selectedMin !== null) || (selectedMax !== undefined && selectedMax !== null)}
                     {Number(localMin).toLocaleString()} - {Number(
                         localMax,
                     ).toLocaleString()}

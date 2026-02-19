@@ -133,10 +133,10 @@ def print_report(report: Dict[str, Any], is_execute: bool = False):
                 sorted_vals = sorted(set(numeric_vals), key=lambda x: (str(x)))
                 distinct = len(set(numeric_vals))
                 total = len(numeric_vals)
-                print(f"  New values:")
+                print("  New values:")
                 print(f"    Range: {sorted_vals[0]} – {sorted_vals[-1]}  ({distinct} distinct, {empty_count} empty)")
             else:
-                print(f"  New values:  (all empty)")
+                print("  New values:  (all empty)")
         else:
             # For other types, show value counts
             non_empty_vals = [v for v in new_values.elements() if v != "(empty)"]
@@ -153,17 +153,17 @@ def print_report(report: Dict[str, Any], is_execute: bool = False):
                     most_common_str = most_common_str[:40] + "..."
                 least_common_cnt = new_values.most_common()[-1][1]
                 least_common_count = sum(1 for _, c in new_values.items() if c == least_common_cnt)
-                print(f"  New values:  (long values — summary)")
+                print("  New values:  (long values — summary)")
                 print(f"    Total: {total}    Distinct: {distinct}    Empty: {empty_count}")
                 print(f"    Most common (\u00d7{most_common_cnt}):  \"{most_common_str}\"")
                 print(f"    Least common (\u00d7{least_common_cnt}):  {least_common_count} values")
             else:
-                print(f"  New values:")
+                print("  New values:")
                 for val, cnt in new_values.most_common():
                     print(f"    {str(val):20s} {cnt:>5}")
 
         # Comparison with DB
-        print(f"  Comparison with DB:")
+        print("  Comparison with DB:")
         print(f"    Unchanged:  {s['unchanged_count']:>5}")
         changed = s["changed_count"]
         if changed > 0:

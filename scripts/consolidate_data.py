@@ -447,7 +447,7 @@ def print_report(report: Dict[str, Any]):
     undefined = report.get("undefined_attr_columns", [])
     will_remove = report.get("remove_undefined_attrs", False)
 
-    print(f"\n  Defined Attribute Keys (from backend/attributes/definitions/):")
+    print("\n  Defined Attribute Keys (from backend/attributes/definitions/):")
     if defined_keys:
         for k in sorted(defined_keys):
             print(f"    - {k}")
@@ -571,7 +571,7 @@ def execute(report: Dict[str, Any], output_dir: str):
         "INSERT INTO settings (id, data, created_at) VALUES (1, ?, ?)",
         (json.dumps(settings, ensure_ascii=False), datetime.now().isoformat()),
     )
-    print(f"    settings:              1 row")
+    print("    settings:              1 row")
 
     # --- 2) Determine which attribute columns to keep ---
     kept_attr_cols = report.get("kept_attr_columns", [])
@@ -873,7 +873,7 @@ def main():
         return
 
     # Execute
-    print(f"\n  Mode: EXECUTE")
+    print("\n  Mode: EXECUTE")
     print(f"  Remove undefined attrs: {args.remove_undefined_attrs}")
     output_db_path = execute(report, args.output_dir)
 

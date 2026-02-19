@@ -64,7 +64,7 @@ def test_parse_connector(ppt_path):
             try:
                 # print(dir(shape.ConnectorFormat))
                 pass
-            except:
+            except Exception:
                 pass
 
             # Try to access BeginX/Y on the shape itself?

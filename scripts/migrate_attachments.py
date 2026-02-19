@@ -20,8 +20,8 @@ import sys
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE_DIR, "backend"))
 
-from database import Database
-from attachments_db import AttachmentsDatabase
+from database import Database  # noqa: E402
+from attachments_db import AttachmentsDatabase  # noqa: E402
 
 
 def migrate_attachments():

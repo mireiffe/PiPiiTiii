@@ -11,7 +11,7 @@ BACKEND_DIR = os.path.join(BASE_DIR, "backend")
 sys.path.append(BASE_DIR)
 sys.path.append(BACKEND_DIR)
 
-from backend.database import Database
+from backend.database import Database  # noqa: E402
 
 DB_PATH = os.path.join(BASE_DIR, "backend", "data", "projects.db")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
