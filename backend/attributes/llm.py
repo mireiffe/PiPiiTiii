@@ -5,7 +5,6 @@ Provides LLMExtractConfig dataclass and a synchronous llm_generate_text helper
 that calls OpenAI-compatible /chat/completions endpoints.
 """
 
-import json
 import logging
 import os
 from dataclasses import dataclass
@@ -19,9 +18,6 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 TRUST_ENV = os.environ.get("TRUST_ENV", "true").lower() == "true"
-SETTINGS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "settings.json"
-)
 
 
 @dataclass(frozen=True)
@@ -32,17 +28,8 @@ class LLMExtractConfig:
     user_prompt_template: str  # {value} = extract() result; project_data keys also available
     condition: Optional[Callable[[str], bool]] = None  # validation function for LLM output
     max_retries: int = 3
-    base_url: Optional[str] = None  # per-attribute override (falls back to settings.json)
-    model_name: Optional[str] = None  # per-attribute override (falls back to settings.json)
-
-
-def _load_llm_settings() -> dict:
-    """Load LLM settings from settings.json."""
-    try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f).get("llm", {})
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return {}
+    base_url: Optional[str] = None  # per-attribute override (falls back to ATTR_LLM_BASE_URL env)
+    model_name: Optional[str] = None  # per-attribute override (falls back to ATTR_LLM_MODEL env)
 
 
 def llm_generate_text(
@@ -55,18 +42,16 @@ def llm_generate_text(
     """
     Synchronous helper that calls an OpenAI-compatible /chat/completions endpoint.
 
-    Falls back to settings.json for base_url / model_name when not provided.
-    API key is read from the LLM_API_KEY environment variable.
+    Falls back to ATTR_LLM_* environment variables when not provided.
+    API key is read from ATTR_LLM_API_KEY (fallback: LLM_API_KEY).
     """
-    llm_settings = _load_llm_settings()
-
-    endpoint = base_url or llm_settings.get("api_endpoint", "https://api.openai.com/v1")
+    endpoint = base_url or os.getenv("ATTR_LLM_BASE_URL", "https://api.openai.com/v1")
     endpoint = endpoint.rstrip("/")
     if not endpoint.endswith("/chat/completions"):
         endpoint = f"{endpoint}/chat/completions"
 
-    model = model_name or llm_settings.get("model_name", "gpt-4o")
-    api_key = os.getenv("LLM_API_KEY", "")
+    model = model_name or os.getenv("ATTR_LLM_MODEL", "gpt-4o")
+    api_key = os.getenv("ATTR_LLM_API_KEY") or os.getenv("LLM_API_KEY", "")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
