@@ -10,7 +10,7 @@ Usage:
     python scripts/consolidate_data.py --execute          # actually create DB
     python scripts/consolidate_data.py --execute --remove-undefined-attrs
     python scripts/consolidate_data.py --execute --output-dir ./export
-    python scripts/consolidate_data.py --execute --merge-db ./other1.db ./other2.db
+    python scripts/consolidate_data.py --execute --concat-db ./other1.db ./other2.db
 """
 
 import argparse
@@ -494,11 +494,11 @@ def print_report(report: Dict[str, Any]):
     print("    - images                (BLOB data from attachments.db)")
     print("    - settings              (full settings.json as single JSON row)")
 
-    # Merge DBs info
-    merge_dbs = report.get("merge_dbs")
-    if merge_dbs:
-        print("\n  Merge DBs:")
-        for db_info in merge_dbs:
+    # Concat DBs info
+    concat_dbs = report.get("concat_dbs")
+    if concat_dbs:
+        print("\n  Concat DBs:")
+        for db_info in concat_dbs:
             path = db_info["path"]
             if db_info["exists"]:
                 print(f"    {path:40s}  EXISTS    {db_info['size_mb']:.2f} MB")
@@ -755,101 +755,58 @@ def execute(report: Dict[str, Any], output_dir: str):
 
 
 # ---------------------------------------------------------------------------
-# Merge
+# Concat
 # ---------------------------------------------------------------------------
 
-def merge_databases(output_db_path: str, merge_paths: List[str]):
-    """Merge additional consolidated DB files into the output DB.
+def concat_databases(output_db_path: str, concat_paths: List[str]):
+    """Copy tables from additional DB files into the output DB.
 
-    For each merge DB, copies rows from all known tables (except settings)
-    into the output DB using INSERT OR REPLACE.  For the projects table,
-    any extra dynamic-attribute columns present in the merge source but
-    missing in the output are added via ALTER TABLE ADD COLUMN first.
+    For each concat DB, copies all tables into the output DB.
+    Raises an error if any table name conflicts with existing tables.
     """
-    MERGE_TABLES = [
-        "projects",
-        "key_info_definitions",
-        "key_info_instances",
-        "key_info_captures",
-        "key_info_images",
-        "images",
-    ]
-
     out_conn = sqlite3.connect(output_db_path)
+    out_cursor = out_conn.cursor()
 
-    for merge_path in merge_paths:
-        if not os.path.exists(merge_path):
-            print(f"\n  [WARN] Merge DB not found, skipping: {merge_path}")
+    # Get existing tables in output DB
+    out_cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    existing_tables = {row[0] for row in out_cursor.fetchall()}
+
+    for concat_path in concat_paths:
+        if not os.path.exists(concat_path):
+            print(f"\n  [WARN] Concat DB not found, skipping: {concat_path}")
             continue
 
-        print(f"\n  Merging: {merge_path}")
-        merge_conn = sqlite3.connect(merge_path)
-        merge_cursor = merge_conn.cursor()
+        print(f"\n  Concatenating: {concat_path}")
 
-        # Get list of tables in the merge DB
-        merge_cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        merge_tables_available = {row[0] for row in merge_cursor.fetchall()}
+        # ATTACH the concat DB
+        out_conn.execute("ATTACH DATABASE ? AS concat_src", (concat_path,))
+        out_cursor.execute("SELECT name FROM concat_src.sqlite_master WHERE type='table'")
+        src_tables = [row[0] for row in out_cursor.fetchall()]
 
-        for table in MERGE_TABLES:
-            if table not in merge_tables_available:
-                continue
+        # Check for conflicts
+        conflicts = [t for t in src_tables if t in existing_tables]
+        if conflicts:
+            out_conn.execute("DETACH DATABASE concat_src")
+            out_conn.close()
+            raise SystemExit(
+                f"  [ERROR] Table name conflict in {concat_path}: {conflicts}\n"
+                f"  Output DB already has these tables. Aborting."
+            )
 
-            # Get column info for both sides
-            merge_cursor.execute(f"PRAGMA table_info({table})")
-            merge_cols = [row[1] for row in merge_cursor.fetchall()]
+        # Copy each table
+        for table in src_tables:
+            out_conn.execute(
+                f"CREATE TABLE [{table}] AS SELECT * FROM concat_src.[{table}]"
+            )
+            out_cursor.execute(f"SELECT COUNT(*) FROM [{table}]")
+            count = out_cursor.fetchone()[0]
+            print(f"    {table:30s}  {count:>6} rows")
+            existing_tables.add(table)
 
-            out_cursor = out_conn.cursor()
-            out_cursor.execute(f"PRAGMA table_info({table})")
-            out_cols = {row[1] for row in out_cursor.fetchall()}
-
-            # For projects table: add missing dynamic attribute columns
-            if table == "projects":
-                for col in merge_cols:
-                    if col not in out_cols:
-                        out_conn.execute(f"ALTER TABLE projects ADD COLUMN [{col}] TEXT")
-                        out_cols.add(col)
-                        print(f"    Added column [{col}] to projects")
-
-            # Use column intersection for copying
-            common_cols = [c for c in merge_cols if c in out_cols]
-            if not common_cols:
-                continue
-
-            col_clause = ", ".join([f"[{c}]" for c in common_cols])
-            placeholders = ", ".join(["?"] * len(common_cols))
-
-            merge_cursor.execute(f"SELECT {col_clause} FROM {table}")
-            row_count = 0
-            while True:
-                batch = merge_cursor.fetchmany(500)
-                if not batch:
-                    break
-                for row in batch:
-                    out_conn.execute(
-                        f"INSERT OR REPLACE INTO {table} ({col_clause}) VALUES ({placeholders})",
-                        row,
-                    )
-                    row_count += 1
-
-            print(f"    {table:30s}  {row_count:>6} rows merged")
-
-        merge_conn.close()
+        out_conn.execute("DETACH DATABASE concat_src")
 
     out_conn.commit()
-
-    # Final verification after merge
-    print("\n  Verification (after merge):")
-    out_cursor = out_conn.cursor()
-    for table in MERGE_TABLES + ["settings"]:
-        out_cursor.execute(f"SELECT COUNT(*) FROM {table}")
-        count = out_cursor.fetchone()[0]
-        print(f"    {table:30s}  {count:>6} rows")
-
     out_conn.close()
-
-    output_size_mb = os.path.getsize(output_db_path) / (1024 * 1024)
-    print(f"\n  Output: {output_db_path}")
-    print(f"  Size:   {output_size_mb:.2f} MB")
 
 
 # ---------------------------------------------------------------------------
@@ -877,10 +834,10 @@ def main():
         help=f"Output directory (default: {DEFAULT_OUTPUT_DIR}).",
     )
     parser.add_argument(
-        "--merge-db",
+        "--concat-db",
         nargs="+",
         metavar="DB_PATH",
-        help="Additional consolidated DB files to merge into the output.",
+        help="Additional DB files whose tables will be copied into the output.",
     )
     args = parser.parse_args()
 
@@ -892,26 +849,26 @@ def main():
     # Analyze
     report = analyze(args.remove_undefined_attrs)
 
-    # Add merge DB info to report
-    if args.merge_db:
-        merge_dbs_info = []
-        for db_path in args.merge_db:
+    # Add concat DB info to report
+    if args.concat_db:
+        concat_dbs_info = []
+        for db_path in args.concat_db:
             exists = os.path.exists(db_path)
             size_mb = os.path.getsize(db_path) / (1024 * 1024) if exists else 0
-            merge_dbs_info.append({
+            concat_dbs_info.append({
                 "path": db_path,
                 "exists": exists,
                 "size_mb": round(size_mb, 2),
             })
-        report["merge_dbs"] = merge_dbs_info
+        report["concat_dbs"] = concat_dbs_info
 
     if report.get("errors"):
         print_report(report)
         sys.exit(1)
 
     if not args.execute:
-        if args.merge_db:
-            print("\n  Note: --merge-db requires --execute to take effect.")
+        if args.concat_db:
+            print("\n  Note: --concat-db requires --execute to take effect.")
         print_report(report)
         return
 
@@ -920,9 +877,9 @@ def main():
     print(f"  Remove undefined attrs: {args.remove_undefined_attrs}")
     output_db_path = execute(report, args.output_dir)
 
-    # Merge
-    if args.merge_db:
-        merge_databases(output_db_path, args.merge_db)
+    # Concat
+    if args.concat_db:
+        concat_databases(output_db_path, args.concat_db)
 
     print()
     print("=" * 60)
