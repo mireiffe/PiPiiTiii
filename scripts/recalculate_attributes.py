@@ -222,9 +222,8 @@ def execute(
                 for key, val in attrs.items():
                     old_val = p_data.get(key)
                     if key in llm_keys:
-                        old_is_empty = old_val is None or old_val == ""
-                        changed = old_is_empty or str(old_val) != str(val)
-                        if changed and not old_is_empty:
+                        has_old = old_val is not None and old_val != ""
+                        if has_old and str(old_val) != str(val):
                             tag = f" (LLM, was: \"{old_val}\")"
                         else:
                             tag = " (LLM)"
