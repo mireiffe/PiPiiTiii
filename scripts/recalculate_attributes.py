@@ -85,6 +85,7 @@ def analyze(
         "active_attrs": active_attrs,
         "stats": stats,
         "results_by_project": results_by_project,
+        "_projects": projects,
     }
 
 
@@ -187,19 +188,38 @@ def print_report(report: Dict[str, Any], is_execute: bool = False):
 # Execution
 # ---------------------------------------------------------------------------
 
-def execute(report: Dict[str, Any], db: Database):
-    """Write the calculated attributes to the database."""
-    results = report["results_by_project"]
+def execute(
+    report: Dict[str, Any],
+    db: Database,
+    manager: AttributeManager,
+    *,
+    use_llm: bool = False,
+):
+    """Write the calculated attributes to the database.
 
-    print(f"\n  Writing attributes for {len(results)} projects...")
+    When use_llm is True, attributes are recalculated with LLM extraction
+    instead of using the dry-run results (which never call LLM).
+    """
+    projects = report.get("_projects")  # original project list, set when use_llm path
 
-    count = 0
-    for project_id, attrs in results:
-        if attrs:
-            db.update_project_attributes(project_id, attrs)
-            count += 1
-
-    print(f"  Done. Updated {count} projects.")
+    if use_llm and projects is not None:
+        print(f"\n  Recalculating with LLM for {len(projects)} projects...")
+        count = 0
+        for p_data in projects:
+            attrs = manager.calculate_attributes(p_data, use_llm=True)
+            if attrs:
+                db.update_project_attributes(p_data["id"], attrs)
+                count += 1
+        print(f"  Done. Updated {count} projects (with LLM).")
+    else:
+        results = report["results_by_project"]
+        print(f"\n  Writing attributes for {len(results)} projects...")
+        count = 0
+        for project_id, attrs in results:
+            if attrs:
+                db.update_project_attributes(project_id, attrs)
+                count += 1
+        print(f"  Done. Updated {count} projects.")
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +235,15 @@ def main():
         action="store_true",
         help="Actually write to DB (default is dry-run).",
     )
+    parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        help="Use LLM extraction for attributes that support it (requires --execute).",
+    )
     args = parser.parse_args()
+
+    if args.use_llm and not args.execute:
+        parser.error("--use-llm requires --execute (LLM calls are not made during dry-run).")
 
     print()
     print("=" * 60)
@@ -233,7 +261,7 @@ def main():
 
     # Show summary then execute
     print_report(report, is_execute=True)
-    execute(report, db)
+    execute(report, db, manager, use_llm=args.use_llm)
 
     print()
     print("=" * 60)

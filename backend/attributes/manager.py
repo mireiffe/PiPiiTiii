@@ -79,12 +79,24 @@ class AttributeManager:
                 # For now, TEXT is safest for flexible attributes.
                 self.db.execute_ddl(f"ALTER TABLE projects ADD COLUMN {key} TEXT")
 
-    def calculate_attributes(self, project_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Calculate all active attributes for a project."""
+    def calculate_attributes(
+        self, project_data: Dict[str, Any], *, use_llm: bool = False
+    ) -> Dict[str, Any]:
+        """Calculate all active attributes for a project.
+
+        Args:
+            project_data: Project metadata dictionary.
+            use_llm: If True, use extract_with_llm() which refines results via
+                     LLM for attributes that define an llm_extract_config.
+                     Attributes without config fall back to plain extract().
+        """
         results = {}
         for key, attr in self.attributes.items():
             try:
-                results[key] = attr.extract(project_data)
+                if use_llm:
+                    results[key] = attr.extract_with_llm(project_data)
+                else:
+                    results[key] = attr.extract(project_data)
             except Exception as e:
                 print(f"[ERROR] Failed to calculate attribute {key}: {e}")
                 results[key] = None
