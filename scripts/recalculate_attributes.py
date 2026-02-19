@@ -138,9 +138,28 @@ def print_report(report: Dict[str, Any], is_execute: bool = False):
                 print(f"  New values:  (all empty)")
         else:
             # For other types, show value counts
-            print(f"  New values:")
-            for val, cnt in new_values.most_common():
-                print(f"    {str(val):20s} {cnt:>5}")
+            non_empty_vals = [v for v in new_values.elements() if v != "(empty)"]
+            avg_len = sum(len(str(v)) for v in non_empty_vals) / len(non_empty_vals) if non_empty_vals else 0
+
+            if avg_len > 30:
+                # Long values — show summary statistics
+                total = sum(new_values.values())
+                empty_count = new_values.get("(empty)", 0)
+                distinct = len([v for v in new_values if v != "(empty)"])
+                most_common_val, most_common_cnt = new_values.most_common(1)[0]
+                most_common_str = str(most_common_val)
+                if len(most_common_str) > 40:
+                    most_common_str = most_common_str[:40] + "..."
+                least_common_cnt = new_values.most_common()[-1][1]
+                least_common_count = sum(1 for _, c in new_values.items() if c == least_common_cnt)
+                print(f"  New values:  (long values — summary)")
+                print(f"    Total: {total}    Distinct: {distinct}    Empty: {empty_count}")
+                print(f"    Most common (\u00d7{most_common_cnt}):  \"{most_common_str}\"")
+                print(f"    Least common (\u00d7{least_common_cnt}):  {least_common_count} values")
+            else:
+                print(f"  New values:")
+                for val, cnt in new_values.most_common():
+                    print(f"    {str(val):20s} {cnt:>5}")
 
         # Comparison with DB
         print(f"  Comparison with DB:")
