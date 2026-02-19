@@ -220,7 +220,16 @@ def execute(
             attrs = manager.calculate_attributes(p_data, use_llm=True)
             if attrs:
                 for key, val in attrs.items():
-                    tag = " (LLM)" if key in llm_keys else ""
+                    old_val = p_data.get(key)
+                    if key in llm_keys:
+                        old_is_empty = old_val is None or old_val == ""
+                        changed = old_is_empty or str(old_val) != str(val)
+                        if changed and not old_is_empty:
+                            tag = f" (LLM, was: \"{old_val}\")"
+                        else:
+                            tag = " (LLM)"
+                    else:
+                        tag = ""
                     print(f"         {key}: \"{val}\"{tag}")
                 db.update_project_attributes(p_data["id"], attrs)
                 count += 1
