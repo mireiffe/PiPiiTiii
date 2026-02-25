@@ -1,9 +1,12 @@
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
-from attributes.llm import LLMExtractConfig, llm_generate_text
+from attributes.llm import LLMExtractConfig, async_llm_generate_text, llm_generate_text
 from attributes.types import AttributeType
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +115,66 @@ class BaseAttribute(ABC):
                 last_result = last_result  # keep previous result if any
 
         # All retries exhausted
+        if last_result is not None:
+            logger.warning(
+                "[%s] All %d retries failed condition; returning last LLM result: %r",
+                self.key, config.max_retries, last_result,
+            )
+            return last_result
+
+        logger.warning(
+            "[%s] All %d retries failed; falling back to raw extract value: %r",
+            self.key, config.max_retries, raw_value,
+        )
+        return raw_value
+
+    async def async_extract_with_llm(
+        self,
+        project_data: Dict[str, Any],
+        *,
+        client: Optional[httpx.AsyncClient] = None,
+        semaphore: Optional[asyncio.Semaphore] = None,
+    ) -> Any:
+        """Async version of extract_with_llm()."""
+        raw_value = self.extract(project_data)
+
+        config = self.llm_extract_config
+        if config is None:
+            return raw_value
+
+        format_kwargs = {**project_data, "value": raw_value}
+        user_prompt = config.user_prompt_template.format_map(
+            _SafeFormatDict(format_kwargs)
+        )
+
+        last_result = None
+        for attempt in range(1, config.max_retries + 1):
+            try:
+                result = await async_llm_generate_text(
+                    config.system_prompt,
+                    user_prompt,
+                    base_url=config.base_url,
+                    model_name=config.model_name,
+                    client=client,
+                    semaphore=semaphore,
+                )
+                if config.response_parser is not None:
+                    result = config.response_parser(result).strip()
+                last_result = result
+
+                if config.condition is None or config.condition(result):
+                    return result
+
+                logger.warning(
+                    "[%s] LLM result failed condition (attempt %d/%d): %r",
+                    self.key, attempt, config.max_retries, result,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[%s] LLM call failed (attempt %d/%d): %s",
+                    self.key, attempt, config.max_retries, e,
+                )
+
         if last_result is not None:
             logger.warning(
                 "[%s] All %d retries failed condition; returning last LLM result: %r",

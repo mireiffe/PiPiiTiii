@@ -8,11 +8,14 @@ Usage:
 """
 
 import argparse
+import asyncio
 import os
 import sys
 from collections import Counter
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
+
+import httpx
 
 # Add backend to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -189,21 +192,19 @@ def print_report(report: Dict[str, Any], is_execute: bool = False):
 # Execution
 # ---------------------------------------------------------------------------
 
-def execute(
+async def _async_execute_llm(
     report: Dict[str, Any],
     db: Database,
     manager: AttributeManager,
     *,
-    use_llm: bool = False,
+    concurrency: int = 5,
     md_lines: list | None = None,
 ):
-    """Write the calculated attributes to the database.
+    """Process all projects concurrently with LLM extraction.
 
-    When use_llm is True, attributes are recalculated with LLM extraction
-    instead of using the dry-run results (which never call LLM).
-    When md_lines is provided, append markdown-formatted log entries.
+    Uses asyncio.Semaphore to cap the number of in-flight LLM API calls.
     """
-    projects = report.get("_projects")  # original project list, set when use_llm path
+    projects = report["_projects"]
 
     active_attrs = report["active_attrs"]
     llm_keys = {
@@ -213,19 +214,35 @@ def execute(
         and manager.attributes[a["key"]].llm_extract_config is not None
     }
 
-    if use_llm and projects is not None:
-        # Build raw extract lookup (non-LLM results) for "was" comparison
-        raw_by_project: Dict[str, Dict[str, Any]] = {
-            pid: attrs for pid, attrs in report["results_by_project"]
-        }
+    raw_by_project: Dict[str, Dict[str, Any]] = {
+        pid: attrs for pid, attrs in report["results_by_project"]
+    }
 
-        total = len(projects)
-        print(f"\n  Recalculating with LLM for {total} projects...")
-        count = 0
-        for idx, p_data in enumerate(projects, 1):
-            filename = p_data.get("original_filename", p_data["id"])
-            print(f"  [{idx}/{total}] {p_data['id']} ({filename})")
-            attrs = manager.calculate_attributes(p_data, use_llm=True)
+    total = len(projects)
+    semaphore = asyncio.Semaphore(concurrency)
+    completed_count = 0
+    updated_count = 0
+    lock = asyncio.Lock()
+
+    trust_env = os.environ.get("TRUST_ENV", "true").lower() == "true"
+
+    async def process_project(p_data: Dict[str, Any], client: httpx.AsyncClient):
+        nonlocal completed_count, updated_count
+
+        filename = p_data.get("original_filename", p_data["id"])
+        try:
+            attrs = await manager.async_calculate_attributes(
+                p_data, use_llm=True, client=client, semaphore=semaphore,
+            )
+        except Exception as e:
+            async with lock:
+                completed_count += 1
+                print(f"  [{completed_count}/{total}] {p_data['id']} ({filename}) - ERROR: {e}")
+            return
+
+        async with lock:
+            completed_count += 1
+            print(f"  [{completed_count}/{total}] {p_data['id']} ({filename})")
             if attrs:
                 md_rows: list[tuple[str, str, str]] = []
                 raw_attrs = raw_by_project.get(p_data["id"], {})
@@ -252,8 +269,42 @@ def execute(
                     for k, v, n in md_rows:
                         md_lines.append(f"| {k} | {v} | {n} |")
                 db.update_project_attributes(p_data["id"], attrs)
-                count += 1
-        print(f"  Done. Updated {count} projects (with LLM).")
+                updated_count += 1
+
+    print(f"\n  Recalculating with LLM for {total} projects (concurrency={concurrency})...")
+
+    async with httpx.AsyncClient(timeout=60.0, trust_env=trust_env) as client:
+        await asyncio.gather(
+            *[process_project(p_data, client) for p_data in projects]
+        )
+
+    print(f"  Done. Updated {updated_count} projects (with LLM, async).")
+
+
+def execute(
+    report: Dict[str, Any],
+    db: Database,
+    manager: AttributeManager,
+    *,
+    use_llm: bool = False,
+    concurrency: int = 5,
+    md_lines: list | None = None,
+):
+    """Write the calculated attributes to the database.
+
+    When use_llm is True, attributes are recalculated with LLM extraction
+    instead of using the dry-run results (which never call LLM).
+    When md_lines is provided, append markdown-formatted log entries.
+    """
+    projects = report.get("_projects")
+
+    if use_llm and projects is not None:
+        asyncio.run(
+            _async_execute_llm(
+                report, db, manager,
+                concurrency=concurrency, md_lines=md_lines,
+            )
+        )
     else:
         results = report["results_by_project"]
         total = len(results)
@@ -289,6 +340,12 @@ def main():
         "--log-markdown",
         action="store_true",
         help="Save LLM execution log as a markdown file (requires --execute --use-llm).",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=5,
+        help="Max concurrent LLM API calls (default: 5). Only used with --use-llm.",
     )
     args = parser.parse_args()
 
@@ -330,7 +387,10 @@ def main():
             f"- LLM Attributes: {', '.join(llm_attr_names)}",
         ]
 
-    execute(report, db, manager, use_llm=args.use_llm, md_lines=md_lines)
+    execute(
+        report, db, manager,
+        use_llm=args.use_llm, concurrency=args.concurrency, md_lines=md_lines,
+    )
 
     if md_lines is not None:
         now = datetime.now()

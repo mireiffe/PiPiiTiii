@@ -1,7 +1,11 @@
+import asyncio
 import os
 import importlib.util
 import inspect
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional
+
+import httpx
+
 from attributes.base import BaseAttribute
 from database import Database
 
@@ -100,6 +104,50 @@ class AttributeManager:
             except Exception as e:
                 print(f"[ERROR] Failed to calculate attribute {key}: {e}")
                 results[key] = None
+        return results
+
+    async def async_calculate_attributes(
+        self,
+        project_data: Dict[str, Any],
+        *,
+        use_llm: bool = False,
+        client: Optional[httpx.AsyncClient] = None,
+        semaphore: Optional[asyncio.Semaphore] = None,
+    ) -> Dict[str, Any]:
+        """Async version of calculate_attributes.
+
+        Non-LLM attributes are computed synchronously (pure local).
+        LLM attributes are dispatched as async tasks and gathered in parallel.
+        """
+        results: Dict[str, Any] = {}
+        llm_tasks: list[tuple[str, asyncio.Task]] = []
+
+        for key, attr in self.attributes.items():
+            if use_llm and attr.llm_extract_config is not None:
+                task = asyncio.create_task(
+                    attr.async_extract_with_llm(
+                        project_data, client=client, semaphore=semaphore,
+                    )
+                )
+                llm_tasks.append((key, task))
+            else:
+                try:
+                    results[key] = attr.extract(project_data)
+                except Exception as e:
+                    print(f"[ERROR] Failed to calculate attribute {key}: {e}")
+                    results[key] = None
+
+        if llm_tasks:
+            completed = await asyncio.gather(
+                *[t for _, t in llm_tasks], return_exceptions=True
+            )
+            for (key, _), result in zip(llm_tasks, completed):
+                if isinstance(result, Exception):
+                    print(f"[ERROR] Failed to calculate attribute {key}: {result}")
+                    results[key] = None
+                else:
+                    results[key] = result
+
         return results
 
     def get_active_attributes(self) -> List[Dict[str, Any]]:

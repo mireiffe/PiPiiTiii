@@ -1,10 +1,11 @@
 """
 LLM extraction support for attributes.
 
-Provides LLMExtractConfig dataclass and a synchronous llm_generate_text helper
-that calls OpenAI-compatible /chat/completions endpoints.
+Provides LLMExtractConfig dataclass and synchronous/asynchronous helpers
+that call OpenAI-compatible /chat/completions endpoints.
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -73,6 +74,62 @@ def llm_generate_text(
         response.raise_for_status()
         data = response.json()
         return data["choices"][0]["message"]["content"].strip()
+
+
+async def async_llm_generate_text(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    base_url: Optional[str] = None,
+    model_name: Optional[str] = None,
+    client: Optional[httpx.AsyncClient] = None,
+    semaphore: Optional[asyncio.Semaphore] = None,
+) -> str:
+    """
+    Async helper that calls an OpenAI-compatible /chat/completions endpoint.
+
+    Falls back to ATTR_LLM_* environment variables when not provided.
+
+    Args:
+        client: Shared httpx.AsyncClient. If None, creates a temporary one.
+        semaphore: If provided, acquires before making the HTTP call to limit concurrency.
+    """
+    endpoint = base_url or os.getenv("ATTR_LLM_BASE_URL", "https://api.openai.com/v1")
+    endpoint = endpoint.rstrip("/")
+    if not endpoint.endswith("/chat/completions"):
+        endpoint = f"{endpoint}/chat/completions"
+
+    model = model_name or os.getenv("ATTR_LLM_MODEL", "gpt-4o")
+    api_key = os.getenv("ATTR_LLM_API_KEY") or os.getenv("LLM_API_KEY", "")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+
+    async def _do_request(c: httpx.AsyncClient) -> str:
+        if semaphore is not None:
+            async with semaphore:
+                response = await c.post(endpoint, json=payload, headers=headers)
+        else:
+            response = await c.post(endpoint, json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"].strip()
+
+    if client is not None:
+        return await _do_request(client)
+
+    async with httpx.AsyncClient(timeout=60.0, trust_env=TRUST_ENV) as temp_client:
+        return await _do_request(temp_client)
 
 
 def xml_tag_parser(tag: str) -> Callable[[str], str]:
