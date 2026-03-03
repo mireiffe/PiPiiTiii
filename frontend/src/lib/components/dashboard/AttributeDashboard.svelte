@@ -26,6 +26,7 @@
     let error: string | null = null;
     let dashboardAttributes: string[] = [];
     let attributeDefinitions: AttributeDefinition[] = [];
+    let selectedAttrKey: string | null = null;
 
     const categoryColors = [
         '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
@@ -47,6 +48,11 @@
             const settingsData = await settingsRes.json();
             dashboardAttributes = settingsData.dashboard_attributes || [];
             attributeDefinitions = await attrsRes.json();
+
+            // Select first attribute by default
+            if (dashboardAttributes.length > 0 && !selectedAttrKey) {
+                selectedAttrKey = dashboardAttributes[0];
+            }
         } catch (e) {
             console.error('Failed to load attribute dashboard data:', e);
             error = e instanceof Error ? e.message : '데이터 로드 실패';
@@ -132,27 +138,28 @@
         };
     }
 
-    function computeStats(): AttributeStats[] {
-        return dashboardAttributes
-            .map(key => {
-                const attrDef = attributeDefinitions.find(a => a.key === key);
-                if (!attrDef) return null;
+    function computeStatsForKey(key: string): AttributeStats | null {
+        const attrDef = attributeDefinitions.find(a => a.key === key);
+        if (!attrDef) return null;
 
-                const variant = attrDef.attr_type?.variant || 'multi_select';
-                const displayName = attrDef.display_name;
+        const variant = attrDef.attr_type?.variant || 'multi_select';
+        const displayName = attrDef.display_name;
 
-                if (variant === 'toggle') {
-                    return computeToggleStats(key, displayName);
-                } else if (variant === 'range') {
-                    return computeRangeStats(key, displayName);
-                } else {
-                    return computeMultiSelectStats(key, displayName);
-                }
-            })
-            .filter((s): s is AttributeStats => s !== null);
+        if (variant === 'toggle') {
+            return computeToggleStats(key, displayName);
+        } else if (variant === 'range') {
+            return computeRangeStats(key, displayName);
+        } else {
+            return computeMultiSelectStats(key, displayName);
+        }
     }
 
-    $: stats = loading ? [] : computeStats();
+    // Attribute definitions filtered to dashboard-selected ones (for tab display)
+    $: dashboardAttrDefs = dashboardAttributes
+        .map(key => attributeDefinitions.find(a => a.key === key))
+        .filter((a): a is AttributeDefinition => a != null);
+
+    $: selectedStats = (!loading && selectedAttrKey) ? computeStatsForKey(selectedAttrKey) : null;
 
     onMount(() => {
         loadData();
@@ -204,9 +211,6 @@
                     <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
                         전체 PPT <span class="font-bold">{projects.length}</span>
                     </span>
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
-                        속성 <span class="font-bold">{stats.length}</span>
-                    </span>
                 </div>
                 <button
                     class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -220,36 +224,49 @@
             </div>
         </div>
 
-        <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-4">
-            {#if stats.length === 0}
-                <div class="text-center text-gray-400 py-8">
-                    선택된 속성에 대한 데이터가 없습니다
-                </div>
-            {:else}
-                <div class="grid grid-cols-1 gap-4">
-                    {#each stats as stat (stat.key)}
-                        <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                            <div class="flex items-center justify-between mb-3">
-                                <div class="flex items-center gap-2">
-                                    <h3 class="text-sm font-semibold text-gray-700">{stat.displayName}</h3>
-                                    <span class="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">{stat.variant}</span>
-                                </div>
-                                <div class="flex items-center gap-2 text-xs text-gray-400">
-                                    <span>{stat.data.length}개 값</span>
-                                    {#if stat.emptyCount > 0}
-                                        <span class="text-amber-500">미입력 {stat.emptyCount}</span>
-                                    {/if}
-                                </div>
-                            </div>
-                            <CategoryBarChart
-                                data={stat.data}
-                                height={Math.max(120, stat.data.length * 32)}
-                            />
-                        </div>
+        <!-- Attribute Tabs + Content -->
+        <div class="flex-1 overflow-hidden flex flex-col">
+            <!-- Attribute Tabs -->
+            <div class="border-b border-gray-200 bg-white px-4 pt-3 overflow-x-auto shrink-0">
+                <div class="flex gap-1">
+                    {#each dashboardAttrDefs as attr (attr.key)}
+                        <button
+                            class="px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap
+                                {selectedAttrKey === attr.key
+                                    ? 'border-green-600 text-green-600 bg-green-50'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
+                            on:click={() => selectedAttrKey = attr.key}
+                        >
+                            {attr.display_name}
+                        </button>
                     {/each}
                 </div>
-            {/if}
+            </div>
+
+            <!-- Selected Attribute Stats -->
+            <div class="flex-1 overflow-y-auto p-4">
+                {#if selectedStats}
+                    <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-base font-semibold text-gray-700">{selectedStats.displayName}</h3>
+                            <div class="flex items-center gap-3 text-xs text-gray-400">
+                                <span>{selectedStats.data.length}개 값</span>
+                                {#if selectedStats.emptyCount > 0}
+                                    <span class="text-amber-500">미입력 {selectedStats.emptyCount}</span>
+                                {/if}
+                            </div>
+                        </div>
+                        <CategoryBarChart
+                            data={selectedStats.data}
+                            height={Math.max(160, selectedStats.data.length * 36)}
+                        />
+                    </div>
+                {:else}
+                    <div class="text-center text-gray-400 py-8">
+                        속성을 선택해주세요
+                    </div>
+                {/if}
+            </div>
         </div>
     {/if}
 </div>
