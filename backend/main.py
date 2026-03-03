@@ -406,6 +406,7 @@ class Settings(BaseModel):
     summary_fields: List[SummaryField]
     use_thumbnails: bool = False
     phenomenon_attributes: Optional[List[str]] = None
+    dashboard_attributes: Optional[List[str]] = None
     step_containers: Optional[List[StepContainer]] = None
     phase_types: Optional[List[PhaseType]] = None
     workflow_settings: Optional[WorkflowSettingsModel] = None
@@ -864,6 +865,9 @@ def load_settings() -> dict:
             # Ensure phenomenon_attributes exists (migration for existing settings)
             if "phenomenon_attributes" not in settings:
                 settings["phenomenon_attributes"] = []
+            # Ensure dashboard_attributes exists (migration for existing settings)
+            if "dashboard_attributes" not in settings:
+                settings["dashboard_attributes"] = []
             # Ensure key_info_settings exists (migration for existing settings)
             if "key_info_settings" not in settings:
                 settings["key_info_settings"] = {"categories": []}
@@ -878,6 +882,7 @@ def load_settings() -> dict:
             "summary_fields": [],
             "use_thumbnails": True,
             "phenomenon_attributes": [],
+            "dashboard_attributes": [],
             "workflow_steps": get_default_workflow_steps(),
             "step_containers": [],
             "phase_types": [],
@@ -949,6 +954,10 @@ def _diff_settings(old: dict, new: dict) -> List[str]:
     # Thumbnail toggle
     if old.get("use_thumbnails") != new.get("use_thumbnails"):
         changes.append(f"썸네일 보기 {'활성화' if new.get('use_thumbnails') else '비활성화'}")
+
+    # Dashboard attributes
+    if set(old.get("dashboard_attributes") or []) != set(new.get("dashboard_attributes") or []):
+        changes.append("대시보드 속성 변경")
 
     # Tutorial project
     if old.get("tutorial_project_id") != new.get("tutorial_project_id"):

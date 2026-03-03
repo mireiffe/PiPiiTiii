@@ -5,11 +5,12 @@
     import LLMSettingsSection from "$lib/components/settings/LLMSettingsSection.svelte";
     import SummaryFieldsSection from "$lib/components/settings/SummaryFieldsSection.svelte";
     import PhenomenonAttributesSection from "$lib/components/settings/PhenomenonAttributesSection.svelte";
+    import DashboardAttributesSection from "$lib/components/settings/DashboardAttributesSection.svelte";
     import KeyInfoSettingsSection from "$lib/components/settings/KeyInfoSettingsSection.svelte";
     import TutorialSettingsSection from "$lib/components/settings/TutorialSettingsSection.svelte";
 
     // Navigation sections
-    type SectionId = "keyinfo" | "llm" | "summary" | "phenomenon" | "tutorial";
+    type SectionId = "keyinfo" | "llm" | "summary" | "phenomenon" | "dashboard" | "tutorial";
 
     interface NavSection {
         id: SectionId;
@@ -22,6 +23,7 @@
         { id: "llm", label: "LLM 설정", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
         { id: "summary", label: "PPT 요약 필드", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
         { id: "phenomenon", label: "발생현상 속성", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" },
+        { id: "dashboard", label: "대시보드 속성", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
         { id: "tutorial", label: "Tutorial", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
     ];
 
@@ -52,6 +54,7 @@
         summary_fields: SummaryField[];
         use_thumbnails: boolean;
         phenomenon_attributes: string[];
+        dashboard_attributes: string[];
         key_info_settings?: KeyInfoSettings;
         tutorial_project_id?: string;
     }
@@ -67,6 +70,7 @@
         summary_fields: [],
         use_thumbnails: true,
         phenomenon_attributes: [],
+        dashboard_attributes: [],
         key_info_settings: {
             categories: [],
         },
@@ -109,6 +113,7 @@
                     })),
                     use_thumbnails: data.use_thumbnails ?? true,
                     phenomenon_attributes: data.phenomenon_attributes || [],
+                    dashboard_attributes: data.dashboard_attributes || [],
                     key_info_settings: data.key_info_settings || {
                         categories: [],
                     },
@@ -197,6 +202,16 @@
             settings.phenomenon_attributes = settings.phenomenon_attributes.filter(k => k !== key);
         } else {
             settings.phenomenon_attributes = [...settings.phenomenon_attributes, key];
+        }
+    }
+
+    // Dashboard attributes handler
+    function handleToggleDashboardAttribute(e: CustomEvent<{ key: string }>) {
+        const key = e.detail.key;
+        if (settings.dashboard_attributes.includes(key)) {
+            settings.dashboard_attributes = settings.dashboard_attributes.filter(k => k !== key);
+        } else {
+            settings.dashboard_attributes = [...settings.dashboard_attributes, key];
         }
     }
 
@@ -300,6 +315,15 @@
                             {availableAttributes}
                             selectedAttributes={settings.phenomenon_attributes}
                             on:toggle={handleTogglePhenomenonAttribute}
+                        />
+                    </div>
+
+                    <!-- 대시보드 속성 설정 -->
+                    <div id="section-dashboard">
+                        <DashboardAttributesSection
+                            {availableAttributes}
+                            selectedAttributes={settings.dashboard_attributes}
+                            on:toggle={handleToggleDashboardAttribute}
                         />
                     </div>
 

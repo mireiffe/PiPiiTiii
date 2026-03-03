@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
     import KeyInfoDetailModal from './KeyInfoDetailModal.svelte';
     import ActivityLogPanel from './ActivityLogPanel.svelte';
+    import AttributeDashboard from './AttributeDashboard.svelte';
     import { fetchAllKeyInfoInstances, fetchSettings } from '$lib/api/project';
     import type {
         KeyInfoSettings,
@@ -16,8 +17,8 @@
     export let modalTitleConfig: ModalTitleConfigItem[] = ["title"];
     export let projects: Array<{ id: string; name?: string; title?: string }> = [];
 
-    // Top-level tab: 'dashboard' | 'logs'
-    let activeTab: 'dashboard' | 'logs' = 'dashboard';
+    // Top-level tab: 'dashboard' | 'attributes' | 'logs'
+    let activeTab: 'dashboard' | 'attributes' | 'logs' = 'dashboard';
 
     // Dashboard data structure
     interface ProjectAttributes {
@@ -225,6 +226,20 @@
         </button>
         <button
             class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                {activeTab === 'attributes'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
+            on:click={() => activeTab = 'attributes'}
+        >
+            <span class="flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                Attribute
+            </span>
+        </button>
+        <button
+            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
                 {activeTab === 'logs'
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
@@ -241,6 +256,8 @@
 
     {#if activeTab === 'logs'}
         <ActivityLogPanel {projects} />
+    {:else if activeTab === 'attributes'}
+        <AttributeDashboard {projects} />
     {:else if loading}
         <div class="flex-1 flex items-center justify-center">
             <div class="flex flex-col items-center gap-3">
