@@ -28,10 +28,22 @@
     let attributeDefinitions: AttributeDefinition[] = [];
     let selectedAttrKey: string | null = null;
 
-    const categoryColors = [
-        '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
-        '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16',
+    // Single color per attribute (assigned by index in dashboardAttributes)
+    const attrColors = [
+        '#3B82F6', // blue
+        '#10B981', // green
+        '#F59E0B', // amber
+        '#8B5CF6', // purple
+        '#06B6D4', // cyan
+        '#EC4899', // pink
+        '#EF4444', // red
+        '#84CC16', // lime
     ];
+
+    function getAttrColor(key: string): string {
+        const idx = dashboardAttributes.indexOf(key);
+        return attrColors[Math.max(0, idx) % attrColors.length];
+    }
 
     async function loadData() {
         loading = true;
@@ -64,6 +76,7 @@
     function computeMultiSelectStats(key: string, displayName: string): AttributeStats {
         const counts = new Map<string, number>();
         let emptyCount = 0;
+        const color = getAttrColor(key);
         for (const p of projects) {
             const val = p[key];
             if (val == null || val === '') {
@@ -76,9 +89,7 @@
         const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
         return {
             key, displayName, variant: 'multi_select',
-            data: sorted.map(([name, count], i) => ({
-                name, count, color: categoryColors[i % categoryColors.length],
-            })),
+            data: sorted.map(([name, count]) => ({ name, count, color })),
             totalProjects: projects.length,
             emptyCount,
         };
@@ -87,6 +98,7 @@
     function computeRangeStats(key: string, displayName: string): AttributeStats {
         const counts = new Map<string, number>();
         let emptyCount = 0;
+        const color = getAttrColor(key);
         for (const p of projects) {
             const val = p[key];
             if (val == null || val === '') {
@@ -96,7 +108,6 @@
             const strVal = String(val);
             counts.set(strVal, (counts.get(strVal) || 0) + 1);
         }
-        // Sort numerically if possible
         const sorted = [...counts.entries()].sort((a, b) => {
             const numA = Number(a[0]);
             const numB = Number(b[0]);
@@ -105,9 +116,7 @@
         });
         return {
             key, displayName, variant: 'range',
-            data: sorted.map(([name, count], i) => ({
-                name, count, color: categoryColors[i % categoryColors.length],
-            })),
+            data: sorted.map(([name, count]) => ({ name, count, color })),
             totalProjects: projects.length,
             emptyCount,
         };
@@ -154,7 +163,7 @@
         }
     }
 
-    // Attribute definitions filtered to dashboard-selected ones (for tab display)
+    // Attribute definitions filtered to dashboard-selected ones
     $: dashboardAttrDefs = dashboardAttributes
         .map(key => attributeDefinitions.find(a => a.key === key))
         .filter((a): a is AttributeDefinition => a != null);
@@ -197,7 +206,7 @@
             </p>
         </div>
     {:else}
-        <!-- Header -->
+        <!-- Header with attribute selector -->
         <div class="bg-white border-b border-gray-200 px-6 py-3 shadow-sm shrink-0">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -212,61 +221,51 @@
                         전체 PPT <span class="font-bold">{projects.length}</span>
                     </span>
                 </div>
-                <button
-                    class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                    on:click={loadData}
-                    title="새로고침"
-                >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                </button>
+                <div class="flex items-center gap-2">
+                    <select
+                        class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent cursor-pointer"
+                        bind:value={selectedAttrKey}
+                    >
+                        {#each dashboardAttrDefs as attr (attr.key)}
+                            <option value={attr.key}>{attr.display_name}</option>
+                        {/each}
+                    </select>
+                    <button
+                        class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        on:click={loadData}
+                        title="새로고침"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- Attribute Tabs + Content -->
-        <div class="flex-1 overflow-hidden flex flex-col">
-            <!-- Attribute Tabs -->
-            <div class="border-b border-gray-200 bg-white px-4 pt-3 overflow-x-auto shrink-0">
-                <div class="flex gap-1">
-                    {#each dashboardAttrDefs as attr (attr.key)}
-                        <button
-                            class="px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap
-                                {selectedAttrKey === attr.key
-                                    ? 'border-green-600 text-green-600 bg-green-50'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
-                            on:click={() => selectedAttrKey = attr.key}
-                        >
-                            {attr.display_name}
-                        </button>
-                    {/each}
-                </div>
-            </div>
-
-            <!-- Selected Attribute Stats -->
-            <div class="flex-1 overflow-y-auto p-4">
-                {#if selectedStats}
-                    <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-base font-semibold text-gray-700">{selectedStats.displayName}</h3>
-                            <div class="flex items-center gap-3 text-xs text-gray-400">
-                                <span>{selectedStats.data.length}개 값</span>
-                                {#if selectedStats.emptyCount > 0}
-                                    <span class="text-amber-500">미입력 {selectedStats.emptyCount}</span>
-                                {/if}
-                            </div>
+        <!-- Selected Attribute Stats -->
+        <div class="flex-1 overflow-y-auto p-4">
+            {#if selectedStats}
+                <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-base font-semibold text-gray-700">{selectedStats.displayName}</h3>
+                        <div class="flex items-center gap-3 text-xs text-gray-400">
+                            <span>{selectedStats.data.length}개 값</span>
+                            {#if selectedStats.emptyCount > 0}
+                                <span class="text-amber-500">미입력 {selectedStats.emptyCount}</span>
+                            {/if}
                         </div>
-                        <CategoryBarChart
-                            data={selectedStats.data}
-                            height={Math.max(160, selectedStats.data.length * 36)}
-                        />
                     </div>
-                {:else}
-                    <div class="text-center text-gray-400 py-8">
-                        속성을 선택해주세요
-                    </div>
-                {/if}
-            </div>
+                    <CategoryBarChart
+                        data={selectedStats.data}
+                        height={Math.max(160, selectedStats.data.length * 36)}
+                    />
+                </div>
+            {:else}
+                <div class="text-center text-gray-400 py-8">
+                    속성을 선택해주세요
+                </div>
+            {/if}
         </div>
     {/if}
 </div>
