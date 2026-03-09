@@ -1,9 +1,13 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, createEventDispatcher } from 'svelte';
     import { browser } from '$app/environment';
 
     export let data: { name: string; count: number; color?: string }[] = [];
     export let height: number = 200;
+    export let clickable: boolean = false;
+    export let highlightNames: string[] = [];
+
+    const dispatch = createEventDispatcher<{ itemClick: { name: string } }>();
 
     let container: HTMLDivElement;
     let width = 400;
@@ -47,23 +51,47 @@
         <div class="h-full flex flex-col gap-2 py-2">
             {#each data as item, i}
                 {@const barWidth = (item.count / maxCount) * 100}
-                <div class="flex items-center gap-3 group">
-                    <div class="w-20 text-right text-xs font-medium text-gray-600 truncate" title={item.name}>
-                        {item.name}
+                {@const isHighlighted = highlightNames.includes(item.name)}
+                {#if clickable}
+                    <button
+                        class="flex items-center gap-3 group w-full text-left cursor-pointer hover:bg-gray-50 rounded -mx-1 px-1 transition-colors"
+                        on:click={() => dispatch('itemClick', { name: item.name })}
+                    >
+                        <div class="w-20 text-right text-xs font-medium truncate {isHighlighted ? 'text-blue-700 font-bold' : 'text-gray-600'}" title={item.name}>
+                            {isHighlighted ? '★ ' : ''}{item.name}
+                        </div>
+                        <div class="flex-1 h-6 bg-gray-100 rounded overflow-hidden relative">
+                            <div
+                                class="h-full rounded transition-all duration-300 ease-out group-hover:brightness-110"
+                                style="width: {barWidth}%; background-color: {getColor(i, item.color)};{isHighlighted ? ' opacity: 1;' : ''}"
+                            ></div>
+                            <span
+                                class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold"
+                                style="color: {barWidth > 80 ? 'white' : '#374151'};"
+                            >
+                                {item.count}
+                            </span>
+                        </div>
+                    </button>
+                {:else}
+                    <div class="flex items-center gap-3 group">
+                        <div class="w-20 text-right text-xs font-medium text-gray-600 truncate" title={item.name}>
+                            {item.name}
+                        </div>
+                        <div class="flex-1 h-6 bg-gray-100 rounded overflow-hidden relative">
+                            <div
+                                class="h-full rounded transition-all duration-300 ease-out group-hover:brightness-110"
+                                style="width: {barWidth}%; background-color: {getColor(i, item.color)};"
+                            ></div>
+                            <span
+                                class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold"
+                                style="color: {barWidth > 80 ? 'white' : '#374151'};"
+                            >
+                                {item.count}
+                            </span>
+                        </div>
                     </div>
-                    <div class="flex-1 h-6 bg-gray-100 rounded overflow-hidden relative">
-                        <div
-                            class="h-full rounded transition-all duration-300 ease-out group-hover:brightness-110"
-                            style="width: {barWidth}%; background-color: {getColor(i, item.color)};"
-                        ></div>
-                        <span
-                            class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold"
-                            style="color: {barWidth > 80 ? 'white' : '#374151'};"
-                        >
-                            {item.count}
-                        </span>
-                    </div>
-                </div>
+                {/if}
             {/each}
         </div>
     {/if}

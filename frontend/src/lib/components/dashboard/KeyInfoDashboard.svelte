@@ -3,6 +3,7 @@
     import KeyInfoDetailModal from './KeyInfoDetailModal.svelte';
     import ActivityLogPanel from './ActivityLogPanel.svelte';
     import AttributeDashboard from './AttributeDashboard.svelte';
+    import ExplorationPanel from './ExplorationPanel.svelte';
     import { fetchAllKeyInfoInstances, fetchSettings } from '$lib/api/project';
     import type {
         KeyInfoSettings,
@@ -18,7 +19,7 @@
     export let projects: Array<{ id: string; name?: string; title?: string }> = [];
 
     // Top-level tab: 'dashboard' | 'attributes' | 'logs'
-    let activeTab: 'dashboard' | 'attributes' | 'logs' = 'dashboard';
+    let activeTab: 'dashboard' | 'attributes' | 'logs' | 'exploration' = 'dashboard';
 
     // Dashboard data structure
     interface ProjectAttributes {
@@ -252,12 +253,28 @@
                 활동 로그
             </span>
         </button>
+        <button
+            class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                {activeTab === 'exploration'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}"
+            on:click={() => activeTab = 'exploration'}
+        >
+            <span class="flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                탐색
+            </span>
+        </button>
     </div>
 
     {#if activeTab === 'logs'}
         <ActivityLogPanel {projects} />
     {:else if activeTab === 'attributes'}
         <AttributeDashboard {projects} />
+    {:else if activeTab === 'exploration'}
+        <ExplorationPanel {projects} />
     {:else if loading}
         <div class="flex-1 flex items-center justify-center">
             <div class="flex flex-col items-center gap-3">
