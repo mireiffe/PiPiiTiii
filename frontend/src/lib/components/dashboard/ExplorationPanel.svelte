@@ -1,6 +1,5 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import CategoryBarChart from './CategoryBarChart.svelte';
     import { fetchSettings, fetchAllAttributes, fetchAllKeyInfoInstances } from '$lib/api/project';
     import type {
         KeyInfoSettings,
@@ -33,35 +32,30 @@
     // Filter state: Record<attrKey, selectedValues[]>
     let selectedFilters: Record<string, string[]> = {};
 
-    // Accordion state: prefixed IDs ('attr:key' / 'ki:categoryId')
-    let expandedSections: Set<string> = new Set();
+    // "Show more" state for attr rows with many values
+    let expandedAttrRows: Set<string> = new Set();
+    // "Show more" state for keyinfo category cards
+    let expandedKeyInfoCards: Set<string> = new Set();
 
-    function toggleSection(sectionId: string) {
-        if (expandedSections.has(sectionId)) {
-            expandedSections.delete(sectionId);
+    const ATTR_CHIP_LIMIT = 8;
+    const KEYINFO_ITEM_LIMIT = 5;
+
+    function toggleAttrRowExpand(key: string) {
+        if (expandedAttrRows.has(key)) {
+            expandedAttrRows.delete(key);
         } else {
-            expandedSections.add(sectionId);
+            expandedAttrRows.add(key);
         }
-        expandedSections = new Set(expandedSections);
+        expandedAttrRows = new Set(expandedAttrRows);
     }
 
-    function isSectionExpanded(sectionId: string, isFilterActive: boolean): boolean {
-        return expandedSections.has(sectionId) || isFilterActive;
-    }
-
-    // KeyInfo: unique project count per category (for collapsed summary)
-    // Only counts instances whose itemId is in the current category.items config
-    function getCategoryProjectCount(categoryId: string): number {
-        const category = keyInfoSettings.categories.find(c => c.id === categoryId);
-        if (!category) return 0;
-        const validItemIds = new Set(category.items.map(item => item.id));
-        let count = 0;
-        for (const kp of filteredKeyInfoProjects) {
-            if (kp.instances.some(inst => inst.categoryId === categoryId && validItemIds.has(inst.itemId))) {
-                count++;
-            }
+    function toggleKeyInfoCardExpand(categoryId: string) {
+        if (expandedKeyInfoCards.has(categoryId)) {
+            expandedKeyInfoCards.delete(categoryId);
+        } else {
+            expandedKeyInfoCards.add(categoryId);
         }
-        return count;
+        expandedKeyInfoCards = new Set(expandedKeyInfoCards);
     }
 
     // Category colors (same as KeyInfoDashboard)
@@ -108,9 +102,10 @@
             keyInfoProjects = instancesData.projects || [];
             totalCompletedProjects = keyInfoProjects.length;
 
-            // Reset filters and expansion state
+            // Reset all state
             selectedFilters = {};
-            expandedSections = new Set();
+            expandedAttrRows = new Set();
+            expandedKeyInfoCards = new Set();
         } catch (e) {
             console.error('Failed to load exploration data:', e);
             error = e instanceof Error ? e.message : '데이터 로드 실패';
@@ -179,21 +174,36 @@
         .map(key => attributeDefinitions.find(a => a.key === key))
         .filter((a): a is AttributeDefinition => a != null);
 
-    // Compute attribute distribution for a given key over a given project set
-    function computeAttrDistribution(
+    // Faceted search: compute attr distribution excluding current attr's own filter
+    function computeFacetedDistribution(
         key: string,
-        projectSet: Array<Record<string, any>>,
     ): { name: string; count: number; color?: string }[] {
         const attrDef = attributeDefinitions.find(a => a.key === key);
         if (!attrDef) return [];
+
+        // Filter projects with all filters EXCEPT this attribute's filter
+        const otherFilters = activeFilterEntries.filter(([k]) => k !== key);
+        const facetedProjects = projects.filter(project => {
+            for (const [attrKey, values] of otherFilters) {
+                const val = getProjectAttrValue(project, attrKey);
+                if (!values.includes(val)) return false;
+            }
+            return true;
+        });
 
         const variant = attrDef.attr_type?.variant || 'multi_select';
         const color = getAttrColor(key);
         const counts = new Map<string, number>();
 
-        for (const p of projectSet) {
+        for (const p of facetedProjects) {
             const val = getProjectAttrValue(p, key);
             counts.set(val, (counts.get(val) || 0) + 1);
+        }
+
+        // Ensure selected values always appear even if count is 0
+        const selectedVals = selectedFilters[key] || [];
+        for (const sv of selectedVals) {
+            if (!counts.has(sv)) counts.set(sv, 0);
         }
 
         let entries = [...counts.entries()];
@@ -206,7 +216,6 @@
                 return a[0].localeCompare(b[0]);
             });
         } else if (variant === 'toggle') {
-            // Yes first, No second
             entries.sort((a, b) => {
                 if (a[0] === 'Yes') return -1;
                 if (b[0] === 'Yes') return 1;
@@ -225,35 +234,42 @@
         }));
     }
 
-    // Reactive: attribute distributions
+    // Reactive: attribute distributions (faceted)
     $: attrDistributions = dashboardAttrDefs.map(attrDef => ({
         key: attrDef.key,
         displayName: attrDef.display_name,
         variant: attrDef.attr_type?.variant || 'multi_select',
-        data: computeAttrDistribution(attrDef.key, filteredProjects),
+        data: computeFacetedDistribution(attrDef.key),
         isSelected: (selectedFilters[attrDef.key]?.length ?? 0) > 0,
         selectedValues: selectedFilters[attrDef.key] || [],
     }));
 
-    // Reactive: KeyInfo distributions per category
+    // Reactive: KeyInfo distributions per category (with unique project count)
     $: keyInfoDistributions = keyInfoSettings.categories
         .slice()
         .sort((a, b) => a.order - b.order)
-        .map(category => {
+        .map((category, catIndex) => {
+            const validItemIds = new Set(category.items.map(item => item.id));
+
             // Count unique projects per item
             const itemCounts = new Map<string, number>();
             for (const item of category.items) {
                 itemCounts.set(item.id, 0);
             }
 
+            // Unique project count for this category
+            let uniqueProjectCount = 0;
             for (const kp of filteredKeyInfoProjects) {
                 const usedItems = new Set<string>();
+                let hasValidItem = false;
                 for (const inst of kp.instances) {
-                    if (inst.categoryId === category.id && !usedItems.has(inst.itemId)) {
+                    if (inst.categoryId === category.id && validItemIds.has(inst.itemId) && !usedItems.has(inst.itemId)) {
                         usedItems.add(inst.itemId);
                         itemCounts.set(inst.itemId, (itemCounts.get(inst.itemId) || 0) + 1);
+                        hasValidItem = true;
                     }
                 }
+                if (hasValidItem) uniqueProjectCount++;
             }
 
             const data = category.items
@@ -263,7 +279,7 @@
                 }))
                 .sort((a, b) => b.count - a.count);
 
-            return { category, data };
+            return { category, data, uniqueProjectCount, catIndex };
         });
 
     // Get display name for a filter key
@@ -369,83 +385,100 @@
 
         <!-- Scrollable Content -->
         <div class="flex-1 overflow-y-auto p-4 space-y-6">
-            {#if dashboardAttributes.length === 0}
-                <!-- No dashboard attributes configured -->
-                <div class="bg-white rounded-lg border border-gray-200 p-6 shadow-sm text-center text-gray-400">
-                    <p class="text-sm">설정에서 대시보드 속성을 추가해주세요</p>
-                </div>
-            {:else}
-                <!-- Attribute Distributions -->
-                <div>
-                    <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 px-1">
-                        Attribute 분포
+            <!-- ======= Attribute Filter Panel (compact chip style) ======= -->
+            {#if dashboardAttributes.length > 0}
+                <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                            </svg>
+                            <h2 class="text-sm font-semibold text-gray-700">Attribute 필터</h2>
+                            {#if hasActiveFilters}
+                                <span class="text-xs text-gray-400">({filteredProjects.length}개 프로젝트)</span>
+                            {/if}
+                        </div>
                         {#if hasActiveFilters}
-                            <span class="text-xs font-normal text-gray-400 normal-case tracking-normal ml-2">({filteredProjects.length}개 프로젝트 기준)</span>
+                            <button
+                                class="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                                on:click={clearAllFilters}
+                            >
+                                전체 해제
+                            </button>
                         {/if}
-                    </h2>
-                    <div class="space-y-2">
+                    </div>
+                    <div class="divide-y divide-gray-50">
                         {#each attrDistributions as dist}
-                            {@const sectionId = 'attr:' + dist.key}
-                            {@const isExpanded = isSectionExpanded(sectionId, dist.isSelected)}
-                            <div class="bg-white rounded-lg border shadow-sm {dist.isSelected ? 'ring-2 ring-indigo-200 border-indigo-300' : 'border-gray-200'}">
-                                <!-- Collapsible header -->
-                                <button
-                                    class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:outline-none"
-                                    aria-expanded={isExpanded}
-                                    on:click={() => { if (!dist.isSelected) toggleSection(sectionId); }}
-                                >
-                                    <div class="flex items-center gap-2">
-                                        <svg
-                                            class="w-4 h-4 text-gray-400 transition-transform duration-200 {isExpanded ? 'rotate-90' : ''}"
-                                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            {@const isRowExpanded = expandedAttrRows.has(dist.key)}
+                            {@const prioritized = (() => {
+                                if (isRowExpanded || dist.data.length <= ATTR_CHIP_LIMIT) return dist.data;
+                                const selected = dist.data.filter(d => dist.selectedValues.includes(d.name));
+                                const rest = dist.data.filter(d => !dist.selectedValues.includes(d.name));
+                                const combined = [...selected, ...rest];
+                                return combined.slice(0, ATTR_CHIP_LIMIT);
+                            })()}
+                            {@const visibleData = isRowExpanded ? dist.data : prioritized}
+                            {@const hasMore = dist.data.length > ATTR_CHIP_LIMIT}
+                            <div class="px-4 py-2.5 flex items-start gap-3">
+                                <!-- Attr label -->
+                                <div class="shrink-0 w-20 pt-0.5">
+                                    <span class="text-xs font-semibold text-gray-500 truncate block" title={dist.displayName}>
+                                        {dist.displayName}
+                                    </span>
+                                </div>
+                                <!-- Value chips -->
+                                <div class="flex-1 flex flex-wrap gap-1.5">
+                                    {#each visibleData as item}
+                                        {@const isSelected = dist.selectedValues.includes(item.name)}
+                                        <button
+                                            class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full transition-all
+                                                {isSelected
+                                                    ? 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-300 font-semibold'
+                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }
+                                                {item.count === 0 && !isSelected ? 'opacity-40' : ''}"
+                                            on:click={() => toggleFilter(dist.key, item.name)}
+                                            title="{item.name}: {item.count}개"
                                         >
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                            {#if dist.variant === 'toggle' && item.color}
+                                                <span class="w-1.5 h-1.5 rounded-full" style="background-color: {item.color};"></span>
+                                            {/if}
+                                            {item.name}
+                                            <span class="{isSelected ? 'text-indigo-500' : 'text-gray-400'}">{item.count}</span>
+                                        </button>
+                                    {/each}
+                                    {#if hasMore}
+                                        <button
+                                            class="text-xs text-gray-400 hover:text-indigo-500 px-1.5 py-0.5 transition-colors"
+                                            on:click={() => toggleAttrRowExpand(dist.key)}
+                                        >
+                                            {isRowExpanded ? '접기' : `+${dist.data.length - ATTR_CHIP_LIMIT}개 더`}
+                                        </button>
+                                    {/if}
+                                </div>
+                                <!-- Clear button for this attr -->
+                                {#if dist.isSelected}
+                                    <button
+                                        class="shrink-0 text-xs text-gray-300 hover:text-red-400 transition-colors pt-0.5"
+                                        on:click={() => removeFilter(dist.key)}
+                                        title="이 속성 필터 해제"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                         </svg>
-                                        <h3 class="text-sm font-semibold text-gray-700">{dist.displayName}</h3>
-                                        <span class="text-xs text-gray-400">
-                                            {dist.data.length}개 값
-                                        </span>
-                                        {#if dist.isSelected}
-                                            <span class="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium">
-                                                선택됨
-                                            </span>
-                                        {/if}
-                                    </div>
-                                </button>
-
-                                <!-- Expanded body -->
-                                {#if isExpanded}
-                                    <div class="px-4 pb-4">
-                                        {#if dist.isSelected}
-                                            <div class="flex justify-end mb-2">
-                                                <button
-                                                    class="text-xs text-gray-400 hover:text-red-500 transition-colors"
-                                                    on:click={() => removeFilter(dist.key)}
-                                                >
-                                                    선택 해제
-                                                </button>
-                                            </div>
-                                        {/if}
-                                        {#if dist.data.length === 0}
-                                            <div class="text-sm text-gray-400 py-2">데이터가 없습니다</div>
-                                        {:else}
-                                            <CategoryBarChart
-                                                data={dist.data}
-                                                height={Math.max(100, dist.data.length * 36)}
-                                                clickable={true}
-                                                highlightNames={dist.selectedValues}
-                                                on:itemClick={(e) => toggleFilter(dist.key, e.detail.name)}
-                                            />
-                                        {/if}
-                                    </div>
+                                    </button>
                                 {/if}
                             </div>
                         {/each}
                     </div>
                 </div>
+            {:else}
+                <div class="bg-white rounded-lg border border-gray-200 p-6 shadow-sm text-center text-gray-400">
+                    <p class="text-sm">설정에서 대시보드 속성을 추가해주세요</p>
+                </div>
             {/if}
 
-            <!-- KeyInfo Distributions -->
+            <!-- ======= KeyInfo Distribution (multi-column dashboard) ======= -->
             <div>
                 <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 px-1">
                     KeyInfo 분포
@@ -460,46 +493,55 @@
                         <p class="text-sm">KeyInfo 카테고리가 설정되지 않았습니다</p>
                     </div>
                 {:else}
-                    <div class="space-y-2">
-                        {#each keyInfoDistributions as dist, catIndex}
-                            {@const sectionId = 'ki:' + dist.category.id}
-                            {@const isExpanded = expandedSections.has(sectionId)}
-                            {@const projectCount = getCategoryProjectCount(dist.category.id)}
-                            <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-                                <!-- Collapsible header -->
-                                <button
-                                    class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:outline-none"
-                                    aria-expanded={isExpanded}
-                                    on:click={() => toggleSection(sectionId)}
-                                >
-                                    <div class="flex items-center gap-2">
-                                        <svg
-                                            class="w-4 h-4 text-gray-400 transition-transform duration-200 {isExpanded ? 'rotate-90' : ''}"
-                                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                                        >
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                        </svg>
-                                        <div class="w-2.5 h-2.5 rounded-full" style="background-color: {getCategoryColor(catIndex)};"></div>
-                                        <h3 class="text-sm font-semibold text-gray-700">{dist.category.name}</h3>
-                                        <span class="text-xs text-gray-400">
-                                            {projectCount}개 프로젝트
-                                        </span>
-                                    </div>
-                                </button>
+                    <div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                        {#each keyInfoDistributions as dist}
+                            {@const color = getCategoryColor(dist.catIndex)}
+                            {@const activeData = dist.data.filter(d => d.count > 0)}
+                            {@const hasData = activeData.length > 0}
+                            {@const isCardExpanded = expandedKeyInfoCards.has(dist.category.id)}
+                            {@const visibleItems = isCardExpanded ? activeData : activeData.slice(0, KEYINFO_ITEM_LIMIT)}
+                            {@const hasMoreItems = activeData.length > KEYINFO_ITEM_LIMIT}
+                            {@const maxCount = Math.max(...activeData.map(d => d.count), 1)}
+                            <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm min-w-0">
+                                <!-- Card header -->
+                                <div class="flex items-center gap-2 mb-3">
+                                    <div class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {color};"></div>
+                                    <h3 class="text-sm font-semibold text-gray-700 truncate">{dist.category.name}</h3>
+                                    <span class="text-[10px] text-gray-400 shrink-0 ml-auto">{dist.uniqueProjectCount}개</span>
+                                </div>
 
-                                <!-- Expanded body -->
-                                {#if isExpanded}
-                                    {@const hasData = dist.data.some(d => d.count > 0)}
-                                    <div class="px-4 pb-4">
-                                        {#if !hasData}
-                                            <div class="text-sm text-gray-400 py-2">데이터가 없습니다</div>
-                                        {:else}
-                                            <CategoryBarChart
-                                                data={dist.data.filter(d => d.count > 0).map((d, i) => ({ ...d, color: getCategoryColor(catIndex) }))}
-                                                height={Math.max(100, dist.data.filter(d => d.count > 0).length * 36)}
-                                            />
-                                        {/if}
+                                {#if !hasData}
+                                    <div class="text-xs text-gray-300 py-3 text-center">데이터 없음</div>
+                                {:else}
+                                    <!-- Mini bar items -->
+                                    <div class="space-y-1.5">
+                                        {#each visibleItems as item, rank}
+                                            <div class="group">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-[10px] font-bold text-gray-400 w-3 text-right shrink-0">{rank + 1}</span>
+                                                    <span class="text-xs text-gray-700 truncate flex-1 group-hover:text-blue-600 transition-colors" title={item.name}>
+                                                        {item.name}
+                                                    </span>
+                                                    <span class="text-[10px] text-gray-400 shrink-0">{item.count}</span>
+                                                </div>
+                                                <div class="ml-5 h-1.5 bg-gray-100 rounded-full mt-0.5 overflow-hidden">
+                                                    <div
+                                                        class="h-full rounded-full transition-all group-hover:opacity-80"
+                                                        style="width: {(item.count / maxCount) * 100}%; background-color: {color};"
+                                                    ></div>
+                                                </div>
+                                            </div>
+                                        {/each}
                                     </div>
+
+                                    {#if hasMoreItems}
+                                        <button
+                                            class="mt-2 text-[10px] text-gray-400 hover:text-indigo-500 transition-colors w-full text-center"
+                                            on:click={() => toggleKeyInfoCardExpand(dist.category.id)}
+                                        >
+                                            {isCardExpanded ? '접기' : `전체 ${activeData.length}개 보기`}
+                                        </button>
+                                    {/if}
                                 {/if}
                             </div>
                         {/each}
