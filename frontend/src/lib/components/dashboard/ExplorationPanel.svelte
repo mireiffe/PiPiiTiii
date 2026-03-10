@@ -33,6 +33,37 @@
     // Filter state: Record<attrKey, selectedValues[]>
     let selectedFilters: Record<string, string[]> = {};
 
+    // Accordion state: prefixed IDs ('attr:key' / 'ki:categoryId')
+    let expandedSections: Set<string> = new Set();
+
+    function toggleSection(sectionId: string) {
+        if (expandedSections.has(sectionId)) {
+            expandedSections.delete(sectionId);
+        } else {
+            expandedSections.add(sectionId);
+        }
+        expandedSections = new Set(expandedSections);
+    }
+
+    function isSectionExpanded(sectionId: string, isFilterActive: boolean): boolean {
+        return expandedSections.has(sectionId) || isFilterActive;
+    }
+
+    // KeyInfo: unique project count per category (for collapsed summary)
+    // Only counts instances whose itemId is in the current category.items config
+    function getCategoryProjectCount(categoryId: string): number {
+        const category = keyInfoSettings.categories.find(c => c.id === categoryId);
+        if (!category) return 0;
+        const validItemIds = new Set(category.items.map(item => item.id));
+        let count = 0;
+        for (const kp of filteredKeyInfoProjects) {
+            if (kp.instances.some(inst => inst.categoryId === categoryId && validItemIds.has(inst.itemId))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     // Category colors (same as KeyInfoDashboard)
     const categoryColors = [
         '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
@@ -77,8 +108,9 @@
             keyInfoProjects = instancesData.projects || [];
             totalCompletedProjects = keyInfoProjects.length;
 
-            // Reset filters
+            // Reset filters and expansion state
             selectedFilters = {};
+            expandedSections = new Set();
         } catch (e) {
             console.error('Failed to load exploration data:', e);
             error = e instanceof Error ? e.message : '데이터 로드 실패';
@@ -351,37 +383,61 @@
                             <span class="text-xs font-normal text-gray-400 normal-case tracking-normal ml-2">({filteredProjects.length}개 프로젝트 기준)</span>
                         {/if}
                     </h2>
-                    <div class="space-y-3">
+                    <div class="space-y-2">
                         {#each attrDistributions as dist}
-                            <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm {dist.isSelected ? 'ring-2 ring-indigo-200 border-indigo-300' : ''}">
-                                <div class="flex items-center justify-between mb-2">
+                            {@const sectionId = 'attr:' + dist.key}
+                            {@const isExpanded = isSectionExpanded(sectionId, dist.isSelected)}
+                            <div class="bg-white rounded-lg border shadow-sm {dist.isSelected ? 'ring-2 ring-indigo-200 border-indigo-300' : 'border-gray-200'}">
+                                <!-- Collapsible header -->
+                                <button
+                                    class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:outline-none"
+                                    aria-expanded={isExpanded}
+                                    on:click={() => { if (!dist.isSelected) toggleSection(sectionId); }}
+                                >
                                     <div class="flex items-center gap-2">
+                                        <svg
+                                            class="w-4 h-4 text-gray-400 transition-transform duration-200 {isExpanded ? 'rotate-90' : ''}"
+                                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                        >
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                        </svg>
                                         <h3 class="text-sm font-semibold text-gray-700">{dist.displayName}</h3>
+                                        <span class="text-xs text-gray-400">
+                                            {dist.data.length}개 값
+                                        </span>
                                         {#if dist.isSelected}
                                             <span class="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium">
                                                 선택됨
                                             </span>
                                         {/if}
                                     </div>
-                                    {#if dist.isSelected}
-                                        <button
-                                            class="text-xs text-gray-400 hover:text-red-500 transition-colors"
-                                            on:click={() => removeFilter(dist.key)}
-                                        >
-                                            선택 해제
-                                        </button>
-                                    {/if}
-                                </div>
-                                {#if dist.data.length === 0}
-                                    <div class="text-sm text-gray-400 py-2">데이터가 없습니다</div>
-                                {:else}
-                                    <CategoryBarChart
-                                        data={dist.data}
-                                        height={Math.max(100, dist.data.length * 36)}
-                                        clickable={true}
-                                        highlightNames={dist.selectedValues}
-                                        on:itemClick={(e) => toggleFilter(dist.key, e.detail.name)}
-                                    />
+                                </button>
+
+                                <!-- Expanded body -->
+                                {#if isExpanded}
+                                    <div class="px-4 pb-4">
+                                        {#if dist.isSelected}
+                                            <div class="flex justify-end mb-2">
+                                                <button
+                                                    class="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                                                    on:click={() => removeFilter(dist.key)}
+                                                >
+                                                    선택 해제
+                                                </button>
+                                            </div>
+                                        {/if}
+                                        {#if dist.data.length === 0}
+                                            <div class="text-sm text-gray-400 py-2">데이터가 없습니다</div>
+                                        {:else}
+                                            <CategoryBarChart
+                                                data={dist.data}
+                                                height={Math.max(100, dist.data.length * 36)}
+                                                clickable={true}
+                                                highlightNames={dist.selectedValues}
+                                                on:itemClick={(e) => toggleFilter(dist.key, e.detail.name)}
+                                            />
+                                        {/if}
+                                    </div>
                                 {/if}
                             </div>
                         {/each}
@@ -404,21 +460,46 @@
                         <p class="text-sm">KeyInfo 카테고리가 설정되지 않았습니다</p>
                     </div>
                 {:else}
-                    <div class="space-y-3">
+                    <div class="space-y-2">
                         {#each keyInfoDistributions as dist, catIndex}
-                            {@const hasData = dist.data.some(d => d.count > 0)}
-                            <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <div class="w-2.5 h-2.5 rounded-full" style="background-color: {getCategoryColor(catIndex)};"></div>
-                                    <h3 class="text-sm font-semibold text-gray-700">{dist.category.name}</h3>
-                                </div>
-                                {#if !hasData}
-                                    <div class="text-sm text-gray-400 py-2">데이터가 없습니다</div>
-                                {:else}
-                                    <CategoryBarChart
-                                        data={dist.data.filter(d => d.count > 0).map((d, i) => ({ ...d, color: getCategoryColor(catIndex) }))}
-                                        height={Math.max(100, dist.data.filter(d => d.count > 0).length * 36)}
-                                    />
+                            {@const sectionId = 'ki:' + dist.category.id}
+                            {@const isExpanded = expandedSections.has(sectionId)}
+                            {@const projectCount = getCategoryProjectCount(dist.category.id)}
+                            <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                                <!-- Collapsible header -->
+                                <button
+                                    class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:outline-none"
+                                    aria-expanded={isExpanded}
+                                    on:click={() => toggleSection(sectionId)}
+                                >
+                                    <div class="flex items-center gap-2">
+                                        <svg
+                                            class="w-4 h-4 text-gray-400 transition-transform duration-200 {isExpanded ? 'rotate-90' : ''}"
+                                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                        >
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                        </svg>
+                                        <div class="w-2.5 h-2.5 rounded-full" style="background-color: {getCategoryColor(catIndex)};"></div>
+                                        <h3 class="text-sm font-semibold text-gray-700">{dist.category.name}</h3>
+                                        <span class="text-xs text-gray-400">
+                                            {projectCount}개 프로젝트
+                                        </span>
+                                    </div>
+                                </button>
+
+                                <!-- Expanded body -->
+                                {#if isExpanded}
+                                    {@const hasData = dist.data.some(d => d.count > 0)}
+                                    <div class="px-4 pb-4">
+                                        {#if !hasData}
+                                            <div class="text-sm text-gray-400 py-2">데이터가 없습니다</div>
+                                        {:else}
+                                            <CategoryBarChart
+                                                data={dist.data.filter(d => d.count > 0).map((d, i) => ({ ...d, color: getCategoryColor(catIndex) }))}
+                                                height={Math.max(100, dist.data.filter(d => d.count > 0).length * 36)}
+                                            />
+                                        {/if}
+                                    </div>
                                 {/if}
                             </div>
                         {/each}
